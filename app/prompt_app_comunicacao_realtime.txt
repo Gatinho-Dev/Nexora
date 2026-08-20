@@ -1,0 +1,1368 @@
+Crie uma aplicação web completa de comunicação em tempo real inspirada na experiência e na organização do Discord, porém **sem copiar logos, nome, imagens, ícones proprietários ou identidade visual do Discord**.
+
+Quero uma plataforma própria, moderna, responsiva e funcional.
+
+O objetivo principal é que **pelo menos o MVP funcione de verdade**, e não apenas uma interface falsa.
+
+# 1. Objetivo
+
+A plataforma deverá permitir:
+
+- criação de conta;
+- login e logout;
+- perfil de usuário;
+- lista de amigos;
+- mensagens privadas;
+- criação de servidores/comunidades;
+- canais de texto;
+- canais de voz;
+- mensagens em tempo real;
+- envio de imagens e arquivos;
+- chamadas de áudio;
+- chamadas de vídeo;
+- compartilhamento de tela;
+- presença online/offline;
+- edição e exclusão de mensagens;
+- reações;
+- respostas a mensagens;
+- notificações;
+- cargos e permissões básicas.
+
+Implemente primeiro uma versão funcional dessas funções e depois adicione recursos avançados.
+
+---
+
+# 2. Stack sugerida
+
+Utilize uma arquitetura moderna.
+
+Frontend:
+
+- Next.js;
+- React;
+- TypeScript;
+- Tailwind CSS;
+- componentes reutilizáveis;
+- interface responsiva para computador e celular.
+
+Backend:
+
+- Node.js / API Routes ou backend separado;
+- PostgreSQL;
+- Supabase pode ser utilizado para banco, autenticação, realtime e armazenamento.
+
+Comunicação em tempo real:
+
+- WebSockets;
+- Supabase Realtime ou Socket.IO.
+
+Chamadas:
+
+Utilize WebRTC.
+
+Para facilitar chamadas de voz, vídeo e compartilhamento de tela, pode utilizar:
+
+- LiveKit;
+
+ou implementar WebRTC diretamente.
+
+Deve existir um sistema de signaling para WebRTC.
+
+Prepare também suporte para STUN/TURN.
+
+Nunca coloque senhas, secrets ou API keys diretamente no código.
+
+Utilize `.env`.
+
+---
+
+# 3. Autenticação
+
+Criar páginas:
+
+`/login`
+
+`/register`
+
+O usuário deverá poder:
+
+- criar conta;
+- entrar;
+- sair;
+- recuperar senha;
+- alterar nome;
+- alterar username;
+- adicionar avatar;
+- alterar status.
+
+Cada usuário deverá possuir:
+
+```ts
+User {
+  id
+  username
+  displayName
+  avatarUrl
+  bio
+  status
+  createdAt
+}
+```
+
+Status:
+
+- online;
+- ausente;
+- ocupado;
+- offline.
+
+---
+
+# 4. Interface principal
+
+Quero uma interface inspirada na organização de aplicativos como Discord, Slack e Guilded.
+
+Estrutura desktop:
+
+```text
+┌──────┬───────────────┬───────────────────────────┬───────────────┐
+│      │               │                           │               │
+│ SERV │    CANAIS     │          CHAT             │   MEMBROS     │
+│      │               │                           │               │
+│      │               │                           │               │
+│      │               │                           │               │
+└──────┴───────────────┴───────────────────────────┴───────────────┘
+```
+
+Primeira coluna:
+
+- botão início;
+- servidores;
+- botão `+`;
+- explorar servidores.
+
+Segunda coluna:
+
+- nome do servidor;
+- categorias;
+- canais de texto;
+- canais de voz;
+- configurações;
+- usuário atual na parte inferior.
+
+Terceira coluna:
+
+- mensagens;
+- cabeçalho do canal;
+- área de digitação;
+- anexos;
+- emojis;
+- GIFs futuramente.
+
+Quarta coluna:
+
+- membros;
+- cargos;
+- status dos usuários.
+
+No celular, transformar isso em menus laterais/deslizáveis.
+
+---
+
+# 5. Servidores
+
+Usuários devem conseguir criar servidores.
+
+Criar modal:
+
+`Criar servidor`
+
+Campos:
+
+- nome;
+- imagem;
+- descrição opcional.
+
+Estrutura:
+
+```ts
+Server {
+  id
+  name
+  iconUrl
+  ownerId
+  createdAt
+}
+```
+
+Ao criar um servidor, gerar automaticamente:
+
+```text
+CANAIS DE TEXTO
+# geral
+
+CANAIS DE VOZ
+🔊 Geral
+```
+
+---
+
+# 6. Convites
+
+Cada servidor deve possuir links/códigos de convite.
+
+Exemplo:
+
+```text
+/app/invite/ABCD123
+```
+
+Usuários podem:
+
+- gerar convite;
+- copiar convite;
+- entrar no servidor.
+
+Salvar:
+
+```ts
+Invite {
+  id
+  serverId
+  code
+  creatorId
+  expiresAt
+  maxUses
+  uses
+}
+```
+
+---
+
+# 7. Canais
+
+Existirão inicialmente:
+
+### Canal de texto
+
+Permite:
+
+- mensagens;
+- imagens;
+- arquivos;
+- respostas;
+- reações.
+
+### Canal de voz
+
+Permite:
+
+- entrar;
+- sair;
+- mutar microfone;
+- desmutar;
+- ativar câmera;
+- desativar câmera;
+- compartilhar tela.
+
+Modelo:
+
+```ts
+Channel {
+  id
+  serverId
+  categoryId
+  name
+  type
+  position
+}
+```
+
+Tipos:
+
+```text
+TEXT
+VOICE
+```
+
+Estruture o sistema para futuramente aceitar:
+
+```text
+ANNOUNCEMENT
+FORUM
+STAGE
+```
+
+---
+
+# 8. Chat em tempo real
+
+Este é um dos recursos mais importantes.
+
+Quando um usuário enviar uma mensagem:
+
+1. salvar no banco;
+2. enviar em tempo real;
+3. atualizar imediatamente para todos conectados ao canal.
+
+Não recarregar a página.
+
+Mensagem:
+
+```ts
+Message {
+  id
+  channelId
+  authorId
+  content
+  replyToId
+  createdAt
+  editedAt
+}
+```
+
+Adicionar:
+
+- Enter = enviar;
+- Shift + Enter = nova linha;
+- indicador "editado";
+- horário;
+- avatar;
+- nome;
+- menu da mensagem.
+
+---
+
+# 9. Editar mensagens
+
+Usuário pode editar suas próprias mensagens.
+
+Ao editar:
+
+```text
+Olá
+```
+
+deve mostrar:
+
+```text
+Olá (editado)
+```
+
+Atualização deve aparecer em tempo real.
+
+---
+
+# 10. Excluir mensagens
+
+Usuário pode excluir sua própria mensagem.
+
+Moderadores com permissão também poderão apagar mensagens.
+
+Antes de excluir:
+
+```text
+Tem certeza que deseja excluir esta mensagem?
+```
+
+---
+
+# 11. Responder mensagens
+
+Adicionar botão:
+
+`Responder`
+
+Mostrar acima da mensagem:
+
+```text
+Respondendo a @Daniel
+> mensagem original
+```
+
+Ao clicar na mensagem referenciada, navegar até ela.
+
+---
+
+# 12. Reações
+
+Adicionar reações com emoji.
+
+Exemplo:
+
+```text
+👍 4
+❤️ 2
+😂 1
+```
+
+Cada usuário só pode adicionar uma vez a mesma reação.
+
+Atualizar em tempo real.
+
+---
+
+# 13. Digitação
+
+Mostrar:
+
+```text
+Daniel está digitando...
+```
+
+ou:
+
+```text
+Daniel e Ana estão digitando...
+```
+
+Não salvar isso permanentemente no banco.
+
+Enviar através do sistema realtime.
+
+---
+
+# 14. Upload de arquivos
+
+Permitir:
+
+- PNG;
+- JPG;
+- WEBP;
+- GIF;
+- vídeos;
+- áudio;
+- PDF;
+- documentos.
+
+Mostrar preview quando possível.
+
+Estrutura:
+
+```ts
+Attachment {
+  id
+  messageId
+  url
+  filename
+  mimeType
+  size
+}
+```
+
+Adicionar limite configurável de tamanho.
+
+Validar arquivos no servidor.
+
+---
+
+# 15. Mensagens privadas
+
+Criar área:
+
+`Mensagens diretas`
+
+Usuário poderá:
+
+- iniciar conversa;
+- mandar texto;
+- imagens;
+- arquivos;
+- áudio;
+- iniciar chamada.
+
+Rotas:
+
+```text
+/channels/@me
+/channels/@me/:conversationId
+```
+
+---
+
+# 16. Sistema de amigos
+
+Criar:
+
+`Adicionar amigo`
+
+Permitir procurar por username.
+
+Estados:
+
+```text
+PENDING
+ACCEPTED
+BLOCKED
+```
+
+Interface:
+
+```text
+Todos
+Online
+Pendentes
+Bloqueados
+```
+
+---
+
+# 17. Canal de voz
+
+Ao clicar em um canal de voz:
+
+1. usuário entra na sala;
+2. outros usuários veem que ele entrou;
+3. conexão WebRTC é iniciada;
+4. áudio começa;
+5. usuário pode mutar.
+
+Mostrar usuários dentro do canal:
+
+```text
+🔊 Geral
+
+Daniel
+Ana
+Lucas
+```
+
+Controles:
+
+```text
+🎤 Microfone
+
+🎧 Ensurdecer
+
+📹 Câmera
+
+🖥 Compartilhar tela
+
+☎ Desconectar
+```
+
+---
+
+# 18. Chamada de áudio
+
+Implementar chamadas usando WebRTC.
+
+Fluxo:
+
+```text
+Usuário A
+↓
+Signaling
+↓
+Usuário B
+↓
+WebRTC
+↓
+Áudio
+```
+
+Implementar corretamente:
+
+- getUserMedia;
+- RTCPeerConnection;
+- ICE candidates;
+- SDP offer;
+- SDP answer.
+
+Utilizar servidor STUN.
+
+Deixar arquitetura preparada para TURN.
+
+---
+
+# 19. Chamada de vídeo
+
+Permitir ativar câmera.
+
+Mostrar participantes em grid.
+
+Exemplo:
+
+```text
+┌──────────────┐ ┌──────────────┐
+│              │ │              │
+│    Daniel    │ │     Ana      │
+│              │ │              │
+└──────────────┘ └──────────────┘
+```
+
+Responsivo conforme número de participantes.
+
+Controles:
+
+- microfone;
+- câmera;
+- compartilhar tela;
+- tela cheia;
+- sair.
+
+---
+
+# 20. Compartilhamento de tela
+
+Utilizar:
+
+```js
+navigator.mediaDevices.getDisplayMedia()
+```
+
+Permitir compartilhar:
+
+- tela inteira;
+- janela;
+- aba do navegador;
+
+dependendo do suporte do navegador.
+
+Mostrar claramente:
+
+`Daniel está compartilhando a tela`
+
+Adicionar botão:
+
+`Parar compartilhamento`
+
+---
+
+# 21. Mensagens de áudio
+
+Adicionar botão de microfone no chat.
+
+Ao segurar ou clicar:
+
+```text
+🎤 Gravando...
+```
+
+Utilizar MediaRecorder.
+
+Depois permitir:
+
+```text
+▶ 0:14
+```
+
+O usuário poderá:
+
+- ouvir;
+- cancelar;
+- enviar.
+
+---
+
+# 22. Presença
+
+Quando usuário entrar:
+
+```text
+online
+```
+
+Quando perder conexão:
+
+```text
+offline
+```
+
+Também permitir manualmente:
+
+```text
+Online
+Ausente
+Não perturbe
+Invisível
+```
+
+Usar heartbeat/WebSocket para evitar presença incorreta.
+
+---
+
+# 23. Indicador de mensagem não lida
+
+Quando houver mensagens novas:
+
+```text
+● # geral
+```
+
+Adicionar contador quando necessário.
+
+Exemplo:
+
+```text
+● # suporte        4
+```
+
+---
+
+# 24. Menções
+
+Implementar:
+
+```text
+@usuario
+@everyone
+@cargo
+```
+
+Destacar visualmente.
+
+Exemplo:
+
+```text
+@Daniel você pode verificar isso?
+```
+
+Gerar notificação para o usuário mencionado.
+
+---
+
+# 25. Notificações
+
+Criar central de notificações.
+
+Notificar:
+
+- menções;
+- mensagens privadas;
+- pedido de amizade;
+- respostas.
+
+Opcionalmente implementar notificações do navegador usando:
+
+```js
+Notification API
+```
+
+Sempre solicitar permissão ao usuário antes.
+
+---
+
+# 26. Cargos
+
+Cada servidor poderá ter cargos.
+
+Exemplo:
+
+```text
+Administrador
+Moderador
+Membro
+```
+
+Modelo:
+
+```ts
+Role {
+  id
+  serverId
+  name
+  color
+  position
+}
+```
+
+---
+
+# 27. Permissões
+
+Criar sistema de permissões.
+
+Inicialmente:
+
+```text
+ADMINISTRATOR
+
+MANAGE_SERVER
+
+MANAGE_CHANNELS
+
+MANAGE_ROLES
+
+KICK_MEMBERS
+
+BAN_MEMBERS
+
+MANAGE_MESSAGES
+
+SEND_MESSAGES
+
+READ_MESSAGES
+
+CONNECT
+
+SPEAK
+
+STREAM
+```
+
+Nunca confiar apenas na interface.
+
+Todas as permissões devem ser verificadas pelo backend.
+
+---
+
+# 28. Moderação
+
+Adicionar:
+
+- expulsar membro;
+- banir membro;
+- silenciar;
+- excluir mensagem;
+- timeout.
+
+Registrar ações importantes.
+
+Criar posteriormente:
+
+`Registro de auditoria`.
+
+---
+
+# 29. Configurações do servidor
+
+Criar página/modal contendo:
+
+```text
+Visão geral
+Cargos
+Membros
+Convites
+Moderação
+Canais
+Excluir servidor
+```
+
+Somente usuários autorizados podem acessar determinadas opções.
+
+---
+
+# 30. Configurações do usuário
+
+Criar:
+
+```text
+Minha conta
+Perfil
+Privacidade
+Notificações
+Voz e vídeo
+Aparência
+Dispositivos
+```
+
+Em `Voz e vídeo` permitir escolher:
+
+- microfone;
+- câmera;
+- dispositivo de saída quando suportado.
+
+Adicionar teste de microfone.
+
+---
+
+# 31. Tema
+
+Adicionar inicialmente:
+
+```text
+Escuro
+Claro
+Sistema
+```
+
+Tema escuro deve ser o padrão.
+
+Criar identidade visual própria.
+
+Quero uma aparência moderna, limpa e premium.
+
+Pode se inspirar no estilo de:
+
+- Discord;
+- Slack;
+- Telegram;
+- Revolt;
+- Guilded;
+
+mas sem copiar diretamente nenhuma dessas interfaces.
+
+---
+
+# 32. Banco de dados
+
+Criar migrations/schema adequados para:
+
+```text
+users
+profiles
+servers
+server_members
+categories
+channels
+messages
+attachments
+message_reactions
+roles
+member_roles
+friendships
+conversations
+conversation_members
+direct_messages
+invites
+bans
+notifications
+voice_sessions
+```
+
+Adicionar índices para consultas frequentes.
+
+Utilizar foreign keys corretamente.
+
+---
+
+# 33. Segurança
+
+Isso é extremamente importante.
+
+Implementar:
+
+- validação de input;
+- autenticação no backend;
+- autorização;
+- rate limiting;
+- sanitização;
+- proteção contra XSS;
+- proteção contra SQL Injection;
+- validação de uploads;
+- limites de tamanho;
+- proteção de rotas;
+- cookies seguros;
+- secrets somente no servidor.
+
+Nunca confiar em:
+
+```text
+userId
+serverId
+role
+permission
+```
+
+enviados pelo navegador sem verificar no servidor.
+
+---
+
+# 34. Rate limit
+
+Adicionar limite para impedir spam.
+
+Exemplo:
+
+```text
+5 mensagens / 5 segundos
+```
+
+Configuração deve ser facilmente alterável.
+
+Também aplicar limite em:
+
+- criação de servidores;
+- convites;
+- pedidos de amizade;
+- uploads.
+
+---
+
+# 35. Reconnect
+
+Caso WebSocket caia:
+
+- reconectar automaticamente;
+- recuperar mensagens perdidas;
+- atualizar presença;
+- reconstruir estado da aplicação.
+
+Chamadas devem tentar identificar perda de conexão e mostrar:
+
+```text
+Reconectando...
+```
+
+---
+
+# 36. Mobile
+
+A aplicação precisa funcionar bem em:
+
+- computador;
+- tablet;
+- celular.
+
+No celular:
+
+A barra de servidores e canais deve abrir lateralmente.
+
+O chat ocupa a maior parte da tela.
+
+A lista de membros pode ser aberta por botão.
+
+Chamadas devem possuir interface mobile apropriada.
+
+---
+
+# 37. PWA
+
+Estruture a aplicação para posteriormente poder funcionar como PWA.
+
+Adicionar:
+
+```text
+manifest
+ícones
+theme-color
+```
+
+Não é prioridade do primeiro MVP.
+
+---
+
+# 38. Funcionalidades futuras
+
+Depois que o básico estiver funcionando, preparar arquitetura para:
+
+- bots;
+- webhooks;
+- threads;
+- fóruns;
+- canais de anúncio;
+- eventos;
+- enquetes;
+- stickers;
+- emojis personalizados;
+- GIFs;
+- atividades;
+- integração com jogos;
+- rich presence;
+- comunidades públicas;
+- descoberta de servidores;
+- streaming;
+- palco/stage;
+- boost/premium;
+- aplicações/bots OAuth;
+- API pública;
+- integrações externas.
+
+NÃO implemente tudo isso antes do MVP.
+
+---
+
+# 39. PRIORIDADE DE DESENVOLVIMENTO
+
+Siga exatamente esta ordem.
+
+## Fase 1 — Fundação
+
+Faça funcionar:
+
+1. projeto;
+2. banco de dados;
+3. autenticação;
+4. cadastro;
+5. login;
+6. perfil;
+7. layout principal.
+
+TESTE.
+
+---
+
+## Fase 2 — Servidores
+
+Faça funcionar:
+
+1. criar servidor;
+2. entrar no servidor;
+3. listar servidores;
+4. criar canal;
+5. excluir canal;
+6. listar membros.
+
+TESTE.
+
+---
+
+## Fase 3 — Chat
+
+Faça funcionar:
+
+1. enviar mensagem;
+2. receber mensagem em tempo real;
+3. editar;
+4. excluir;
+5. responder;
+6. reações;
+7. anexos.
+
+TESTE.
+
+Essa é uma das partes MAIS IMPORTANTES.
+
+---
+
+## Fase 4 — Mensagens privadas
+
+Implementar:
+
+1. adicionar amigo;
+2. aceitar pedido;
+3. abrir conversa;
+4. enviar mensagem privada;
+5. realtime.
+
+TESTE.
+
+---
+
+## Fase 5 — Voz
+
+Implementar:
+
+1. entrar em canal de voz;
+2. microfone;
+3. mute;
+4. saída;
+5. presença dentro do canal.
+
+TESTE em duas abas ou dois navegadores.
+
+---
+
+## Fase 6 — Vídeo
+
+Implementar:
+
+1. câmera;
+2. vídeo WebRTC;
+3. grid;
+4. ligar/desligar câmera.
+
+TESTE.
+
+---
+
+## Fase 7 — Compartilhamento
+
+Implementar:
+
+1. compartilhar tela;
+2. assistir stream;
+3. parar stream.
+
+TESTE.
+
+---
+
+## Fase 8 — Permissões
+
+Implementar:
+
+- owner;
+- admin;
+- moderador;
+- membro;
+- permissões de canais.
+
+TESTE no backend.
+
+---
+
+# 40. REGRA MAIS IMPORTANTE
+
+NÃO crie botões decorativos que não fazem nada.
+
+Se um botão ainda não estiver implementado:
+
+- esconda o botão;
+
+ou
+
+- marque claramente como "Em breve".
+
+Não simule funcionamento.
+
+Priorize funcionalidade real.
+
+---
+
+# 41. Testes obrigatórios
+
+Antes de considerar uma função pronta, teste:
+
+```text
+Usuário A cria conta
+
+Usuário B cria conta
+
+A cria servidor
+
+A gera convite
+
+B entra
+
+A envia mensagem
+
+B recebe instantaneamente
+
+B responde
+
+A recebe instantaneamente
+
+A cria canal de voz
+
+A entra
+
+B entra
+
+A ouve B
+
+B ouve A
+
+A liga câmera
+
+B vê A
+
+B liga câmera
+
+A vê B
+
+A compartilha tela
+
+B vê a tela
+```
+
+Se qualquer uma dessas etapas falhar, corrija antes de implementar recursos secundários.
+
+---
+
+# 42. Estrutura de código
+
+Organize bem o projeto.
+
+Exemplo:
+
+```text
+src/
+ ├─ app/
+ ├─ components/
+ │   ├─ chat/
+ │   ├─ server/
+ │   ├─ voice/
+ │   ├─ video/
+ │   ├─ friends/
+ │   └─ ui/
+ │
+ ├─ hooks/
+ ├─ lib/
+ ├─ services/
+ ├─ types/
+ └─ utils/
+```
+
+Evite arquivos gigantes.
+
+Divida componentes grandes.
+
+Use TypeScript corretamente.
+
+---
+
+# 43. README
+
+Crie um README explicando:
+
+```text
+Como instalar
+Como configurar banco
+Como configurar .env
+Como iniciar frontend
+Como iniciar backend
+Como configurar realtime
+Como configurar WebRTC
+Como configurar STUN/TURN
+Como testar duas contas
+Como colocar em produção
+```
+
+Criar também:
+
+```text
+.env.example
+```
+
+Nunca adicionar chaves reais ao repositório.
+
+---
+
+# 44. Docker
+
+Se possível, adicionar posteriormente:
+
+```text
+docker-compose.yml
+```
+
+para facilitar desenvolvimento.
+
+Pode conter:
+
+- aplicação;
+- PostgreSQL;
+- Redis;
+- TURN server;
+
+se forem necessários.
+
+---
+
+# 45. Experiência final
+
+Quero que, ao abrir a aplicação, eu consiga realmente:
+
+```text
+Criar conta
+↓
+Criar servidor
+↓
+Criar canal
+↓
+Convidar amigo
+↓
+Conversar em tempo real
+↓
+Entrar em canal de voz
+↓
+Falar
+↓
+Ativar câmera
+↓
+Fazer chamada de vídeo
+↓
+Compartilhar minha tela
+```
+
+Esse fluxo deve funcionar antes de começar funcionalidades cosméticas ou avançadas.
+
+Não quero apenas uma demonstração visual.
+
+Quero uma **aplicação full-stack funcional e extensível**, começando pelo MVP e evoluindo progressivamente até possuir uma quantidade de recursos semelhante a plataformas como Discord.
+
+Sempre que encontrar um erro, investigue a causa e corrija a implementação existente em vez de simplesmente criar uma implementação paralela.
+
+Ao terminar cada fase, execute testes e só então avance para a próxima.
