@@ -19,6 +19,7 @@ export function useAuth(options?: UseAuthOptions) {
   const {
     data: user,
     isLoading,
+    isError,
     error,
     refetch,
   } = trpc.auth.me.useQuery(undefined, {
@@ -44,15 +45,18 @@ export function useAuth(options?: UseAuthOptions) {
     }
   }, [redirectOnUnauthenticated, isLoading, user, navigate, redirectPath]);
 
+  // If query errored (e.g., 401 UNAUTHORIZED), treat as not authenticated and not loading
+  const isAuthLoading = isLoading && !isError;
+
   return useMemo(
     () => ({
       user: user ?? null,
       isAuthenticated: !!user,
-      isLoading: isLoading || logoutMutation.isPending,
+      isLoading: isAuthLoading || logoutMutation.isPending,
       error,
       logout,
       refresh: refetch,
     }),
-    [user, isLoading, logoutMutation.isPending, error, logout, refetch],
+    [user, isAuthLoading, logoutMutation.isPending, error, logout, refetch],
   );
 }

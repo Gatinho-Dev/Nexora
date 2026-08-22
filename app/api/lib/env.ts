@@ -16,4 +16,10 @@ export const env = {
   kimiAuthUrl: required("KIMI_AUTH_URL"),
   kimiOpenUrl: required("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  appOrigin: process.env.APP_ORIGIN?.replace(/\/$/, "") ?? "",
+  publicApiUrl: process.env.PUBLIC_API_URL?.replace(/\/$/, "") ?? "",
+  allowedOrigins: (process.env.ALLOWED_ORIGINS ?? process.env.APP_ORIGIN ?? "")
+    .split(",")
+    .map(origin => origin.trim().replace(/\/$/, ""))
+    .filter(Boolean),
 };

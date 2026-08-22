@@ -4,78 +4,80 @@
 
 @layer base {
   :root {
-    /* Light theme */
-    --background: 210 20% 98%;
-    --foreground: 222 25% 12%;
+    /* Nexora light theme */
+    --background: 220 14% 96%;
+    --foreground: 228 7% 14%;
     --card: 0 0% 100%;
     --card-foreground: 222 25% 12%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 25% 12%;
-    --primary: 172 78% 30%;
+    --primary: 235 86% 65%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 214 20% 93%;
+    --secondary: 220 18% 92%;
     --secondary-foreground: 222 25% 15%;
-    --muted: 214 20% 93%;
+    --muted: 220 18% 92%;
     --muted-foreground: 220 10% 42%;
-    --accent: 214 20% 92%;
+    --accent: 220 18% 90%;
     --accent-foreground: 222 25% 12%;
-    --destructive: 0 72% 51%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 18% 86%;
-    --input: 214 18% 86%;
-    --ring: 172 78% 30%;
-    --radius: 0.625rem;
+    --border: 220 18% 86%;
+    --input: 220 18% 86%;
+    --ring: 235 86% 65%;
+    --radius: 0.5rem;
 
     /* App surfaces */
-    --rail: 222 20% 92%;
-    --sidebar-bg: 216 18% 95%;
+    --rail: 223 20% 92%;
+    --sidebar-bg: 223 18% 95%;
+    --secondary-sidebar-bg: 223 16% 97%;
     --chat-bg: 0 0% 100%;
-    --hover-bg: 214 20% 90%;
-    --active-bg: 214 22% 86%;
-    --mention-bg: 172 78% 90%;
-    --mention-fg: 172 80% 22%;
-    --online: 152 68% 36%;
-    --idle: 38 92% 45%;
-    --dnd: 0 72% 55%;
+    --hover-bg: 220 20% 90%;
+    --active-bg: 220 22% 86%;
+    --mention-bg: 234 100% 92%;
+    --mention-fg: 234 80% 35%;
+    --online: 142 71% 45%;
+    --idle: 38 92% 50%;
+    --dnd: 0 84% 60%;
     --offline: 220 9% 60%;
-    --link: 217 91% 50%;
+    --link: 234 100% 65%;
   }
 
   .dark {
-    /* Dark theme (default) */
-    --background: 222 22% 9%;
-    --foreground: 210 20% 92%;
-    --card: 222 20% 12%;
-    --card-foreground: 210 20% 92%;
-    --popover: 222 24% 10%;
-    --popover-foreground: 210 20% 92%;
-    --primary: 172 66% 45%;
-    --primary-foreground: 180 40% 8%;
-    --secondary: 220 16% 16%;
-    --secondary-foreground: 210 20% 90%;
-    --muted: 220 14% 17%;
-    --muted-foreground: 215 12% 58%;
-    --accent: 220 16% 19%;
-    --accent-foreground: 210 20% 92%;
-    --destructive: 0 72% 58%;
+    /* Discord-inspired dark theme */
+    --background: 228 6% 20%; /* #313338 */
+    --foreground: 210 9% 96%; /* #F2F3F5 */
+    --card: 223 7% 23%;
+    --card-foreground: 220 14% 96%;
+    --popover: 220 7% 17%;
+    --popover-foreground: 220 14% 96%;
+    --primary: 235 86% 65%; /* #5865F2 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 223 7% 24%;
+    --secondary-foreground: 220 14% 90%;
+    --muted: 223 7% 23%;
+    --muted-foreground: 215 9% 73%; /* #B5BAC1 */
+    --accent: 228 6% 27%;
+    --accent-foreground: 220 14% 96%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 14% 18%;
-    --input: 220 14% 22%;
-    --ring: 172 66% 45%;
+    --border: 228 6% 29%;
+    --input: 225 7% 13%;
+    --ring: 235 86% 65%;
 
     /* App surfaces */
-    --rail: 225 26% 6%;
-    --sidebar-bg: 223 23% 8%;
-    --chat-bg: 222 22% 10%;
-    --hover-bg: 220 16% 15%;
-    --active-bg: 220 15% 19%;
-    --mention-bg: 172 60% 18%;
-    --mention-fg: 172 70% 65%;
-    --online: 152 60% 48%;
-    --idle: 38 92% 55%;
-    --dnd: 0 72% 62%;
-    --offline: 220 9% 42%;
-    --link: 200 98% 66%;
+    --rail: 225 7% 13%; /* #1E1F22 */
+    --sidebar-bg: 223 7% 20%; /* #2B2D31 */
+    --secondary-sidebar-bg: 223 7% 18%;
+    --chat-bg: 228 6% 20%; /* #313338 */
+    --hover-bg: 228 6% 26%;
+    --active-bg: 228 6% 29%;
+    --mention-bg: 235 45% 29%;
+    --mention-fg: 235 100% 82%;
+    --online: 139 47% 44%;
+    --idle: 38 92% 50%;
+    --dnd: 0 84% 60%;
+    --offline: 220 9% 46%;
+    --link: 197 100% 47%;
   }
 }
 
@@ -86,14 +88,34 @@
   html,
   body,
   #root {
-    height: 100%;
+    min-height: 100%;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
   }
   body {
     @apply bg-background text-foreground;
     font-family:
-      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-      Arial, sans-serif;
+      "gg sans",
+      "Noto Sans",
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 }
 
@@ -103,6 +125,9 @@
   }
   .bg-sidebar {
     background-color: hsl(var(--sidebar-bg));
+  }
+  .bg-secondary-sidebar {
+    background-color: hsl(var(--secondary-sidebar-bg));
   }
   .bg-chat {
     background-color: hsl(var(--chat-bg));
@@ -141,7 +166,7 @@
     background-color: hsl(var(--mention-bg));
     color: hsl(var(--mention-fg));
     border-radius: 0.25rem;
-    padding: 0 0.125rem;
+    padding: 0 0.25rem;
     font-weight: 600;
   }
   .chat-link {
@@ -152,42 +177,45 @@
   }
 }
 
-/* Slim scrollbars */
+/* Slim custom scrollbars */
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--muted) / 0.6);
-  border-radius: 4px;
+  background-color: #1a1b1e;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background-color: hsl(var(--muted-foreground) / 0.5);
+  background-color: #111214;
+  background-clip: padding-box;
 }
 
 /* Message content */
 .message-content {
   word-break: break-word;
   overflow-wrap: anywhere;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 .message-content pre {
-  background-color: hsl(var(--secondary));
-  border: 1px solid hsl(var(--border));
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
-  margin: 0.25rem 0;
+  background-color: #2b2d31;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  margin: 0.375rem 0;
   overflow-x: auto;
   font-size: 0.8125rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .message-content code.inline-code {
-  background-color: hsl(var(--secondary));
+  background-color: #2b2d31;
   border-radius: 0.25rem;
-  padding: 0.0625rem 0.3125rem;
+  padding: 0.125rem 0.375rem;
   font-size: 0.8125em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -199,7 +227,68 @@
   object-fit: cover;
 }
 
-/* Pulsar logo mark */
-.pulsar-mark {
-  background: linear-gradient(135deg, hsl(172 66% 45%), hsl(200 90% 55%));
+/* Nexora brand elements & glow */
+.nexora-mark {
+  background: #5865f2;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14);
+}
+
+.nexora-glow {
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.22);
+}
+
+/* Dynamic speaking indicator glow */
+.speaking-glow {
+  outline: 2px solid #23a559;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.45);
+  transition:
+    outline 150ms ease,
+    box-shadow 150ms ease;
+}
+
+/* Micro-animations */
+.transition-fast {
+  transition:
+    color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 100ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.transition-normal {
+  transition:
+    color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.transition-slow {
+  transition:
+    color 250ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 250ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 250ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 250ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+@media (prefers-contrast: more) {
+  .dark {
+    --border: 220 8% 43%;
+    --muted-foreground: 210 9% 84%;
+  }
+}
+
+/* Reduced motion accessibility option */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

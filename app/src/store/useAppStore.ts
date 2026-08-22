@@ -35,6 +35,7 @@ type AppState = {
   // mobile UI
   mobileNavOpen: boolean;
   mobileMembersOpen: boolean;
+  membersOpen: boolean;
 
   // actions
   setWsConnected: (v: boolean) => void;
@@ -73,6 +74,7 @@ type AppState = {
   resetVoice: () => void;
   setMobileNavOpen: (v: boolean) => void;
   setMobileMembersOpen: (v: boolean) => void;
+  setMembersOpen: (v: boolean) => void;
 };
 
 function keyOfMessage(msg: MessageDTO): string {
@@ -100,6 +102,7 @@ export const useAppStore = create<AppState>((set) => ({
   remoteStreams: {},
   mobileNavOpen: false,
   mobileMembersOpen: false,
+  membersOpen: false,
 
   setWsConnected: (v) => set({ wsConnected: v }),
 
@@ -235,4 +238,5 @@ export const useAppStore = create<AppState>((set) => ({
 
   setMobileNavOpen: (v) => set({ mobileNavOpen: v }),
   setMobileMembersOpen: (v) => set({ mobileMembersOpen: v }),
+  setMembersOpen: (v) => set({ membersOpen: v }),
 }));

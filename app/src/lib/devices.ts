@@ -1,5 +1,5 @@
-// Preferências de dispositivos de áudio/vídeo (persistidas no navegador).
-const KEY = "pulsar-devices";
+// Preferências de dispositivos de áudio/vídeo da Nexora (persistidas no navegador).
+const KEY = "nexora-devices";
 
 export type DevicePrefs = {
   audioInputId?: string;

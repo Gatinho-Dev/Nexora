@@ -12,9 +12,11 @@ export function SidebarPortal({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (mobileNavOpen) {
-      setSlot(document.getElementById("mobile-sidebar-slot"));
+      const timeout = setTimeout(() => setSlot(document.getElementById("mobile-sidebar-slot")), 0);
+      return () => clearTimeout(timeout);
     } else {
-      setSlot(null);
+      const timeout = setTimeout(() => setSlot(null), 0);
+      return () => clearTimeout(timeout);
     }
   }, [mobileNavOpen]);
 

@@ -1,4 +1,5 @@
 import type { WSClientEvent, WSServerEvent } from "@contracts/types";
+import { websocketUrl } from "./endpoints";
 
 type Handler = (event: WSServerEvent) => void;
 
@@ -17,15 +18,18 @@ class RealtimeClient {
 
   connect() {
     this.shouldConnect = true;
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
     this.open();
   }
 
   private open() {
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+    const ws = new WebSocket(websocketUrl());
     this.ws = ws;
 
     ws.onopen = () => {
@@ -34,7 +38,7 @@ class RealtimeClient {
       this.startHeartbeat();
     };
 
-    ws.onmessage = (raw) => {
+    ws.onmessage = raw => {
       try {
         const event = JSON.parse(raw.data as string) as WSServerEvent;
         for (const handler of this.handlers) handler(event);
