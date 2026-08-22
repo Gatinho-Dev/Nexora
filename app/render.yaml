@@ -6,6 +6,7 @@ services:
     rootDir: app
     buildCommand: npm ci && npm run build
     startCommand: npm run start
+    preDeployCommand: NODE_ENV=production npm run db:migrate
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION

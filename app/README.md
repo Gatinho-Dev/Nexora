@@ -69,7 +69,13 @@ Start Command: npm run start
 Health Check Path: /api/health
 ```
 
-Cadastre as variáveis do backend no painel e, após receber a URL pública, preencha `APP_ORIGIN`, `PUBLIC_API_URL` e `ALLOWED_ORIGINS` com essa URL.
+Cadastre as variáveis do backend no painel e, após receber a URL pública, preencha `APP_ORIGIN`, `PUBLIC_API_URL` e `ALLOWED_ORIGINS` com essa URL. O `DATABASE_URL` precisa apontar para um MySQL gerenciado acessível pelo Render; `localhost`/`127.0.0.1` apontam para o próprio contêiner e nunca para o computador local. Não envie o seu `.env` de desenvolvimento como Secret File.
+
+O Blueprint aplica as migrations automaticamente no **Pre-Deploy Command** antes de iniciar o servidor. Em uma configuração manual, use também:
+
+```text
+Pre-Deploy Command: NODE_ENV=production npm run db:migrate
+```
 
 ## Railway, Fly.io e outros hosts Node
 
