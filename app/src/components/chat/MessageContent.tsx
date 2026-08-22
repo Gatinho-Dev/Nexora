@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from "react";
 
 /**
  * Safe markdown-lite renderer: bold, italic, underline, strikethrough,
- * inline code, code blocks, links and @mentions. No HTML injection —
+ * inline code, code blocks, links and @mentions. No HTML injection -
  * everything is rendered as React elements.
  */
 export function MessageContent({ content }: { content: string }) {
@@ -29,7 +29,7 @@ function splitCodeBlocks(content: string): Block[] {
   const blocks: Block[] = [];
   parts.forEach((part, i) => {
     if (i % 2 === 1) {
-      // Inside code fence — strip optional language tag on first line
+      // Inside code fence - strip optional language tag on first line
       const cleaned = part.replace(/^[a-zA-Z0-9]+\n/, "");
       blocks.push({ type: "code", text: cleaned.replace(/\n$/, "") });
     } else if (part) {

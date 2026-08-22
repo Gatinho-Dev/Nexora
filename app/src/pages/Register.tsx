@@ -18,28 +18,27 @@ export default function Register() {
       await utils.invalidate();
       navigate("/channels/@me");
     },
-    onError: (err) => setError(err.message),
+    onError: err => setError(err.message),
   });
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-rail p-4">
-      <div className="w-full max-w-md rounded-2xl bg-card border border-border p-8 shadow-xl">
+    <main className="min-h-[100dvh] flex items-center justify-center bg-[#313338] p-4 sm:p-6 select-none text-white">
+      <div className="w-full max-w-[480px] rounded-xl bg-[#2B2D31] border border-black/20 p-6 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
         <div className="flex flex-col items-center mb-8">
-          <div className="pulsar-mark h-14 w-14 rounded-2xl flex items-center justify-center mb-4">
-            <svg viewBox="0 0 64 64" className="h-8 w-8">
-              <circle cx="32" cy="32" r="17" fill="none" stroke="#0d1117" strokeWidth="5" />
-              <circle cx="32" cy="32" r="7" fill="#0d1117" />
-            </svg>
+          <div className="h-12 w-12 rounded-[14px] bg-[#5865F2] flex items-center justify-center mb-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]">
+            <span className="font-black text-xl text-white">N</span>
           </div>
-          <h1 className="text-2xl font-bold">Criar uma conta</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Junte-se ao Pulsar em segundos
+          <h1 className="text-2xl font-bold tracking-tight text-white">
+            Criar uma conta
+          </h1>
+          <p className="text-[#B5BAC1] text-sm mt-2">
+            Crie sua conta e encontre sua comunidade.
           </p>
         </div>
 
         <form
           className="space-y-4"
-          onSubmit={(e) => {
+          onSubmit={e => {
             e.preventDefault();
             setError(null);
             register.mutate({
@@ -49,62 +48,87 @@ export default function Register() {
             });
           }}
         >
-          <div className="space-y-2">
-            <Label htmlFor="username">Nome de usuário</Label>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="username"
+              className="text-xs font-bold uppercase text-[#B5BAC1]"
+            >
+              Nome de usuário
+            </Label>
             <Input
               id="username"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
               autoComplete="username"
               placeholder="ex.: ana.silva"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={e => setUsername(e.target.value)}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              Letras, números, ponto, hífen e sublinhado. É como seus amigos vão te encontrar.
+            <p className="text-xs text-[#B5BAC1]">
+              É assim que seus amigos vão te encontrar no Nexora.
             </p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="displayName">Nome de exibição</Label>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="displayName"
+              className="text-xs font-bold uppercase text-[#B5BAC1]"
+            >
+              Nome de exibição
+            </Label>
             <Input
               id="displayName"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
               placeholder="ex.: Ana Silva"
               value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
+              onChange={e => setDisplayName(e.target.value)}
               required
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Senha</Label>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="password"
+              className="text-xs font-bold uppercase text-[#B5BAC1]"
+            >
+              Senha
+            </Label>
             <Input
               id="password"
               type="password"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
               autoComplete="new-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={e => setPassword(e.target.value)}
               required
               minLength={6}
             />
-            <p className="text-xs text-muted-foreground">Mínimo de 6 caracteres.</p>
+            <p className="text-xs text-[#B5BAC1]">Mínimo de 6 caracteres.</p>
           </div>
 
           {error && (
-            <div className="rounded-md bg-destructive/15 text-destructive text-sm px-3 py-2">
+            <div className="rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 text-xs px-3.5 py-2.5 font-medium">
               {error}
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={register.isPending}>
+          <Button
+            type="submit"
+            className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold h-11 rounded-md"
+            disabled={register.isPending}
+          >
             {register.isPending ? "Criando conta..." : "Continuar"}
           </Button>
         </form>
 
-        <p className="text-sm text-muted-foreground mt-4">
+        <p className="text-sm text-[#B5BAC1] mt-5">
           Já tem uma conta?{" "}
-          <Link to="/login" className="chat-link font-medium">
+          <Link
+            to="/login"
+            className="text-[#00A8FC] hover:underline font-medium"
+          >
             Entrar
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

@@ -4,6 +4,7 @@ import { realtime } from "@/lib/ws";
 import { getCurrentView } from "@/lib/currentView";
 import { useAppStore, channelKey, dmKey } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
+import { soundManager } from "@/lib/sound";
 import type { WSServerEvent } from "@contracts/types";
 
 /** Connects the realtime socket and routes events to stores/queries. */
@@ -53,6 +54,7 @@ export function useRealtime(myUserId: number | undefined) {
                 .catch(() => {});
             } else if (!isMine) {
               store.bumpUnreadConversation(msg.conversationId);
+              soundManager.play("dm-message");
             }
           }
           break;
@@ -97,6 +99,7 @@ export function useRealtime(myUserId: number | undefined) {
         case "notification": {
           utils.notification.unreadCount.invalidate();
           utils.notification.list.invalidate();
+          soundManager.play("notification");
           // Browser notification when the tab is hidden and permission granted
           if (
             typeof Notification !== "undefined" &&
@@ -111,7 +114,7 @@ export function useRealtime(myUserId: number | undefined) {
                   ? `Nova mensagem de ${n.actor?.name ?? "Alguém"}`
                   : n.type === "reply"
                     ? `${n.actor?.name ?? "Alguém"} respondeu você`
-                    : "Pulsar";
+                    : "Nexora";
             new Notification(title, { body: n.content ?? undefined, icon: "/icon.svg" });
           }
           break;

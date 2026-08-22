@@ -4,18 +4,23 @@ import { Link } from "react-router";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Card className="w-full max-w-sm text-center">
+    <main className="min-h-[100dvh] flex items-center justify-center bg-[#313338] p-4 text-white">
+      <Card className="w-full max-w-sm border-black/20 bg-[#2B2D31] text-center text-white shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
         <CardHeader>
           <CardTitle className="text-4xl font-bold">404</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-muted-foreground">Page not found</p>
-          <Button asChild className="w-full">
-            <Link to="/">Back to Home</Link>
+          <p className="text-[#B5BAC1]">
+            Esta página não existe ou foi movida.
+          </p>
+          <Button
+            asChild
+            className="w-full min-h-11 bg-[#5865F2] hover:bg-[#4752C4]"
+          >
+            <Link to="/">Voltar ao Nexora</Link>
           </Button>
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }

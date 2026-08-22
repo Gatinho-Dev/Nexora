@@ -1,25 +1,52 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { cors } from "hono/cors";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { eq } from "drizzle-orm";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { createOAuthCallbackHandler, authenticateRequest } from "./kimi/auth";
-import { Paths, MAX_UPLOAD_MB, ALLOWED_UPLOAD_MIME_PREFIXES, RateLimits } from "@contracts/constants";
+import {
+  Paths,
+  MAX_UPLOAD_MB,
+  ALLOWED_UPLOAD_MIME_PREFIXES,
+  RateLimits,
+} from "@contracts/constants";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
 import { rateLimit } from "./utils/rateLimit";
+import { env } from "./lib/env";
+import { publicFileUrl } from "./lib/urls";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
-const maxUploadMb = parseInt(process.env.MAX_UPLOAD_MB || String(MAX_UPLOAD_MB));
+const maxUploadMb = parseInt(
+  process.env.MAX_UPLOAD_MB || String(MAX_UPLOAD_MB)
+);
+
+app.use(
+  "/api/*",
+  cors({
+    origin: origin => {
+      if (!origin) return "";
+      return env.allowedOrigins.includes(origin.replace(/\/$/, ""))
+        ? origin
+        : "";
+    },
+    credentials: true,
+    allowHeaders: ["Content-Type", "Authorization"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  })
+);
+
+app.get("/api/health", c => c.json({ status: "ok", service: "nexora" }));
 
 app.use(bodyLimit({ maxSize: (maxUploadMb + 2) * 1024 * 1024 }));
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 
 // ── File upload (multipart) ───────────────────────────────────
-app.post("/api/upload", async (c) => {
+app.post("/api/upload", async c => {
   let user;
   try {
     user = await authenticateRequest(c.req.raw.headers);
@@ -27,7 +54,11 @@ app.post("/api/upload", async (c) => {
     return c.json({ error: "Não autenticado." }, 401);
   }
   try {
-    rateLimit(`upload:${user.id}`, RateLimits.upload.limit, RateLimits.upload.windowMs);
+    rateLimit(
+      `upload:${user.id}`,
+      RateLimits.upload.limit,
+      RateLimits.upload.windowMs
+    );
   } catch {
     return c.json({ error: "Muitos uploads. Aguarde um momento." }, 429);
   }
@@ -41,10 +72,15 @@ app.post("/api/upload", async (c) => {
     return c.json({ error: "Arquivo vazio." }, 400);
   }
   if (file.size > maxUploadMb * 1024 * 1024) {
-    return c.json({ error: `Arquivo excede o limite de ${maxUploadMb} MB.` }, 400);
+    return c.json(
+      { error: `Arquivo excede o limite de ${maxUploadMb} MB.` },
+      400
+    );
   }
   const mimeType = file.type || "application/octet-stream";
-  const allowed = ALLOWED_UPLOAD_MIME_PREFIXES.some((p) => mimeType.startsWith(p));
+  const allowed = ALLOWED_UPLOAD_MIME_PREFIXES.some(p =>
+    mimeType.startsWith(p)
+  );
   if (!allowed) {
     return c.json({ error: `Tipo de arquivo não permitido: ${mimeType}` }, 400);
   }
@@ -62,11 +98,17 @@ app.post("/api/upload", async (c) => {
     })
     .$returningId();
 
-  return c.json({ id, url: `/api/files/${id}`, filename, mimeType, size: buffer.length });
+  return c.json({
+    id,
+    url: publicFileUrl(id, c.req.url),
+    filename,
+    mimeType,
+    size: buffer.length,
+  });
 });
 
 // ── File download ─────────────────────────────────────────────
-app.get("/api/files/:id", async (c) => {
+app.get("/api/files/:id", async c => {
   try {
     await authenticateRequest(c.req.raw.headers);
   } catch {
@@ -93,7 +135,7 @@ app.get("/api/files/:id", async (c) => {
 });
 
 // ── WebRTC ICE configuration (STUN by default, TURN via env) ──
-app.get("/api/rtc-config", (c) => {
+app.get("/api/rtc-config", c => {
   let iceServers: unknown[] = [
     { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
   ];
@@ -107,7 +149,7 @@ app.get("/api/rtc-config", (c) => {
   return c.json({ iceServers });
 });
 
-app.use("/api/trpc/*", async (c) => {
+app.use("/api/trpc/*", async c => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",
     req: c.req.raw,
@@ -115,6 +157,6 @@ app.use("/api/trpc/*", async (c) => {
     createContext,
   });
 });
-app.all("/api/*", (c) => c.json({ error: "Not Found" }, 404));
+app.all("/api/*", c => c.json({ error: "Not Found" }, 404));
 
 export default app;

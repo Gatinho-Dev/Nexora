@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
+import { statusColor } from "@/lib/statusColor";
 
 type Props = {
   /** Convenience: derive userId/name/src from a user-like object. */
@@ -28,19 +29,6 @@ const dotSizes = {
   lg: "h-3.5 w-3.5 border-2",
   xl: "h-5 w-5 border-4",
 };
-
-export function statusColor(status: string | undefined) {
-  switch (status) {
-    case "online":
-      return "bg-online";
-    case "idle":
-      return "bg-idle";
-    case "dnd":
-      return "bg-dnd";
-    default:
-      return "bg-offline";
-  }
-}
 
 export function Avatar({
   user,
