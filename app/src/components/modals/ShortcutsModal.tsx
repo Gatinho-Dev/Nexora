@@ -26,7 +26,7 @@ export function ShortcutsModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md p-6 bg-[#2B2D31] border border-white/10 text-white rounded-2xl shadow-2xl select-none">
         <DialogTitle className="flex items-center gap-2 text-lg font-bold text-white mb-2">
-          <Keyboard className="h-5 w-5 text-[#4654D8]" /> Atalhos da Nexora
+          <Keyboard className="h-5 w-5 text-[#5865F2]" /> Atalhos da Nexora
         </DialogTitle>
         <div className="space-y-3 text-xs">
           <ShortcutRow label="Quick Switcher" keys={["Ctrl", "K"]} />

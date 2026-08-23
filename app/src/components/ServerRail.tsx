@@ -150,14 +150,22 @@ function RailButton({
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             className={cn(
-              "relative h-12 w-12 rounded-[24px] flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200 overflow-hidden active:scale-95 shadow-sm",
+              // Discord signature: 48px squircle that morphs into a circle on
+              // hover — 350ms cubic-bezier(0.215, 0.61, 0.355, 1).
+              "relative h-12 w-12 flex items-center justify-center overflow-hidden active:scale-95",
+              "transition-[border-radius,background-color,color,transform,box-shadow] duration-[350ms]",
+              "[transition-timing-function:cubic-bezier(0.215,0.61,0.355,1)]",
               active
-                ? "rounded-[16px] bg-[#4654D8] text-white"
-                : actionType === "add"
-                  ? "bg-[#313338] text-[#23A559] hover:bg-[#23A559] hover:text-white hover:rounded-[16px]"
-                  : actionType === "explore"
-                    ? "bg-[#313338] text-[#23A559] hover:bg-[#23A559] hover:text-white hover:rounded-[16px]"
-                    : "bg-[#313338] text-foreground hover:bg-[#4654D8] hover:text-white hover:rounded-[16px]"
+                ? "rounded-[16px] bg-[#5865F2] text-white"
+                : actionType === "add" || actionType === "explore"
+                  ? cn(
+                      "bg-[#313338] text-[#23A559] hover:bg-[#23A559] hover:text-white",
+                      hovered ? "rounded-full" : "rounded-[16px]"
+                    )
+                  : cn(
+                      "bg-[#313338] text-foreground hover:bg-[#5865F2] hover:text-white",
+                      hovered ? "rounded-full" : "rounded-[16px]"
+                    )
             )}
           >
             {children}

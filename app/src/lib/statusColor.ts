@@ -7,6 +7,8 @@ export function statusColor(status: string | undefined): string {
       return "bg-idle";
     case "dnd":
       return "bg-dnd";
+    case "streaming":
+      return "bg-streaming";
     default:
       return "bg-offline";
   }

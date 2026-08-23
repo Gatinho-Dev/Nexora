@@ -42,7 +42,7 @@ export function InvitePage() {
     <main className="flex h-[100dvh] items-center justify-center bg-[#313338] p-4 text-white">
       <Card className="w-full max-w-sm border-black/20 bg-[#2B2D31] text-center text-white shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
         <CardHeader>
-          <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#4654D8] text-2xl font-bold text-white">
+          <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#5865F2] text-2xl font-bold text-white">
             {info.data?.server.name?.slice(0, 2).toUpperCase() ?? "?"}
           </div>
           <CardTitle>

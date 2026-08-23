@@ -76,7 +76,7 @@ function ProfileBanner({ profile }: { profile: ProfileDetails | null }) {
         decorative
         className="absolute -right-7 -top-10 h-52 w-52 rotate-6 opacity-[0.12]"
       />
-      <div className="absolute bottom-0 left-0 h-1 w-2/3 bg-[#4654D8]" />
+      <div className="absolute bottom-0 left-0 h-1 w-2/3 bg-[#5865F2]" />
       <div className="absolute bottom-0 right-0 h-1 w-1/3 bg-[#7383FF]" />
     </div>
   );
@@ -260,7 +260,7 @@ export function ProfileCard({
                   {isOwn ? (
                     <Button
                       onClick={openProfileSettings}
-                      className="h-10 rounded-lg bg-[#4654D8] px-4 text-xs font-semibold text-white hover:bg-[#3D49BF]"
+                      className="h-10 rounded-lg bg-[#5865F2] px-4 text-xs font-semibold text-white hover:bg-[#4752C4]"
                     >
                       <Pencil className="mr-2 h-4 w-4" />
                       Editar perfil
@@ -270,7 +270,7 @@ export function ProfileCard({
                       <Button
                         onClick={() => userId && openDm.mutate({ userId })}
                         disabled={openDm.isPending}
-                        className="h-10 rounded-lg bg-[#4654D8] px-4 text-xs font-semibold text-white hover:bg-[#3D49BF]"
+                        className="h-10 rounded-lg bg-[#5865F2] px-4 text-xs font-semibold text-white hover:bg-[#4752C4]"
                       >
                         {openDm.isPending ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />

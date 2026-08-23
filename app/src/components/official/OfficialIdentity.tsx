@@ -14,7 +14,7 @@ export function OfficialIdentity({ compact = false, className }: OfficialIdentit
       <div className="relative shrink-0">
         <NexoraAppIcon className={compact ? "h-8 w-8" : "h-10 w-10"} />
         <span
-          className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#24262c] bg-[#4654D8] text-white"
+          className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#24262c] bg-[#5865F2] text-white"
           aria-hidden="true"
         >
           <ShieldCheck className="h-2.5 w-2.5" strokeWidth={3} />
@@ -28,7 +28,7 @@ export function OfficialIdentity({ compact = false, className }: OfficialIdentit
           <Tooltip>
             <TooltipTrigger asChild>
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded-[4px] bg-[#4654D8] px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.08em] text-white"
+                className="inline-flex shrink-0 items-center gap-1 rounded-[4px] bg-[#5865F2] px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.08em] text-white"
                 aria-label="Conta oficial e verificada da Nexora"
               >
                 <BadgeCheck className="h-3 w-3" />

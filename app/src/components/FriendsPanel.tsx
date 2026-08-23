@@ -180,7 +180,7 @@ export function FriendsPanel({
                         title="Enviar mensagem"
                         onClick={() => openDm.mutate({ userId: f.user.id })}
                         disabled={openDm.isPending}
-                        className="text-[#4654D8] hover:bg-[#4654D8]/10 hover:text-[#4654D8]"
+                        className="text-[#5865F2] hover:bg-[#5865F2]/10 hover:text-[#5865F2]"
                       >
                         <MessageSquare className="h-4 w-4" />
                       </Button>
@@ -297,7 +297,7 @@ function AddFriend({ onDone }: { onDone: () => void }) {
         />
         <Button
           type="submit"
-          className="h-11 bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold"
+          className="h-11 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold"
           disabled={!username.trim() || sendRequest.isPending}
         >
           {sendRequest.isPending ? "Enviando..." : "Enviar pedido"}
