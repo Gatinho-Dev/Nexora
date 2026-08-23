@@ -27,7 +27,11 @@ export function ServerChannel() {
 
   const details = trpc.server.get.useQuery(
     { serverId },
-    { enabled: Number.isFinite(serverId) && serverId > 0, retry: false }
+    {
+      enabled: Number.isFinite(serverId) && serverId > 0,
+      retry: false,
+      placeholderData: prev => prev,
+    }
   );
 
   useEffect(() => {

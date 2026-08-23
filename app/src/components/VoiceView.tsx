@@ -70,7 +70,7 @@ function VideoTile({
   return (
     <div
       className={cn(
-        "voice-participant group relative overflow-hidden rounded-[14px] bg-[#292a31] border border-white/[0.08] transition-[border-color,box-shadow,transform,opacity] duration-200",
+        "voice-participant group relative overflow-hidden rounded-[14px] bg-panel border border-white/[0.08] transition-[border-color,box-shadow,transform,opacity] duration-200",
         focused ? "col-span-full row-span-full min-h-[380px]" : "aspect-video",
         speaking && "speaking-glow border-[#3bbd72]"
       )}
@@ -165,16 +165,29 @@ export function VoiceView({
   onOpenProfile?: (userId: number) => void;
 }) {
   const me = trpc.auth.me.useQuery().data;
-  const store = useAppStore();
+  // Narrow selectors: the voice grid must not re-render on unrelated store
+  // changes (typing ticks, unread counters, etc.).
   const roomKey = channelId ? `c:${channelId}` : `dm:${conversationId}`;
-  const participants = store.voiceParticipants[roomKey] ?? [];
+  const participantsMap = useAppStore(s => s.voiceParticipants);
+  const participants = participantsMap[roomKey] ?? [];
+  const voiceChannelId = useAppStore(s => s.voiceChannelId);
+  const voiceConversationId = useAppStore(s => s.voiceConversationId);
   const connected = channelId
-    ? store.voiceChannelId === channelId
-    : store.voiceConversationId === conversationId;
+    ? voiceChannelId === channelId
+    : voiceConversationId === conversationId;
   const connectedElsewhere =
-    (store.voiceChannelId !== null && store.voiceChannelId !== channelId) ||
-    (store.voiceConversationId !== null &&
-      store.voiceConversationId !== conversationId);
+    (voiceChannelId !== null && voiceChannelId !== channelId) ||
+    (voiceConversationId !== null &&
+      voiceConversationId !== conversationId);
+  const connectionStatus = useAppStore(s => s.voiceConnectionStatus);
+  const playbackBlocked = useAppStore(s => s.voicePlaybackBlocked);
+  const muted = useAppStore(s => s.muted);
+  const deafened = useAppStore(s => s.deafened);
+  const cameraOn = useAppStore(s => s.cameraOn);
+  const screenOn = useAppStore(s => s.screenOn);
+  const speakingByUser = useAppStore(s => s.speakingByUser);
+  const localVideo = useAppStore(s => s.localVideo);
+  const remoteStreams = useAppStore(s => s.remoteStreams);
 
   const [joining, setJoining] = useState(false);
   const [focusUserId, setFocusUserId] = useState<number | null>(null);
@@ -245,7 +258,7 @@ export function VoiceView({
   };
 
   const sharingParticipant = participants.find(p => p.screen);
-  const connectionStatus = store.voiceConnectionStatus;
+  
   const connectionLabel = {
     idle: "Desconectado",
     connecting: "Conectando",
@@ -329,14 +342,14 @@ export function VoiceView({
   const visibleParticipants = focused ? [focused] : participants;
 
   return (
-    <div className="flex flex-1 flex-col bg-[#303139] min-h-0 relative select-none">
+    <div className="flex flex-1 flex-col bg-chat min-h-0 relative select-none text-foreground">
       <div
-        className="flex min-h-11 items-center justify-between border-b border-white/[0.06] bg-[#2b2c33] px-3 sm:px-4"
+        className="flex min-h-11 items-center justify-between border-b border-white/[0.06] bg-sidebar px-3 sm:px-4 text-foreground"
         role="status"
         aria-live="polite"
       >
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">{title}</p>
+          <p className="truncate text-sm font-semibold text-foreground">{title}</p>
           <p className="text-[11px] text-[#aeb1bd]">
             {participants.length}{" "}
             {participants.length === 1 ? "participante" : "participantes"}
@@ -363,7 +376,7 @@ export function VoiceView({
         </div>
       </div>
 
-      {store.voicePlaybackBlocked && (
+      {playbackBlocked && (
         <button
           type="button"
           onClick={() => voiceManager.resumeRemotePlayback()}
@@ -376,7 +389,7 @@ export function VoiceView({
       )}
       {/* Stage audience banner */}
       {isStage && amAudience && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[#2b2c33]/60 px-4 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-sidebar/60 px-4 py-2">
           <p className="text-xs font-medium text-[#aeb1bd]">
             Você está na <span className="font-bold text-white">audiência</span>
             {canSelfPromote
@@ -446,8 +459,8 @@ export function VoiceView({
             const isLocal = p.userId === me?.id;
             if (isStage && !p.speaker) return null;
             const stream = isLocal
-              ? store.localVideo
-              : (store.remoteStreams[p.userId] ?? null);
+              ? localVideo
+              : (remoteStreams[p.userId] ?? null);
             return (
               <VideoTile
                 key={p.userId}
@@ -457,7 +470,7 @@ export function VoiceView({
                 focused={!!focused}
                 onToggleFocus={() => setFocusUserId(focused ? null : p.userId)}
                 onOpenProfile={onOpenProfile}
-                speaking={!!store.speakingByUser[p.userId] && !p.muted}
+                speaking={!!speakingByUser[p.userId] && !p.muted}
               />
             );
           })}
@@ -495,22 +508,22 @@ export function VoiceView({
 
       {/* Floating Interactive Call Controls Toolbar */}
       <TooltipProvider delayDuration={150}>
-        <div className="flex items-center justify-center gap-2 border-t border-white/[0.06] bg-[#292a31]/95 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:gap-3 sm:pb-4">
+        <div className="flex items-center justify-center gap-2 border-t border-white/[0.06] bg-panel/95 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:gap-3 sm:pb-4">
           {/* Mic */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={store.muted ? "destructive" : "secondary"}
+                variant={muted ? "destructive" : "secondary"}
                 size="icon"
                 className="h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95"
                 onClick={() => voiceManager.toggleMute()}
                 disabled={amAudience}
                 aria-label={
-                  store.muted ? "Ativar microfone" : "Silenciar microfone"
+                  muted ? "Ativar microfone" : "Silenciar microfone"
                 }
-                title={store.muted ? "Ativar microfone" : "Silenciar microfone"}
+                title={muted ? "Ativar microfone" : "Silenciar microfone"}
               >
-                {store.muted ? (
+                {muted ? (
                   <MicOff className="h-5 w-5" />
                 ) : (
                   <Mic className="h-5 w-5" />
@@ -520,7 +533,7 @@ export function VoiceView({
             <TooltipContent side="top">
               {amAudience
                 ? "Audiência não pode falar"
-                : store.muted
+                : muted
                   ? "Ativar microfone"
                   : "Silenciar microfone"}
             </TooltipContent>
@@ -530,16 +543,16 @@ export function VoiceView({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={store.deafened ? "destructive" : "secondary"}
+                variant={deafened ? "destructive" : "secondary"}
                 size="icon"
                 className="h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95"
                 onClick={() => voiceManager.toggleDeafen()}
                 aria-label={
-                  store.deafened ? "Ativar áudio" : "Ensurdecer áudio"
+                  deafened ? "Ativar áudio" : "Ensurdecer áudio"
                 }
-                title={store.deafened ? "Ativar áudio" : "Ensurdecer áudio"}
+                title={deafened ? "Ativar áudio" : "Ensurdecer áudio"}
               >
-                {store.deafened ? (
+                {deafened ? (
                   <VolumeX className="h-5 w-5" />
                 ) : (
                   <Headphones className="h-5 w-5" />
@@ -547,7 +560,7 @@ export function VoiceView({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">
-              {store.deafened ? "Ativar áudio" : "Ensurdecer áudio"}
+              {deafened ? "Ativar áudio" : "Ensurdecer áudio"}
             </TooltipContent>
           </Tooltip>
 
@@ -555,20 +568,20 @@ export function VoiceView({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={store.cameraOn ? "default" : "secondary"}
+                variant={cameraOn ? "default" : "secondary"}
                 size="icon"
                 className={cn(
                   "h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95",
-                  store.cameraOn && "bg-[#5865F2] text-white hover:bg-[#4752C4]"
+                  cameraOn && "bg-[#5865F2] text-white hover:bg-[#4752C4]"
                 )}
                 onClick={() =>
                   voiceManager.toggleCamera().catch(e => toast.error(e.message))
                 }
                 disabled={amAudience}
-                aria-label={store.cameraOn ? "Desligar câmera" : "Ligar câmera"}
-                title={store.cameraOn ? "Desligar câmera" : "Ligar câmera"}
+                aria-label={cameraOn ? "Desligar câmera" : "Ligar câmera"}
+                title={cameraOn ? "Desligar câmera" : "Ligar câmera"}
               >
-                {store.cameraOn ? (
+                {cameraOn ? (
                   <Video className="h-5 w-5" />
                 ) : (
                   <VideoOff className="h-5 w-5" />
@@ -576,7 +589,7 @@ export function VoiceView({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">
-              {store.cameraOn ? "Desligar câmera" : "Ligar câmera"}
+              {cameraOn ? "Desligar câmera" : "Ligar câmera"}
             </TooltipContent>
           </Tooltip>
 
@@ -584,14 +597,14 @@ export function VoiceView({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={store.screenOn ? "default" : "secondary"}
+                variant={screenOn ? "default" : "secondary"}
                 size="icon"
                 className={cn(
                   "h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95",
-                  store.screenOn && "bg-[#23A559] text-black hover:bg-[#16a34a]"
+                  screenOn && "bg-[#23A559] text-black hover:bg-[#16a34a]"
                 )}
                 onClick={() =>
-                  store.screenOn
+                  screenOn
                     ? voiceManager
                         .stopScreenShare()
                         .catch(e => toast.error(e.message))
@@ -601,17 +614,17 @@ export function VoiceView({
                 }
                 disabled={amAudience}
                 aria-label={
-                  store.screenOn
+                  screenOn
                     ? "Parar compartilhamento"
                     : "Compartilhar tela"
                 }
                 title={
-                  store.screenOn
+                  screenOn
                     ? "Parar compartilhamento"
                     : "Compartilhar tela"
                 }
               >
-                {store.screenOn ? (
+                {screenOn ? (
                   <MonitorX className="h-5 w-5" />
                 ) : (
                   <MonitorUp className="h-5 w-5" />
@@ -619,7 +632,7 @@ export function VoiceView({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">
-              {store.screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
+              {screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
             </TooltipContent>
           </Tooltip>
 

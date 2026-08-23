@@ -22,6 +22,9 @@ type AppState = {
   // safety
   sensitiveMediaPref: "hide" | "warn" | "auto";
   setSensitiveMediaPref: (pref: "hide" | "warn" | "auto") => void;
+  // rail unread aggregation per server
+  serverUnread: Record<number, number>;
+  setServerUnread: (serverId: number, count: number) => void;
   // presence & unread
   presence: Record<number, string>;
   unreadChannels: Record<number, number>;
@@ -107,6 +110,7 @@ export const useAppStore = create<AppState>(set => ({
   typing: {},
   presence: {},
   sensitiveMediaPref: "warn",
+  serverUnread: {},
   unreadChannels: {},
   unreadConversations: {},
   voiceParticipants: {},
@@ -209,6 +213,12 @@ export const useAppStore = create<AppState>(set => ({
   setSensitiveMediaPref: pref => {
     set({ sensitiveMediaPref: pref });
   },
+  setServerUnread: (serverId, count) =>
+    set(state =>
+      state.serverUnread[serverId] === count
+        ? state
+        : { serverUnread: { ...state.serverUnread, [serverId]: count } }
+    ),
   bumpUnreadChannel: id =>
     set(s => ({
       unreadChannels: {
