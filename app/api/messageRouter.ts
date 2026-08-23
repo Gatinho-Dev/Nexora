@@ -101,6 +101,7 @@ async function buildMessageDTO(
     authorId: msg.authorId,
     content: msg.content,
     replyToId: msg.replyToId,
+    tag: msg.tag ?? null,
     createdAt: msg.createdAt,
     editedAt: msg.editedAt,
     author: author
@@ -278,6 +279,7 @@ export const forumRouter = createRouter({
       z.object({
         channelId: z.number(),
         before: z.number().optional(),
+        tag: z.string().max(24).optional(),
         limit: z.number().min(1).max(100).default(50),
       })
     )
@@ -294,6 +296,8 @@ export const forumRouter = createRouter({
         eq(schema.messages.channelId, input.channelId),
         sql`${schema.messages.replyToId} IS NULL`,
       ];
+      if (input.tag)
+        conditions.push(eq(schema.messages.tag, input.tag));
       if (input.before)
         conditions.push(sql`${schema.messages.id} < ${input.before}`);
 
@@ -419,6 +423,7 @@ export const messageRouter = createRouter({
         content: z.string().max(4000),
         replyToId: z.number().optional(),
         threadId: z.number().optional(),
+        tag: z.string().min(1).max(24).optional(),
         attachmentIds: z.array(z.number()).max(10).optional(),
         spoilerIds: z.array(z.number()).max(10).optional(),
       })

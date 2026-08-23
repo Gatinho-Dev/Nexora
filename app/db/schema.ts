@@ -139,6 +139,7 @@ export const messages = mysqlTable(
     content: text("content").notNull(),
     replyToId: bigint("replyToId", { mode: "number", unsigned: true }),
     threadId: bigint("threadId", { mode: "number", unsigned: true }),
+    tag: varchar("tag", { length: 24 }),
     editedAt: timestamp("editedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },

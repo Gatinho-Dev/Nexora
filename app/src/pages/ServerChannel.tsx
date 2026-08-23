@@ -16,7 +16,9 @@ import {
   IconForum,
   IconMegaphone,
 } from "@/components/icons/channelIcons";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import type { AppOutletContext } from "@/lib/appOutletContext";
 
 export function ServerChannel() {
@@ -30,6 +32,27 @@ export function ServerChannel() {
   const membersOpen = useAppStore(s => s.membersOpen);
   const setMembersOpen = useAppStore(s => s.setMembersOpen);
   const [desktopMembers, setDesktopMembers] = useState(true);
+  const [followOpen, setFollowOpen] = useState(false);
+  const follow = trpc.announce.follow.useMutation({
+    onSuccess: () => {
+      toast.success("Seguindo canal de anúncios.");
+      setFollowOpen(false);
+    },
+    onError: e => toast.error(e.message),
+  });
+  const myServers = trpc.server.list.useQuery();
+  const [followServerId, setFollowServerId] = useState<number | null>(null);
+  const followTargetChannels =
+    followServerId != null
+      ? trpc.server.get.useQuery(
+          { serverId: followServerId },
+          { enabled: followServerId != null }
+        ).data?.channels.filter(c =>
+            ["TEXT", "ANNOUNCEMENT", "FORUM", "MEDIA"].includes(c.type)
+          ) ?? []
+      : [];
+  const [followChannelId, setFollowChannelId] = useState<number | null>(null);
+
 
   const details = trpc.server.get.useQuery(
     { serverId },
@@ -117,6 +140,15 @@ export function ServerChannel() {
         <span className="font-bold text-sm truncate">{channel.name}</span>
       </div>
       <div className="flex items-center gap-1.5">
+        {channel.type === "ANNOUNCEMENT" && (
+          <button
+            onClick={() => setFollowOpen(true)}
+            className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-bold text-bodyx hover:bg-white/20 transition-colors"
+            title="Gerenciar servidores seguidores"
+          >
+            Seguidores
+          </button>
+        )}
         <div className="hidden md:block">
           <NotificationsBell onOpenProfile={onOpenProfile} />
         </div>
@@ -163,10 +195,15 @@ export function ServerChannel() {
               onOpenProfile={onOpenProfile}
             />
           </>
-        ) : channel.type === "FORUM" ? (
+        ) : channel.type === "FORUM" || channel.type === "MEDIA" ? (
           <>
             {header}
-            <ForumView channelId={channel.id} />
+            <ForumView
+              channelId={channel.id}
+              channelType={channel.type === "MEDIA" ? "MEDIA" : "FORUM"}
+              tags={channel.tags ?? null}
+              forcedTags={channel.forcedTags}
+            />
           </>
         ) : canRead ? (
           <ChatArea
@@ -190,6 +227,73 @@ export function ServerChannel() {
           </div>
         )}
       </div>
+
+      {followOpen && channel?.type === "ANNOUNCEMENT" && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setFollowOpen(false)} />
+          <div className="relative w-full max-w-md rounded-t-2xl border border-white/10 bg-panel p-4 pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-2xl sm:rounded-2xl animate-in slide-in-from-bottom duration-200">
+            <h3 className="text-base font-bold">Seguir canal de anúncios</h3>
+            <p className="mt-1 text-xs text-muted2">
+              Escolha um de seus outros servidores e o canal que receberá as
+              publicações de <b>#{channel.name}</b>.
+            </p>
+            <div className="mt-3 space-y-2">
+              <select
+                value={followServerId ?? ""}
+                onChange={e => {
+                  const id = Number(e.target.value);
+                  setFollowServerId(id || null);
+                  setFollowChannelId(null);
+                }}
+                aria-label="Servidor que vai seguir"
+                className="min-h-[44px] w-full rounded-[4px] bg-input px-3 text-sm"
+              >
+                <option value="">Selecione seu servidor...</option>
+                {myServers.data
+                  ?.filter(sv => sv.id !== serverId)
+                  .map(sv => (
+                    <option key={sv.id} value={sv.id}>
+                      {sv.name}
+                    </option>
+                  ))}
+              </select>
+              {followServerId != null && followTargetChannels.length > 0 && (
+                <select
+                  value={followChannelId ?? ""}
+                  onChange={e => setFollowChannelId(Number(e.target.value) || null)}
+                  aria-label="Canal que receberá as publicações"
+                  className="min-h-[44px] w-full rounded-[4px] bg-input px-3 text-sm"
+                >
+                  <option value="">Canal que receberá os posts...</option>
+                  {followTargetChannels.map(c => (
+                    <option key={c.id} value={c.id}>
+                      #{c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button variant="ghost" size="sm" onClick={() => setFollowOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={!followServerId || !followChannelId || follow.isPending}
+                  onClick={() =>
+                    follow.mutate({
+                      sourceChannelId: channel!.id,
+                      targetChannelId: followChannelId!,
+                    })
+                  }
+                  className="bg-[#5865F2] hover:bg-[#4752C4]"
+                >
+                  Seguir
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Member list side panel */}
       {channel?.type === "TEXT" && desktopMembers && (

@@ -50,6 +50,13 @@
       "when": 1787516575139,
       "tag": "0006_forced_tags_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1787519220005,
+      "tag": "0007_message_tag",
+      "breakpoints": true
     }
   ]
 }
