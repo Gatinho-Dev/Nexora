@@ -7,6 +7,9 @@ import {
   ModerationUnavailableError,
 } from "./nvidiaContentSafety";
 import { handleSevereViolation } from "./accountSafety";
+import { env } from "../lib/env";
+
+let warnedNoKey = false;
 
 /**
  * Media moderation pipeline.
@@ -34,6 +37,49 @@ export async function enqueueModeration(
   uploaderId: number
 ): Promise<void> {
   const db = getDb();
+
+  // Deployment-level switch: without NVIDIA_API_KEY the instance opted out of
+  // AI moderation, so media is released immediately (never stuck private).
+  // A CONFIGURED key that later fails still keeps media private per policy.
+  if (!env.nvidiaApiKey) {
+    if (!warnedNoKey) {
+      console.warn(
+        "[media] NVIDIA_API_KEY ausente — moderação de imagens desativada neste deploy."
+      );
+      warnedNoKey = true;
+    }
+    await db
+      .insert(schema.mediaModeration)
+      .values({
+        fileId,
+        uploaderId,
+        status: "approved",
+        safety: "unknown",
+        categories: [],
+        allowReveal: true,
+        moderationModel: "unmoderated",
+        moderatedAt: new Date(),
+      })
+      .onDuplicateKeyUpdate({ set: { uploaderId } });
+    // Self-heal uploads stranded in processing before this fix existed.
+    await db
+      .update(schema.mediaModeration)
+      .set({
+        status: "approved",
+        safety: "unknown",
+        allowReveal: true,
+        moderationModel: "unmoderated",
+        moderatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.mediaModeration.uploaderId, uploaderId),
+          eq(schema.mediaModeration.status, "processing")
+        )
+      );
+    return;
+  }
+
   await db
     .insert(schema.mediaModeration)
     .values({ fileId, uploaderId, categories: [] })
@@ -239,6 +285,24 @@ export async function moderationStatusForUploader(
   fileIds: number[]
 ): Promise<Record<number, string>> {
   if (fileIds.length === 0) return {};
+  if (!env.nvidiaApiKey) {
+    // No moderation configured: release anything stranded in processing.
+    await getDb()
+      .update(schema.mediaModeration)
+      .set({
+        status: "approved",
+        safety: "unknown",
+        allowReveal: true,
+        moderationModel: "unmoderated",
+        moderatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.mediaModeration.uploaderId, uploaderId),
+          eq(schema.mediaModeration.status, "processing")
+        )
+      );
+  }
   const rows = await getDb()
     .select({
       fileId: schema.mediaModeration.fileId,
