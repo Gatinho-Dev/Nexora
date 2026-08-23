@@ -1,4 +1,5 @@
-import { BadgeCheck, ShieldCheck } from "lucide-react";
+import { BadgeCheck } from "lucide-react";
+import { IconOfficial } from "../icons/figmaChannelIcons";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -17,7 +18,7 @@ export function OfficialIdentity({ compact = false, className }: OfficialIdentit
           className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#24262c] bg-[#5865F2] text-white"
           aria-hidden="true"
         >
-          <ShieldCheck className="h-2.5 w-2.5" strokeWidth={3} />
+          <IconOfficial className="h-3 w-3 text-white" />
         </span>
       </div>
       <div className="min-w-0">

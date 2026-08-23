@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { IconRules } from "@/components/icons/figmaChannelIcons";
 
 /** Minimal internal pages for Terms of Service / Community Guidelines. */
 export function LegalPage({ kind }: { kind: "terms" | "guidelines" }) {
@@ -7,7 +8,11 @@ export function LegalPage({ kind }: { kind: "terms" | "guidelines" }) {
   return (
     <main className="min-h-[100dvh] bg-chat px-6 py-12 text-bodyx">
       <div className="mx-auto max-w-2xl">
-        <NexoraAppIcon decorative className="h-10 w-10" />
+        {kind === "guidelines" ? (
+          <IconRules className="h-11 w-11 text-[#5865F2]" />
+        ) : (
+          <NexoraAppIcon decorative className="h-10 w-10" />
+        )}
         <h1 className="mt-4 text-2xl font-extrabold text-white">
           {isTerms ? "Termos de Serviço do Nexora" : "Diretrizes da Comunidade do Nexora"}
         </h1>
