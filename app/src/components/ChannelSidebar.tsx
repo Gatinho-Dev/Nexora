@@ -118,16 +118,16 @@ export function ChannelSidebar({
   return (
     <aside
       aria-label="Canais da comunidade"
-      className="w-60 shrink-0 bg-[#2B2D31] flex flex-col h-full border-r border-black/20 select-none"
+      className="w-60 shrink-0 bg-sidebar flex flex-col h-full border-r border-black/20 select-none"
     >
       {/* Server Header Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="h-12 px-4 flex items-center justify-between font-semibold text-white border-b border-black/20 hover:bg-[#35373C] transition-colors shadow-sm">
+          <button className="h-12 px-4 flex items-center justify-between font-semibold text-foreground border-b border-black/20 hover:bg-hov transition-colors shadow-sm">
             <span className="truncate text-sm tracking-wide">
               {server.name}
             </span>
-            <ChevronDown className="h-4 w-4 shrink-0 text-[#B5BAC1]" />
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted2" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56 bg-[#111214] border-black/30 text-white shadow-xl">
@@ -142,14 +142,14 @@ export function ChannelSidebar({
             onClick={() => setEventsOpen(true)}
             className="hover:bg-white/10 cursor-pointer"
           >
-            <CalendarClock className="h-4 w-4 mr-2 text-[#B5BAC1]" /> Eventos
+            <CalendarClock className="h-4 w-4 mr-2 text-muted2" /> Eventos
           </DropdownMenuItem>
           {canManageServer && (
             <DropdownMenuItem
               onClick={() => setSettingsOpen(true)}
               className="hover:bg-white/10 cursor-pointer"
             >
-              <Settings className="h-4 w-4 mr-2 text-[#B5BAC1]" /> Configurações
+              <Settings className="h-4 w-4 mr-2 text-muted2" /> Configurações
               do servidor
             </DropdownMenuItem>
           )}
@@ -158,7 +158,7 @@ export function ChannelSidebar({
               onClick={() => setCreateChannelOpen(true)}
               className="hover:bg-white/10 cursor-pointer"
             >
-              <Plus className="h-4 w-4 mr-2 text-[#B5BAC1]" /> Criar canal
+              <Plus className="h-4 w-4 mr-2 text-muted2" /> Criar canal
             </DropdownMenuItem>
           )}
           {!isOwner && (
@@ -199,7 +199,7 @@ export function ChannelSidebar({
               <div className="flex items-center justify-between px-1 py-1 group">
                 <button
                   onClick={() => toggleCategory(category.id)}
-                  className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-[#949BA4] hover:text-[#DBDEE1] transition-colors"
+                  className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-faint hover:text-bodyx transition-colors"
                 >
                   {isCollapsed ? (
                     <ChevronRight className="h-3 w-3" />
@@ -212,7 +212,7 @@ export function ChannelSidebar({
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <CategoryActions categoryId={category.id} name={category.name} />
                     <button
-                      className="text-[#B5BAC1] hover:text-white"
+                      className="text-muted2 hover:text-foreground"
                       onClick={() => setCreateChannelOpen(true)}
                       title="Criar canal nesta categoria"
                     >
@@ -271,8 +271,8 @@ export function ChannelSidebar({
                           className={cn(
                             "w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors group",
                             isConnectedHere
-                              ? "bg-[#404249] text-white font-medium"
-                              : "text-[#949BA4] hover:bg-[#35373C] hover:text-[#DBDEE1]"
+                              ? "bg-act text-foreground font-medium"
+                              : "text-faint hover:bg-hov hover:text-bodyx"
                           )}
                         >
                           <div className="flex items-center gap-2 truncate">
@@ -282,7 +282,7 @@ export function ChannelSidebar({
                                   "h-4 w-4 shrink-0",
                                   isConnectedHere
                                     ? "text-[#5865F2]"
-                                    : "text-[#B5BAC1]"
+                                    : "text-muted2"
                                 )}
                               />
                             ) : (
@@ -291,7 +291,7 @@ export function ChannelSidebar({
                                   "h-4 w-4 shrink-0",
                                   isConnectedHere
                                     ? "text-[#5865F2]"
-                                    : "text-[#B5BAC1]"
+                                    : "text-muted2"
                                 )}
                               />
                             )}
@@ -302,7 +302,7 @@ export function ChannelSidebar({
                               e.stopPropagation();
                               setInviteOpen(true);
                             }}
-                            className="h-3.5 w-3.5 text-[#B5BAC1] hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-3.5 w-3.5 text-muted2 hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                           />
                         </button>
 
@@ -340,11 +340,11 @@ export function ChannelSidebar({
                                       showStatus={false}
                                     />
                                   </span>
-                                  <span className="truncate text-white/90 font-medium">
+                                  <span className="truncate text-foreground/90 font-medium">
                                     {p.name}
                                   </span>
                                 </div>
-                                <div className="flex items-center gap-1 text-[#B5BAC1]">
+                                <div className="flex items-center gap-1 text-muted2">
                                   {p.muted && (
                                     <MicOff className="h-3 w-3 text-red-400" />
                                   )}
@@ -456,10 +456,10 @@ function TextChannelRow({
       className={cn(
         "group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm cursor-pointer transition-colors select-none",
         active
-          ? "bg-[#404249] text-white font-medium"
+          ? "bg-act text-foreground font-medium"
           : unread
-            ? "text-white font-medium bg-[#35373C] hover:bg-[#404249]"
-            : "text-[#949BA4] hover:bg-[#35373C] hover:text-[#DBDEE1]"
+            ? "text-foreground font-medium bg-hov hover:bg-act"
+            : "text-faint hover:bg-hov hover:text-bodyx"
       )}
     >
       <div className="flex items-center gap-2 truncate">
@@ -467,14 +467,14 @@ function TextChannelRow({
           <MessagesSquare
             className={cn(
               "h-4 w-4 shrink-0",
-              active ? "text-[#DBDEE1]" : unread ? "text-white" : "text-[#80848E]"
+              active ? "text-bodyx" : unread ? "text-foreground" : "text-faint"
             )}
           />
         ) : (
           <Hash
             className={cn(
               "h-4 w-4 shrink-0",
-              active ? "text-[#DBDEE1]" : unread ? "text-white" : "text-[#80848E]"
+              active ? "text-bodyx" : unread ? "text-foreground" : "text-faint"
             )}
           />
         )}
@@ -495,7 +495,7 @@ function TextChannelRow({
                   e.stopPropagation();
                   onInviteClick?.();
                 }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 text-[#B5BAC1] hover:text-white transition-opacity"
+                className="opacity-0 group-hover:opacity-100 p-0.5 text-muted2 hover:text-foreground transition-opacity"
               >
                 <UserPlus className="h-3.5 w-3.5" />
               </button>
@@ -509,7 +509,7 @@ function TextChannelRow({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="opacity-0 group-hover:opacity-100 p-0.5 text-[#B5BAC1] hover:text-red-400 transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 p-0.5 text-muted2 hover:text-red-400 transition-opacity"
                   onClick={e => {
                     e.stopPropagation();
                     if (
@@ -575,7 +575,7 @@ function CategoryActions({
           onKeyDown={e => {
             if (e.key === "Escape") setRenaming(false);
           }}
-          className="w-28 rounded bg-[#1E1F22] px-1.5 py-0.5 text-[11px] font-semibold uppercase text-white outline-none ring-1 ring-[#5865F2]"
+          className="w-28 rounded bg-rail px-1.5 py-0.5 text-[11px] font-semibold uppercase text-white outline-none ring-1 ring-[#5865F2]"
         />
       </form>
     );
@@ -584,7 +584,7 @@ function CategoryActions({
   return (
     <>
       <button
-        className="text-[#B5BAC1] hover:text-white"
+        className="text-muted2 hover:text-foreground"
         title="Renomear categoria"
         onClick={() => {
           setNewName(name);
@@ -594,7 +594,7 @@ function CategoryActions({
         <Pencil className="h-3 w-3" />
       </button>
       <button
-        className="text-[#B5BAC1] hover:text-red-400"
+        className="text-muted2 hover:text-red-400"
         title="Excluir categoria"
         onClick={() => {
           if (

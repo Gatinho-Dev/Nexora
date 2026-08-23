@@ -87,7 +87,7 @@ function VideoTile({
           )}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-[#2B2D31]">
+        <div className="flex h-full w-full items-center justify-center bg-sidebar">
           <button
             type="button"
             onClick={() => onOpenProfile?.(participant.userId)}
@@ -256,15 +256,15 @@ export function VoiceView({
 
   if (!connected) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-[#313338] p-8 text-white select-none">
-        <div className="rounded-2xl bg-[#2B2D31] p-6 text-[#B5BAC1] border border-black/20">
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-chat p-8 text-white select-none">
+        <div className="rounded-2xl bg-sidebar p-6 text-muted2 border border-black/20">
           <Headphones className="h-12 w-12" />
         </div>
         <div className="text-center max-w-sm">
           <h2 className="text-xl font-bold text-white tracking-wide">
             {title}
           </h2>
-          <p className="mt-1 text-xs text-[#B5BAC1]">
+          <p className="mt-1 text-xs text-muted2">
             {participants.length > 0
               ? `${participants.length} ${participants.length === 1 ? "pessoa conectada nesta sala da Nexora" : "pessoas conectadas nesta sala da Nexora"}`
               : "Ninguém conectado por aqui ainda"}
@@ -295,7 +295,7 @@ export function VoiceView({
 
         {connectedElsewhere ? (
           <div className="flex flex-col items-center gap-2">
-            <p className="text-xs text-[#B5BAC1]">
+            <p className="text-xs text-muted2">
               Você já está em outra chamada na Nexora.
             </p>
             <Button
@@ -424,7 +424,7 @@ export function VoiceView({
       <div className="flex-1 overflow-y-auto p-4 min-h-0">
         {isStage && (
           <div className="mx-auto mb-4 max-w-3xl">
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[#949BA4]">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-faint">
               Palestrantes
             </p>
           </div>
@@ -466,7 +466,7 @@ export function VoiceView({
         {/* Stage audience strip */}
         {isStage && audience.length > 0 && (
           <div className="mx-auto mt-6 max-w-3xl">
-            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[#949BA4]">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-faint">
               Audiência ({audience.length})
             </p>
             <div className="flex flex-wrap gap-2">
@@ -476,7 +476,7 @@ export function VoiceView({
                   type="button"
                   onClick={() => onOpenProfile?.(p.userId)}
                   title={`Ver perfil de ${p.name}`}
-                  className="flex items-center gap-2 rounded-full bg-white/5 py-1 pl-1 pr-3 text-xs text-[#B5BAC1] transition-colors hover:bg-white/10 hover:text-white"
+                  className="flex items-center gap-2 rounded-full bg-white/5 py-1 pl-1 pr-3 text-xs text-muted2 transition-colors hover:bg-white/10 hover:text-white"
                 >
                   <Avatar
                     userId={p.userId}

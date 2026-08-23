@@ -14,11 +14,11 @@ export default function Home() {
 
   return (
     <main
-      className="min-h-[100dvh] flex flex-col items-center justify-center bg-[#313338] text-white select-none"
+      className="min-h-[100dvh] flex flex-col items-center justify-center bg-chat text-white select-none"
       aria-busy="true"
     >
       <NexoraAppIcon className="mb-4 h-14 w-14 animate-pulse" />
-      <p className="text-[#B5BAC1] text-sm" role="status">
+      <p className="text-muted2 text-sm" role="status">
         Carregando Nexora...
       </p>
     </main>

@@ -29,7 +29,7 @@ export function DMSidebar({
   return (
     <aside
       aria-label="Mensagens diretas"
-      className="flex h-full w-60 flex-col border-r border-black/20 bg-[#2B2D31] select-none"
+      className="flex h-full w-60 flex-col border-r border-black/20 bg-sidebar select-none"
     >
       <div className="flex h-12 items-center border-b border-white/5 px-3">
         <button
@@ -37,8 +37,8 @@ export function DMSidebar({
           className={cn(
             "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
             !activeConversationId
-              ? "bg-[#404249] text-white"
-              : "text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]"
+              ? "bg-act text-foreground"
+              : "text-muted2 hover:bg-hov hover:text-bodyx"
           )}
         >
           <Users className="h-4 w-4" /> Amigos
@@ -46,7 +46,7 @@ export function DMSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        <p className="px-2 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-[#949BA4]">
+        <p className="px-2 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-faint">
           Mensagens diretas
         </p>
         <button
@@ -54,8 +54,8 @@ export function DMSidebar({
           className={cn(
             "group mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
             officialActive
-              ? "bg-[#404249] text-white"
-              : "text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]"
+              ? "bg-act text-foreground"
+              : "text-muted2 hover:bg-hov hover:text-bodyx"
           )}
           aria-current={officialActive ? "page" : undefined}
         >
@@ -67,7 +67,7 @@ export function DMSidebar({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <p className="truncate text-xs font-bold text-white">Nexora</p>
+              <p className="truncate text-xs font-bold text-foreground">Nexora</p>
               <span
                 className="rounded-[3px] bg-[#5865F2] px-1 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-white"
                 title="Conta oficial e verificada da Nexora"
@@ -75,7 +75,7 @@ export function DMSidebar({
                 Oficial
               </span>
             </div>
-            <p className="truncate text-[11px] text-[#B5BAC1]/70">
+            <p className="truncate text-[11px] text-muted2/70">
               Comunicados da plataforma
             </p>
           </div>
@@ -93,8 +93,8 @@ export function DMSidebar({
             className={cn(
               "mb-2 flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors",
               location.pathname === "/nexora-admin"
-                ? "border-[#5865F2]/40 bg-[#5865F2]/15 text-white"
-                : "border-transparent text-[#B5BAC1] hover:border-white/[0.06] hover:bg-[#35373C] hover:text-white"
+                ? "border-[#5865F2]/40 bg-[#5865F2]/15 text-[#c9cdfb]"
+                : "border-transparent text-muted2 hover:border-white/[0.06] hover:bg-hov hover:text-white"
             )}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#5865F2]/15 text-[#9aa5ff]">
@@ -111,11 +111,11 @@ export function DMSidebar({
           </button>
         )}
         {conversations.isLoading ? (
-          <p className="px-2 py-2 text-xs text-[#B5BAC1]">
+          <p className="px-2 py-2 text-xs text-muted2">
             Carregando conversas...
           </p>
         ) : conversations.data?.length === 0 ? (
-          <p className="px-2 py-2 text-xs text-[#B5BAC1]">
+          <p className="px-2 py-2 text-xs text-muted2">
             Nenhuma conversa. Adicione amigos para começar na Nexora!
           </p>
         ) : (
@@ -128,8 +128,8 @@ export function DMSidebar({
                 className={cn(
                   "mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
                   location.pathname === "/channels/@me/requests"
-                    ? "bg-[#404249] text-white"
-                    : "text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]"
+                    ? "bg-act text-foreground"
+                    : "text-muted2 hover:bg-hov hover:text-bodyx"
                 )}
               >
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/5">
@@ -143,7 +143,7 @@ export function DMSidebar({
                 </span>
               </button>
             )}
-            <p className="px-2 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-[#949BA4]">
+            <p className="px-2 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-faint">
               Mensagens
             </p>
             <div className="space-y-0.5">
@@ -158,8 +158,8 @@ export function DMSidebar({
                       className={cn(
                         "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors group",
                         activeConversationId === conv.id
-                          ? "bg-[#404249] text-white font-medium"
-                          : "text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]"
+                          ? "bg-act text-foreground font-medium"
+                          : "text-muted2 hover:bg-hov hover:text-bodyx"
                       )}
                     >
                       {other?.id ? (
@@ -192,13 +192,13 @@ export function DMSidebar({
                           <p
                             className={cn(
                               "truncate text-xs font-semibold group-hover:text-white transition-colors",
-                              unread > 0 && "text-white font-bold"
+                              unread > 0 && "text-foreground font-bold"
                             )}
                           >
                             {other?.name ?? other?.username ?? "Conversa"}
                           </p>
                           {conv.lastMessage && (
-                            <p className="truncate text-[11px] text-[#B5BAC1]/70">
+                            <p className="truncate text-[11px] text-muted2/70">
                               {conv.lastMessage.content || "📎 Anexo enviado"}
                             </p>
                           )}

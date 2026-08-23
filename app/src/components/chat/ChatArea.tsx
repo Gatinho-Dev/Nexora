@@ -158,7 +158,7 @@ export function ChatArea({
   }, [typingMap, myId, now]);
 
   return (
-    <main className="flex-1 flex flex-col min-w-0 h-full bg-[#313338] relative select-text">
+    <main className="flex-1 flex flex-col min-w-0 h-full bg-chat relative select-text">
       {header}
 
       {/* Messages area */}
@@ -170,17 +170,17 @@ export function ChatArea({
         {loading ? (
           <SkeletonChatLoader />
         ) : !messages || messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-[#B5BAC1] gap-3 p-8 select-none">
+          <div className="h-full flex flex-col items-center justify-center text-muted2 gap-3 p-8 select-none">
             <div className="h-16 w-16 rounded-full bg-[#41434A] flex items-center justify-center">
-              <div className="h-full w-full rounded-full flex items-center justify-center text-[#DBDEE1]">
+              <div className="h-full w-full rounded-full flex items-center justify-center text-bodyx">
                 <Hash className="h-8 w-8" />
               </div>
             </div>
             <div className="text-center">
-              <h3 className="text-base font-bold text-white mb-1">
+              <h3 className="text-base font-bold text-foreground mb-1">
                 Este é o começo da conversa
               </h3>
-              <p className="text-sm text-[#B5BAC1]">
+              <p className="text-sm text-muted2">
                 Envie a primeira mensagem para começar a conversa.
               </p>
             </div>
@@ -197,10 +197,10 @@ export function ChatArea({
                 <div className="h-12 w-12 rounded-2xl bg-[#5865F2]/20 text-[#5865F2] flex items-center justify-center mb-3">
                   <Hash className="h-6 w-6" />
                 </div>
-                <h2 className="font-bold text-xl text-white">
+                <h2 className="font-bold text-xl text-foreground">
                   Bem-vindo ao começo deste canal!
                 </h2>
-                <p className="text-xs text-[#B5BAC1] mt-1">
+                <p className="text-xs text-muted2 mt-1">
                   Este é o início histórico de todas as mensagens.
                 </p>
               </div>
@@ -228,16 +228,16 @@ export function ChatArea({
       )}
 
       {/* Typing Indicator Bar */}
-      <div className="h-5 px-4 text-xs font-medium text-[#B5BAC1] flex items-center select-none">
+      <div className="h-5 px-4 text-xs font-medium text-muted2 flex items-center select-none">
         {typingUsers.length === 1 && (
-          <span className="flex items-center gap-1.5 text-white/80">
+          <span className="flex items-center gap-1.5 text-muted2">
             <span className="h-1.5 w-1.5 rounded-full bg-[#5865F2] animate-ping" />
             <strong className="text-[#5865F2]">{typingUsers[0]}</strong> está
             digitando...
           </span>
         )}
         {typingUsers.length === 2 && (
-          <span className="flex items-center gap-1.5 text-white/80">
+          <span className="flex items-center gap-1.5 text-muted2">
             <span className="h-1.5 w-1.5 rounded-full bg-[#5865F2] animate-ping" />
             <strong className="text-[#5865F2]">{typingUsers[0]}</strong> e{" "}
             <strong className="text-[#5865F2]">{typingUsers[1]}</strong> estão
@@ -245,7 +245,7 @@ export function ChatArea({
           </span>
         )}
         {typingUsers.length > 2 && (
-          <span className="flex items-center gap-1.5 text-white/80">
+          <span className="flex items-center gap-1.5 text-muted2">
             <span className="h-1.5 w-1.5 rounded-full bg-[#5865F2] animate-ping" />
             Várias pessoas estão digitando na Nexora...
           </span>
@@ -291,7 +291,7 @@ function renderMessages(
           className="flex items-center gap-3 px-4 py-3 select-none"
         >
           <div className="h-px flex-1 bg-[#3F4147]" />
-          <span className="text-[11px] font-bold text-[#B5BAC1] uppercase tracking-wider">
+          <span className="text-[11px] font-bold text-muted2 uppercase tracking-wider">
             {day}
           </span>
           <div className="h-px flex-1 bg-[#3F4147]" />
@@ -330,8 +330,8 @@ function SkeletonChatLoader() {
           <div className="h-10 w-10 rounded-full bg-[#383A40] shrink-0" />
           <div className="flex-1 space-y-2">
             <div className="h-4 w-32 rounded bg-[#383A40]" />
-            <div className="h-4 w-3/4 rounded bg-[#35373C]" />
-            <div className="h-4 w-1/2 rounded bg-[#35373C]" />
+            <div className="h-4 w-3/4 rounded bg-hov" />
+            <div className="h-4 w-1/2 rounded bg-hov" />
           </div>
         </div>
       ))}

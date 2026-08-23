@@ -13,6 +13,8 @@ import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
 import { Menu, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VoiceMediaRenderer } from "@/components/voice/VoiceMediaRenderer";
+import { PermanentBanScreen } from "@/components/safety/PermanentBanScreen";
+import { TriangleAlert } from "lucide-react";
 import { NexoraAppIcon, NexoraLogo } from "@/components/NexoraBrand";
 
 export function AppLayout() {
@@ -35,6 +37,17 @@ export function AppLayout() {
 
   // Sync unread counters
   const unread = trpc.message.unread.useQuery(undefined, { enabled: !!user });
+  const safety = trpc.safety.me.useQuery(undefined, { enabled: !!user });
+
+  // Keep the sensitive-media preference in sync with the server.
+  useEffect(() => {
+    if (safety.data) {
+      useAppStore
+        .getState()
+        .setSensitiveMediaPref(safety.data.safety.sensitiveMediaPref);
+    }
+  }, [safety.data]);
+
   useEffect(() => {
     if (unread.data) {
       useAppStore
@@ -51,13 +64,18 @@ export function AppLayout() {
 
   if (isLoading || !user) {
     return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center bg-[#313338] text-white">
+      <div className="flex h-[100dvh] flex-col items-center justify-center bg-chat text-foreground">
         <NexoraAppIcon className="mb-4 h-14 w-14 animate-pulse" />
-        <p className="text-sm font-medium text-[#B5BAC1] animate-pulse">
+        <p className="text-sm font-medium text-muted2 animate-pulse">
           Carregando Nexora...
         </p>
       </div>
     );
+  }
+
+  // Server-side enforced ban — presentation only.
+  if (safety.data?.safety.accountStatus === "permanently_banned") {
+    return <PermanentBanScreen severeStrikes={safety.data.safety.severeStrikes} />;
   }
 
   const inServer =
@@ -74,7 +92,7 @@ export function AppLayout() {
   };
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-[#1E1F22] select-none text-[#F2F3F5]">
+    <div className="flex h-[100dvh] overflow-hidden bg-rail select-none text-[#F2F3F5]">
       {/* Desktop Rail */}
       <div className="hidden md:flex h-full">
         <ServerRail onOpenContextMenu={handleOpenContextMenu} />
@@ -95,11 +113,23 @@ export function AppLayout() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
+        {safety.data?.safety.accountStatus === "suspended" && (
+          <button
+            onClick={() => navigate("/channels/@me")}
+            className="flex items-center justify-center gap-2 bg-red-500/15 px-3 py-2 text-left text-xs font-semibold text-red-200 hover:bg-red-500/20"
+            aria-label="Conta suspensa: consulte o Status da Conta"
+          >
+            <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="min-w-0 truncate">
+              Uma ação foi aplicada à sua conta — confira em Configurações → Status da Conta.
+            </span>
+          </button>
+        )}
         {/* Mobile top bar */}
-        <div className="flex h-12 items-center gap-2 border-b border-black/20 px-3 md:hidden bg-[#2B2D31] text-white">
+        <div className="flex h-12 items-center gap-2 border-b border-black/20 px-3 md:hidden bg-sidebar text-foreground">
           <button
             onClick={() => setMobileNavOpen(!mobileNavOpen)}
-            className="flex h-11 w-11 items-center justify-center rounded-md text-[#B5BAC1] hover:bg-[#35373C] hover:text-white"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-muted2 hover:bg-hov hover:text-white"
             aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
             title="Menu"
           >
@@ -122,8 +152,8 @@ export function AppLayout() {
               <button
                 onClick={() => setMembersOpen(!membersOpen)}
                 className={cn(
-                  "flex h-11 w-11 items-center justify-center rounded-md text-[#B5BAC1] hover:bg-[#35373C]",
-                  membersOpen && "bg-[#404249] text-white"
+                  "flex h-11 w-11 items-center justify-center rounded-md text-muted2 hover:bg-hov",
+                  membersOpen && "bg-act text-foreground"
                 )}
                 aria-label={membersOpen ? "Ocultar membros" : "Mostrar membros"}
                 title="Membros"

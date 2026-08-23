@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
-import { TRPCError } from "@trpc/server";
+import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
@@ -22,6 +21,7 @@ import {
   broadcastToConversation,
   sendToUsers,
 } from "./realtime";
+import { assertCanInteract } from "./services/accountSafety";
 
 // ── DTO assembly ──────────────────────────────────────────────
 async function buildMessageDTO(
@@ -36,6 +36,20 @@ async function buildMessageDTO(
     .select()
     .from(schema.attachments)
     .where(eq(schema.attachments.messageId, msg.id));
+
+  const moderationRows =
+    attachmentRows.length > 0
+      ? await db
+          .select()
+          .from(schema.mediaModeration)
+          .where(
+            inArray(
+              schema.mediaModeration.fileId,
+              attachmentRows.map(a => a.fileId)
+            )
+          )
+      : [];
+  const moderationByFile = new Map(moderationRows.map(m => [m.fileId, m]));
 
   const reactionRows = await db
     .select()
@@ -100,15 +114,28 @@ async function buildMessageDTO(
           bio: null,
           status: "offline",
         },
-    attachments: attachmentRows.map(a => ({
-      id: a.id,
-      fileId: a.fileId,
-      filename: a.filename,
-      mimeType: a.mimeType,
-      size: a.size,
-      url: publicFileUrl(a.fileId),
-      spoiler: a.spoiler,
-    })),
+    attachments: attachmentRows.map(a => {
+      const moderation = moderationByFile.get(a.fileId);
+      return {
+        id: a.id,
+        fileId: a.fileId,
+        filename: a.filename,
+        mimeType: a.mimeType,
+        size: a.size,
+        url: publicFileUrl(a.fileId),
+        spoiler: a.spoiler,
+        moderationStatus:
+          moderation?.status === "processing" ||
+          moderation?.status === "approved" ||
+          moderation?.status === "sensitive" ||
+          moderation?.status === "blocked"
+            ? moderation.status
+            : ("approved" as const),
+        sensitive: moderation?.sensitive ?? false,
+        adultOnly: moderation?.adultOnly ?? false,
+        allowReveal: moderation?.allowReveal ?? true,
+      };
+    }),
     reactions: [...reactionMap.values()],
     replyTo,
   };
@@ -395,6 +422,9 @@ export const messageRouter = createRouter({
       );
       const db = getDb();
 
+      // Suspended / banned accounts cannot send messages.
+      await assertCanInteract(ctx.user.id);
+
       const content = input.content.trim();
       if (
         !content &&
@@ -432,14 +462,37 @@ export const messageRouter = createRouter({
         })
         .$returningId();
 
-      // Attach previously uploaded files
+      // Attach previously uploaded files — only media already cleared by
+      // content-safety may be published.
       if (input.attachmentIds && input.attachmentIds.length > 0) {
         const fileRows = await db
           .select()
           .from(schema.files)
           .where(inArray(schema.files.id, input.attachmentIds));
+        const modRows = await db
+          .select()
+          .from(schema.mediaModeration)
+          .where(inArray(schema.mediaModeration.fileId, input.attachmentIds));
+        const modById = new Map(modRows.map(m => [m.fileId, m]));
         for (const file of fileRows) {
           if (file.uploaderId !== ctx.user.id) continue;
+          const moderation = modById.get(file.id);
+          // Unmoderated or blocked media is never published.
+          if (moderation) {
+            if (
+              moderation.status === "blocked" ||
+              moderation.status === "processing" ||
+              moderation.status === "review_required"
+            ) {
+              throw new TRPCError({
+                code: "FORBIDDEN",
+                message:
+                  moderation.status === "blocked"
+                    ? "Uma das mídias foi bloqueada pela segurança do Nexora."
+                    : "Verificando mídia... Aguarde a análise antes de enviar.",
+              });
+            }
+          }
           await db.insert(schema.attachments).values({
             messageId: id,
             fileId: file.id,
@@ -616,6 +669,7 @@ export const messageRouter = createRouter({
       z.object({ messageId: z.number(), emoji: z.string().min(1).max(32) })
     )
     .mutation(async ({ ctx, input }) => {
+      await assertCanInteract(ctx.user.id);
       rateLimit(
         `reaction:${ctx.user.id}`,
         RateLimits.reaction.limit,

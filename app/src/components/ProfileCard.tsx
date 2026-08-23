@@ -86,14 +86,14 @@ function ProfileBadges({ badges }: { badges?: ProfileBadgeData[] }) {
   if (!badges?.length) {
     return (
       <div className="flex items-center gap-3 rounded-xl border border-dashed border-white/15 bg-white/[0.025] px-3.5 py-3 text-left">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-[#949BA4]">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-faint">
           <BadgeCheck className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-[#DBDEE1]">
+          <p className="text-xs font-semibold text-bodyx">
             Espaço para emblemas
           </p>
-          <p className="mt-0.5 text-[11px] leading-4 text-[#949BA4]">
+          <p className="mt-0.5 text-[11px] leading-4 text-faint">
             Emblemas oficiais aparecerão aqui quando forem concedidos.
           </p>
         </div>
@@ -218,7 +218,7 @@ export function ProfileCard({
             <DialogClose asChild>
               <button
                 type="button"
-                className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#11131A]/80 text-[#DBDEE1] transition-colors hover:bg-[#11131A] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#11131A]/80 text-bodyx transition-colors hover:bg-[#11131A] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
                 aria-label="Fechar perfil"
                 title="Fechar"
               >
@@ -238,7 +238,7 @@ export function ProfileCard({
               <p className="text-sm font-semibold text-white">
                 Não foi possível abrir este perfil.
               </p>
-              <p className="mt-1 text-xs text-[#949BA4]">
+              <p className="mt-1 text-xs text-faint">
                 {query.error?.message ?? "O usuário não está mais disponível."}
               </p>
             </div>
@@ -329,7 +329,7 @@ export function ProfileCard({
                     </span>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#B5BAC1]">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted2">
                   <span>@{profile.username ?? "sem-usuario"}</span>
                   <span className="inline-flex items-center gap-1.5">
                     <span
@@ -345,13 +345,13 @@ export function ProfileCard({
 
               <div className="mt-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.72fr)]">
                 <section className="rounded-xl border border-white/[0.08] bg-[#171920] p-4 sm:p-5">
-                  <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#949BA4]">
+                  <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
                     Sobre mim
                   </h3>
                   <p
                     className={cn(
                       "mt-2 whitespace-pre-wrap text-sm leading-6",
-                      profile.bio ? "text-[#DBDEE1]" : "text-[#777E8B]"
+                      profile.bio ? "text-bodyx" : "text-faint"
                     )}
                   >
                     {profile.bio ||
@@ -360,7 +360,7 @@ export function ProfileCard({
                 </section>
 
                 <section className="rounded-xl border border-white/[0.08] bg-[#171920] p-4 sm:p-5">
-                  <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#949BA4]">
+                  <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-faint">
                     Emblemas
                   </h3>
                   <div className="mt-2.5">
@@ -369,7 +369,7 @@ export function ProfileCard({
                 </section>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/[0.07] pt-4 text-[11px] text-[#949BA4]">
+              <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/[0.07] pt-4 text-[11px] text-faint">
                 {joinedLabel ? (
                   <span className="inline-flex items-center gap-1.5">
                     <CalendarDays className="h-3.5 w-3.5 text-[#7383FF]" />

@@ -17,7 +17,7 @@ export function DMRequests() {
   });
 
   return (
-    <div className="flex flex-1 flex-col items-center bg-[#313338] p-8 text-white select-none">
+    <div className="flex flex-1 flex-col items-center bg-chat p-8 text-white select-none">
       <div className="w-full max-w-xl">
         <div className="mb-4 flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#5865F2]/20 text-[#9aa5ff]">
@@ -25,7 +25,7 @@ export function DMRequests() {
           </span>
           <div>
             <h1 className="text-lg font-bold">Solicitações de mensagem</h1>
-            <p className="text-xs text-[#B5BAC1]">
+            <p className="text-xs text-muted2">
               Pessoas fora da sua lista de amigos que te enviaram mensagem.
             </p>
           </div>
@@ -33,13 +33,13 @@ export function DMRequests() {
 
         {conversations.isLoading ? (
           <div className="flex justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-[#B5BAC1]" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted2" />
           </div>
         ) : requests.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center">
-            <Inbox className="h-10 w-10 text-[#80848E]" />
+            <Inbox className="h-10 w-10 text-faint" />
             <p className="text-sm font-semibold">Sem solicitações</p>
-            <p className="max-w-xs text-xs text-[#B5BAC1]">
+            <p className="max-w-xs text-xs text-muted2">
               Quando alguém que não é seu amigo te mandar mensagem, o convite
               aparece aqui.
             </p>
@@ -51,7 +51,7 @@ export function DMRequests() {
               return (
                 <div
                   key={conv.id}
-                  className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-[#2B2D31] p-3.5"
+                  className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-sidebar p-3.5"
                 >
                   {other && (
                     <Avatar
@@ -67,7 +67,7 @@ export function DMRequests() {
                     <p className="truncate text-sm font-bold">
                       {other?.name ?? other?.username ?? "Usuário"}
                     </p>
-                    <p className="truncate text-xs text-[#B5BAC1]">
+                    <p className="truncate text-xs text-muted2">
                       {conv.lastMessage?.content || "📎 Anexo enviado"}
                     </p>
                   </div>
@@ -85,7 +85,7 @@ export function DMRequests() {
                     onClick={() => deleteConversation.mutate({ conversationId: conv.id })}
                     title="Excluir solicitação"
                     aria-label="Excluir solicitação"
-                    className="text-[#B5BAC1] hover:bg-red-500/10 hover:text-red-400"
+                    className="text-muted2 hover:bg-red-500/10 hover:text-red-400"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -97,7 +97,7 @@ export function DMRequests() {
 
         <button
           onClick={() => navigate("/channels/@me")}
-          className="mt-6 flex items-center gap-1.5 text-xs text-[#B5BAC1] transition-colors hover:text-white"
+          className="mt-6 flex items-center gap-1.5 text-xs text-muted2 transition-colors hover:text-white"
         >
           <X className="h-3.5 w-3.5" /> Voltar
         </button>

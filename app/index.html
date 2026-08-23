@@ -1,6 +1,15 @@
 <!doctype html>
-<html lang="pt-BR" class="dark">
+<html lang="pt-BR">
   <head>
+    <script>
+      // Avoid theme flash: apply saved preference before first paint.
+      try {
+        var t = localStorage.getItem("nexora-theme") || "dark";
+        var sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        var dark = t === "system" ? sysDark : t === "dark";
+        document.documentElement.classList.toggle("dark", dark);
+      } catch (e) {}
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#11131A" />
@@ -13,12 +22,12 @@
     <title>Nexora - Converse em tempo real</title>
   </head>
   <body
-    class="bg-[#313338] text-[#F2F3F5] antialiased selection:bg-[#4654D8]/30 selection:text-white"
+    class="bg-background text-foreground antialiased selection:bg-[#5865F2]/30 selection:text-white"
     style="background: #313338; color: #f2f3f5"
   >
     <div id="root" style="height: 100dvh">
       <div
-        class="min-h-[100dvh] flex flex-col items-center justify-center bg-[#313338] text-white select-none"
+        class="min-h-[100dvh] flex flex-col items-center justify-center bg-background text-foreground select-none"
         style="height: 100%"
         aria-busy="true"
       >

@@ -64,7 +64,7 @@ export function DMConversation() {
   };
 
   const header = (
-    <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/5 px-4 bg-[#2B2D31] text-white select-none shadow-sm">
+    <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/5 px-4 bg-sidebar text-white select-none shadow-sm">
       <div className="flex items-center gap-2.5 min-w-0">
         {other?.id ? (
           <button
@@ -87,7 +87,7 @@ export function DMConversation() {
           {other?.name ?? other?.username ?? "Conversa"}
         </span>
         {other?.username && (
-          <span className="text-xs text-[#B5BAC1] truncate font-medium">
+          <span className="text-xs text-muted2 truncate font-medium">
             @{other.username}
           </span>
         )}
@@ -99,7 +99,7 @@ export function DMConversation() {
               <button
                 onClick={() => startCall(false)}
                 disabled={joining || inCall}
-                className="rounded-lg p-1.5 text-[#B5BAC1] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                className="rounded-lg p-1.5 text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors disabled:opacity-50"
               >
                 <Phone className="h-4 w-4" />
               </button>
@@ -114,7 +114,7 @@ export function DMConversation() {
               <button
                 onClick={() => startCall(true)}
                 disabled={joining || inCall}
-                className="rounded-lg p-1.5 text-[#B5BAC1] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                className="rounded-lg p-1.5 text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors disabled:opacity-50"
               >
                 <Video className="h-4 w-4" />
               </button>
@@ -133,9 +133,9 @@ export function DMConversation() {
   );
 
   const requestBanner = isRequest ? (
-    <div className="flex flex-wrap items-center gap-2 border-b border-white/5 bg-[#2B2D31] px-4 py-2.5 text-xs select-none">
+    <div className="flex flex-wrap items-center gap-2 border-b border-white/5 bg-sidebar px-4 py-2.5 text-xs select-none">
       <UserPlus className="h-4 w-4 shrink-0 text-[#5865F2]" />
-      <p className="min-w-0 flex-1 text-[#DBDEE1]">
+      <p className="min-w-0 flex-1 text-bodyx">
         <span className="font-bold">
           {other?.name ?? other?.username ?? "Alguém"}
         </span>{" "}
@@ -161,11 +161,11 @@ export function DMConversation() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {conversation.error ? (
-          <div className="flex flex-1 items-center justify-center text-xs text-[#B5BAC1] bg-[#313338]">
+          <div className="flex flex-1 items-center justify-center text-xs text-muted2 bg-chat">
             Conversa não encontrada.
           </div>
         ) : !conversation.data || !me ? (
-          <div className="flex flex-1 items-center justify-center bg-[#313338]">
+          <div className="flex flex-1 items-center justify-center bg-chat">
             <NexoraAppIcon className="h-10 w-10 animate-pulse" />
           </div>
         ) : inCall ? (

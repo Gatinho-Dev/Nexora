@@ -459,6 +459,123 @@ export const serverEvents = mysqlTable(
   (table) => ({ serverIdx: index("se_server_idx").on(table.serverId) }),
 );
 
+// ── Account safety & moderation ───────────────────────────────
+// Server-side source of truth for account standing. The frontend may display
+// this data but never decides punishments.
+export const accountSafety = mysqlTable("account_safety", {
+  userId: bigint("userId", { mode: "number", unsigned: true })
+    .primaryKey(),
+  status: mysqlEnum("status", [
+    "good_standing",
+    "limited",
+    "very_limited",
+    "at_risk",
+    "suspended",
+    "permanently_banned",
+  ])
+    .default("good_standing")
+    .notNull(),
+  severeStrikes: int("severeStrikes").default(0).notNull(),
+  maxSevereStrikes: int("maxSevereStrikes").default(3).notNull(),
+  suspendedUntil: timestamp("suspendedUntil"),
+  suspendedByViolationId: bigint("suspendedByViolationId", {
+    mode: "number",
+    unsigned: true,
+  }),
+  permanentBan: boolean("permanentBan").default(false).notNull(),
+  /** Sensitive media preference: hide | warn | auto */
+  sensitiveMediaPref: mysqlEnum("sensitiveMediaPref", [
+    "hide",
+    "warn",
+    "auto",
+  ])
+    .default("warn")
+    .notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
+export const violations = mysqlTable(
+  "violations",
+  {
+    id: serial("id").primaryKey(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    fileId: bigint("fileId", { mode: "number", unsigned: true }),
+    category: varchar("category", { length: 120 }).notNull(),
+    severity: mysqlEnum("severity", ["warning", "moderate", "severe"])
+      .default("severe")
+      .notNull(),
+    source: mysqlEnum("source", ["automatic_ai", "moderator", "user_report"])
+      .default("automatic_ai")
+      .notNull(),
+    moderationModel: varchar("moderationModel", { length: 160 }),
+    status: mysqlEnum("status", [
+      "pending_review",
+      "confirmed",
+      "false_positive",
+      "resolved",
+    ])
+      .default("pending_review")
+      .notNull(),
+    action: mysqlEnum("action", [
+      "none",
+      "warning",
+      "limited",
+      "content_blocked",
+      "three_day_suspension",
+      "temporary_suspension",
+      "permanent_ban",
+    ])
+      .default("none")
+      .notNull(),
+    strikeApplied: boolean("strikeApplied").default(false).notNull(),
+    internalNote: text("internalNote"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    reviewedAt: timestamp("reviewedAt"),
+    reviewedByUserId: bigint("reviewedByUserId", {
+      mode: "number",
+      unsigned: true,
+    }),
+  },
+  (table) => ({
+    userIdx: index("vio_user_idx").on(table.userId, table.id),
+    statusIdx: index("vio_status_idx").on(table.status, table.createdAt),
+    /** Idempotency: one violation per file + category. */
+    fileCatUniq: uniqueIndex("vio_file_cat_uniq").on(table.fileId, table.category),
+  }),
+);
+
+/** Moderation state for uploaded files (images/videos). One row per file. */
+export const mediaModeration = mysqlTable("media_moderation", {
+  fileId: bigint("fileId", { mode: "number", unsigned: true })
+    .primaryKey(),
+  uploaderId: bigint("uploaderId", { mode: "number", unsigned: true }).notNull(),
+  status: mysqlEnum("status", [
+    "processing",
+    "approved",
+    "sensitive",
+    "blocked",
+    "review_required",
+  ])
+    .default("processing")
+    .notNull(),
+  safety: mysqlEnum("safety", ["safe", "unsafe", "unknown"])
+    .default("unknown")
+    .notNull(),
+  categories: json("categories").$type<string[]>().notNull(),
+  sensitive: boolean("sensitive").default(false).notNull(),
+  adultOnly: boolean("adultOnly").default(false).notNull(),
+  allowReveal: boolean("allowReveal").default(true).notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  lastError: varchar("lastError", { length: 500 }),
+  moderationModel: varchar("moderationModel", { length: 160 }),
+  moderatedAt: timestamp("moderatedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 // ── Types ─────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -485,3 +602,6 @@ export type OfficialAnnouncementRead = typeof officialAnnouncementReads.$inferSe
 export type PlatformBadge = typeof platformBadges.$inferSelect;
 export type UserBadge = typeof userBadges.$inferSelect;
 export type AdminAuditLog = typeof adminAuditLog.$inferSelect;
+export type AccountSafety = typeof accountSafety.$inferSelect;
+export type Violation = typeof violations.$inferSelect;
+export type MediaModeration = typeof mediaModeration.$inferSelect;

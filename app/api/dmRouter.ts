@@ -7,6 +7,7 @@ import * as schema from "@db/schema";
 import type { ConversationDTO } from "@contracts/types";
 import { requireConversationAccess, toPublicUser } from "./utils/permissions";
 import { sendToUsers } from "./realtime";
+import { assertCanInteract } from "./services/accountSafety";
 
 async function buildConversationDTO(
   conversationId: number,
@@ -111,6 +112,7 @@ export const dmRouter = createRouter({
   open: authedQuery
     .input(z.object({ userId: z.number() }))
     .mutation(async ({ ctx, input }) => {
+      await assertCanInteract(ctx.user.id);
       const db = getDb();
       if (input.userId === ctx.user.id) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode conversar consigo mesmo." });

@@ -46,12 +46,12 @@ export function ServerChannel() {
 
   if (details.error) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[#313338] text-white">
-        <div className="text-center p-6 rounded-xl bg-[#2B2D31] border border-black/20 shadow-xl max-w-sm">
-          <p className="text-lg font-bold text-white">
+      <div className="flex flex-1 items-center justify-center bg-chat text-foreground">
+        <div className="text-center p-6 rounded-xl bg-sidebar border border-black/20 shadow-xl max-w-sm">
+          <p className="text-lg font-bold text-foreground">
             Comunidade não encontrada
           </p>
-          <p className="mt-1 text-xs text-[#B5BAC1]">
+          <p className="mt-1 text-xs text-muted2">
             Você não é membro desta comunidade na Nexora ou ela foi movida.
           </p>
           <button
@@ -67,7 +67,7 @@ export function ServerChannel() {
 
   if (!details.data || !me) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-[#313338]">
+      <div className="flex flex-1 items-center justify-center bg-chat">
         <div className="h-10 w-10 rounded-xl bg-[#5865F2] flex items-center justify-center font-bold text-white animate-pulse">
           N
         </div>
@@ -83,16 +83,16 @@ export function ServerChannel() {
   const canRead = details.data.myPermissions.includes("READ_MESSAGES");
 
   const header = channel ? (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/20 px-4 bg-[#313338] text-white select-none shadow-sm">
+    <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/20 px-4 bg-chat text-foreground select-none shadow-sm">
       <div className="flex items-center gap-2 min-w-0">
         {channel.type === "VOICE" ? (
           <Volume2 className="h-5 w-5 text-emerald-400 shrink-0" />
         ) : channel.type === "STAGE" ? (
           <Megaphone className="h-5 w-5 text-emerald-400 shrink-0" />
         ) : channel.type === "FORUM" ? (
-          <MessagesSquare className="h-5 w-5 text-[#80848E] shrink-0" />
+          <MessagesSquare className="h-5 w-5 text-faint shrink-0" />
         ) : (
-          <Hash className="h-5 w-5 text-[#80848E] shrink-0" />
+          <Hash className="h-5 w-5 text-faint shrink-0" />
         )}
         <span className="font-bold text-sm truncate">{channel.name}</span>
       </div>
@@ -104,8 +104,8 @@ export function ServerChannel() {
           <button
             onClick={() => setDesktopMembers(!desktopMembers)}
             className={cn(
-              "hidden md:flex rounded-lg p-1.5 text-[#B5BAC1] hover:bg-white/10 hover:text-white transition-colors",
-              desktopMembers && "bg-white/10 text-white"
+              "hidden md:flex rounded-lg p-1.5 text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors",
+              desktopMembers && "bg-white/10 text-foreground"
             )}
             title="Lista de membros"
           >
@@ -128,7 +128,7 @@ export function ServerChannel() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!channel ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-[#B5BAC1] bg-[#313338]">
+          <div className="flex flex-1 items-center justify-center text-sm text-muted2 bg-chat">
             Selecione um canal para começar a conversar na Nexora.
           </div>
         ) : channel.type === "VOICE" || channel.type === "STAGE" ? (
@@ -163,7 +163,7 @@ export function ServerChannel() {
             header={header}
           />
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-[#B5BAC1] bg-[#313338]">
+          <div className="flex flex-1 items-center justify-center text-sm text-muted2 bg-chat">
             Você não possui permissão para ver este canal.
           </div>
         )}
@@ -188,14 +188,14 @@ export function ServerChannel() {
             onClick={() => setMembersOpen(false)}
           />
           <div className="absolute right-0 top-0 h-full shadow-2xl">
-            <div className="flex h-full flex-col bg-[#2B2D31] text-white">
+            <div className="flex h-full flex-col bg-sidebar text-foreground">
               <div className="flex h-12 items-center justify-between border-b border-white/5 px-4">
                 <span className="text-xs font-bold uppercase tracking-wider">
                   Membros
                 </span>
                 <button
                   onClick={() => setMembersOpen(false)}
-                  className="rounded-lg p-1 text-[#B5BAC1] hover:bg-white/10 hover:text-white"
+                  className="rounded-lg p-1 text-muted2 hover:bg-black/[0.06] hover:text-foreground"
                 >
                   <X className="h-5 w-5" />
                 </button>

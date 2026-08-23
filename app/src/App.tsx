@@ -38,11 +38,14 @@ const NexoraAdminPanel = lazy(() =>
 const InvitePage = lazy(() =>
   import("./pages/InvitePage").then(module => ({ default: module.InvitePage }))
 );
+const LegalPage = lazy(() =>
+  import("./pages/LegalPage").then(module => ({ default: module.LegalPage }))
+);
 
 function PageLoader() {
   return (
     <main
-      className="flex min-h-[100dvh] items-center justify-center bg-[#313338]"
+      className="flex min-h-[100dvh] items-center justify-center bg-chat"
       aria-busy="true"
     >
       <NexoraAppIcon className="h-12 w-12 animate-pulse" />
@@ -89,6 +92,22 @@ export default function App() {
         element={
           <Deferred>
             <InvitePage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/legal/terms"
+        element={
+          <Deferred>
+            <LegalPage kind="terms" />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/legal/guidelines"
+        element={
+          <Deferred>
+            <LegalPage kind="guidelines" />
           </Deferred>
         }
       />

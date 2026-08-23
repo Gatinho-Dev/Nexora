@@ -104,20 +104,20 @@ export function ForumView({ channelId }: { channelId: number }) {
   };
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col bg-[#313338] text-white">
+    <div className="flex flex-1 min-h-0 flex-col bg-chat text-foreground">
       {/* Forum header */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/20 bg-[#313338] px-4 select-none shadow-sm">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/20 bg-chat px-4 select-none shadow-sm">
         <div className="flex min-w-0 items-center gap-2">
           {openPostId !== null ? (
             <button
               onClick={() => setOpenPostId(null)}
-              className="rounded p-1 text-[#B5BAC1] hover:bg-white/10 hover:text-white"
+              className="rounded p-1 text-muted2 hover:bg-white/10 hover:text-foreground"
               title="Voltar para os posts"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
           ) : (
-            <MessagesSquare className="h-5 w-5 shrink-0 text-[#80848E]" />
+            <MessagesSquare className="h-5 w-5 shrink-0 text-faint" />
           )}
           <span className="truncate text-sm font-bold">
             {openPostId !== null
@@ -142,7 +142,7 @@ export function ForumView({ channelId }: { channelId: number }) {
         <>
           {/* New post composer */}
           {composerOpen && (
-            <div className="mx-4 mt-3 space-y-2 rounded-xl border border-white/10 bg-[#2B2D31] p-3 shadow-lg">
+            <div className="mx-4 mt-3 space-y-2 rounded-xl border border-white/10 bg-sidebar p-3 shadow-lg">
               <Input
                 autoFocus
                 value={title}
@@ -163,14 +163,14 @@ export function ForumView({ channelId }: { channelId: number }) {
                 placeholder="Escreva o conteúdo do post (opcional)"
                 rows={3}
                 maxLength={3800}
-                className="w-full resize-none rounded-md bg-[#383A40] px-3 py-2 text-sm outline-none placeholder:text-[#949BA4]"
+                className="w-full resize-none rounded-md bg-[#383A40] px-3 py-2 text-sm outline-none placeholder:text-faint"
               />
               <div className="flex items-center justify-end gap-2">
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => setComposerOpen(false)}
-                  className="text-[#B5BAC1] hover:text-white"
+                  className="text-muted2 hover:text-foreground"
                 >
                   Cancelar
                 </Button>
@@ -194,13 +194,13 @@ export function ForumView({ channelId }: { channelId: number }) {
           <div ref={listRef} className="flex-1 overflow-y-auto p-4">
             {postsQuery.isLoading ? (
               <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-[#B5BAC1]" />
+                <Loader2 className="h-6 w-6 animate-spin text-muted2" />
               </div>
             ) : (postsQuery.data?.posts.length ?? 0) === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-                <MessagesSquare className="h-10 w-10 text-[#80848E]" />
+                <MessagesSquare className="h-10 w-10 text-faint" />
                 <p className="text-sm font-semibold">Nenhum post ainda</p>
-                <p className="max-w-xs text-xs text-[#B5BAC1]">
+                <p className="max-w-xs text-xs text-muted2">
                   Comece a primeira discussão deste fórum criando um novo post.
                 </p>
               </div>
@@ -210,7 +210,7 @@ export function ForumView({ channelId }: { channelId: number }) {
                   <button
                     key={post.id}
                     onClick={() => setOpenPostId(post.id)}
-                    className="group flex h-fit flex-col rounded-xl border border-white/[0.06] bg-[#2B2D31] p-3.5 text-left transition-all hover:border-[#5865F2]/50 hover:bg-[#2f3136]"
+                    className="group flex h-fit flex-col rounded-xl border border-white/[0.06] bg-sidebar p-3.5 text-left transition-all hover:border-[#5865F2]/50 hover:bg-[#2f3136]"
                   >
                     <div className="mb-2 flex items-center gap-2">
                       <button
@@ -231,20 +231,20 @@ export function ForumView({ channelId }: { channelId: number }) {
                         <div className="truncate text-xs font-bold">
                           {post.author.name ?? post.author.username ?? "?"}
                         </div>
-                        <div className="text-[10px] text-[#949BA4]">
+                        <div className="text-[10px] text-faint">
                           {new Date(post.createdAt).toLocaleDateString("pt-BR")}
                         </div>
                       </div>
                     </div>
-                    <div className="line-clamp-2 text-sm font-bold leading-snug group-hover:text-[#DBDEE1]">
+                    <div className="line-clamp-2 text-sm font-bold leading-snug group-hover:text-bodyx">
                       {postTitle(post)}
                     </div>
                     {postBody(post) && (
-                      <div className="mt-1 line-clamp-3 text-xs text-[#B5BAC1]">
+                      <div className="mt-1 line-clamp-3 text-xs text-muted2">
                         <MessageContent content={postBody(post)} />
                       </div>
                     )}
-                    <div className="mt-3 flex items-center gap-1 text-[11px] font-medium text-[#949BA4]">
+                    <div className="mt-3 flex items-center gap-1 text-[11px] font-medium text-faint">
                       <MessageSquare className="h-3.5 w-3.5" />
                       {postsQuery.data?.replyCounts[post.id] ?? 0}{" "}
                       {(postsQuery.data?.replyCounts[post.id] ?? 0) === 1
@@ -263,12 +263,12 @@ export function ForumView({ channelId }: { channelId: number }) {
           <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4">
             {threadQuery.isLoading ? (
               <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-6 w-6 animate-spin text-[#B5BAC1]" />
+                <Loader2 className="h-6 w-6 animate-spin text-muted2" />
               </div>
             ) : threadQuery.data ? (
               <div className="mx-auto max-w-3xl space-y-3">
                 {/* Original post */}
-                <div className="rounded-xl border border-white/10 bg-[#2B2D31] p-4">
+                <div className="rounded-xl border border-white/10 bg-sidebar p-4">
                   <div className="flex items-start gap-3">
                     <Avatar
                       userId={threadQuery.data.post.authorId}
@@ -283,7 +283,7 @@ export function ForumView({ channelId }: { channelId: number }) {
                           {threadQuery.data.post.author.name ??
                             threadQuery.data.post.author.username}
                         </span>
-                        <span className="text-[11px] text-[#949BA4]">
+                        <span className="text-[11px] text-faint">
                           {new Date(
                             threadQuery.data.post.createdAt
                           ).toLocaleString("pt-BR")}
@@ -293,7 +293,7 @@ export function ForumView({ channelId }: { channelId: number }) {
                         {postTitle(threadQuery.data.post)}
                       </div>
                       {postBody(threadQuery.data.post) && (
-                        <div className="mt-1 text-sm text-[#DBDEE1]">
+                        <div className="mt-1 text-sm text-bodyx">
                           <MessageContent content={postBody(threadQuery.data.post)} />
                         </div>
                       )}
@@ -311,16 +311,16 @@ export function ForumView({ channelId }: { channelId: number }) {
                       size="xs"
                       showStatus={false}
                     />
-                    <div className="min-w-0 flex-1 rounded-lg bg-[#2B2D31]/60 px-3 py-2">
+                    <div className="min-w-0 flex-1 rounded-lg bg-sidebar/60 px-3 py-2">
                       <div className="flex items-baseline gap-2">
                         <span className="text-xs font-bold">
                           {reply.author.name ?? reply.author.username}
                         </span>
-                        <span className="text-[10px] text-[#949BA4]">
+                        <span className="text-[10px] text-faint">
                           {new Date(reply.createdAt).toLocaleString("pt-BR")}
                         </span>
                       </div>
-                      <div className="text-sm text-[#DBDEE1]">
+                      <div className="text-sm text-bodyx">
                         <MessageContent content={reply.content} />
                       </div>
                     </div>
@@ -344,7 +344,7 @@ export function ForumView({ channelId }: { channelId: number }) {
                 }}
                 placeholder="Responder ao post..."
                 disabled={!canSend}
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-[#949BA4] disabled:opacity-50"
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-faint disabled:opacity-50"
               />
               <button
                 onClick={sendReply}

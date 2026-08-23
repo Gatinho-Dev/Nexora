@@ -59,19 +59,19 @@ export function GifPicker({
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Buscar GIFs no KLIPY..."
-            className="h-9 bg-[#1E1F22] border-white/10 text-sm"
+            className="h-9 bg-rail border-white/10 text-sm"
           />
-          <div className="max-h-72 overflow-y-auto rounded-lg bg-[#1E1F22] p-1">
+          <div className="max-h-72 overflow-y-auto rounded-lg bg-rail p-1">
             {loading && gifs.length === 0 && (
-              <div className="flex items-center justify-center py-10 text-[#B5BAC1]">
+              <div className="flex items-center justify-center py-10 text-muted2">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
             )}
             {!loading && error && (
-              <p className="px-3 py-8 text-center text-xs text-[#B5BAC1]">{error}</p>
+              <p className="px-3 py-8 text-center text-xs text-muted2">{error}</p>
             )}
             {!loading && !error && gifs.length === 0 && (
-              <p className="px-3 py-8 text-center text-xs text-[#B5BAC1]">
+              <p className="px-3 py-8 text-center text-xs text-muted2">
                 {query ? "Nenhum GIF encontrado." : "Nenhum GIF em alta agora."}
               </p>
             )}

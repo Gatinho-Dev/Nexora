@@ -91,8 +91,8 @@ export function FriendsPanel({
             : [];
 
   return (
-    <main className="flex flex-1 flex-col bg-[#313338] min-w-0 select-none">
-      <div className="flex h-12 items-center gap-2 border-b border-black/20 px-4 overflow-x-auto bg-[#313338]">
+    <main className="flex flex-1 flex-col bg-chat min-w-0 select-none">
+      <div className="flex h-12 items-center gap-2 border-b border-black/20 px-4 overflow-x-auto bg-chat">
         {tabs.map(t => (
           <button
             key={t.id}
@@ -102,10 +102,10 @@ export function FriendsPanel({
               tab === t.id
                 ? t.id === "add"
                   ? "bg-[#248046] text-white"
-                  : "bg-[#404249] text-white"
+                  : "bg-act text-white"
                 : t.id === "add"
                   ? "text-[#23A559] hover:bg-[#23A559]/10"
-                  : "text-[#B5BAC1] hover:bg-[#35373C] hover:text-white"
+                  : "text-muted2 hover:bg-hov hover:text-white"
             )}
           >
             {t.label}
@@ -122,8 +122,8 @@ export function FriendsPanel({
         {tab === "add" ? (
           <AddFriend onDone={() => setTab("pending")} />
         ) : listForTab.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center p-8 text-[#B5BAC1] gap-3">
-            <div className="h-16 w-16 rounded-full bg-[#2B2D31] flex items-center justify-center text-[#B5BAC1]">
+          <div className="flex h-full flex-col items-center justify-center text-center p-8 text-muted2 gap-3">
+            <div className="h-16 w-16 rounded-full bg-sidebar flex items-center justify-center text-muted2">
               <Users className="h-8 w-8" />
             </div>
             <p className="text-sm font-medium">
@@ -136,13 +136,13 @@ export function FriendsPanel({
           </div>
         ) : (
           <div className="mx-auto max-w-2xl space-y-1">
-            <p className="pb-3 text-xs font-bold uppercase tracking-wide text-[#949BA4]">
+            <p className="pb-3 text-xs font-bold uppercase tracking-wide text-faint">
               {tabs.find(t => t.id === tab)?.label} - {listForTab.length}
             </p>
             {listForTab.map(f => (
               <div
                 key={f.friendshipId}
-                className="flex min-h-14 items-center gap-3 rounded-md border-t border-white/5 px-3 py-2.5 hover:bg-[#35373C] transition-colors"
+                className="flex min-h-14 items-center gap-3 rounded-md border-t border-white/5 px-3 py-2.5 hover:bg-hov transition-colors"
               >
                 <button
                   type="button"
@@ -163,7 +163,7 @@ export function FriendsPanel({
                   <p className="truncate text-xs font-bold text-white">
                     {f.user.name ?? f.user.username}
                   </p>
-                  <p className="truncate text-[11px] text-[#B5BAC1]">
+                  <p className="truncate text-[11px] text-muted2">
                     @{f.user.username}
                     {f.status === "PENDING" &&
                       (f.direction === "incoming"
@@ -240,7 +240,7 @@ export function FriendsPanel({
                       size="icon"
                       title="Desbloquear"
                       onClick={() => unblock.mutate({ userId: f.user.id })}
-                      className="text-[#B5BAC1] hover:text-white"
+                      className="text-muted2 hover:text-foreground"
                     >
                       <Undo2 className="h-4 w-4" />
                     </Button>
@@ -275,7 +275,7 @@ function AddFriend({ onDone }: { onDone: () => void }) {
       <h2 className="text-lg font-bold text-white flex items-center gap-2">
         <UserPlus className="h-5 w-5 text-[#23A559]" /> Adicionar amigo
       </h2>
-      <p className="mt-1 text-xs text-[#B5BAC1]">
+      <p className="mt-1 text-xs text-muted2">
         Digite o nome de usuário exato da pessoa que você quer adicionar na
         Nexora.
       </p>
@@ -288,7 +288,7 @@ function AddFriend({ onDone }: { onDone: () => void }) {
         }}
       >
         <Input
-          className="h-11 bg-[#1E1F22] border-black/20 text-white placeholder:text-[#949BA4]"
+          className="h-11 bg-rail border-black/20 text-white placeholder:text-faint"
           value={username}
           onChange={e => setUsername(e.target.value)}
           placeholder="nome.de.usuario"

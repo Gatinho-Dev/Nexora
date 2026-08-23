@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
+import { useAppStore } from "@/store/useAppStore";
+import { AccountStanding } from "../safety/AccountStanding";
 import { toast } from "sonner";
 import { apiUrl } from "@/lib/endpoints";
 import {
@@ -46,7 +48,9 @@ import { NexoraLogo, NexoraMark } from "@/components/NexoraBrand";
 type Tab =
   | "account"
   | "profile"
+  | "standing"
   | "privacy"
+  | "sensitive"
   | "connections"
   | "appearance"
   | "accessibility"
@@ -65,7 +69,8 @@ const MENU_GROUPS: {
     items: [
       { id: "account", label: "Minha conta" },
       { id: "profile", label: "Perfil" },
-      { id: "privacy", label: "Privacidade" },
+      { id: "standing", label: "Status da Conta" },
+      { id: "privacy", label: "Conteúdo e Privacidade" },
       { id: "connections", label: "Conexões" },
     ],
   },
@@ -111,21 +116,21 @@ export function UserSettingsModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="h-[min(760px,calc(100dvh-1rem))] w-[min(1120px,calc(100vw-1rem))] max-w-none gap-0 overflow-hidden rounded-xl border-white/10 bg-[#313338] p-0 text-white select-none sm:max-w-none sm:rounded-2xl"
+        className="h-[min(760px,calc(100dvh-1rem))] w-[min(1120px,calc(100vw-1rem))] max-w-none gap-0 overflow-hidden rounded-xl border-white/10 bg-chat p-0 text-white select-none sm:max-w-none sm:rounded-2xl"
       >
         <DialogTitle className="sr-only">
           Configurações do Usuário Nexora
         </DialogTitle>
         <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden sm:flex-row">
           {/* Left Navigation Sidebar */}
-          <aside className="flex w-full min-w-0 max-w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-white/5 bg-[#2B2D31] p-2 sm:block sm:h-full sm:w-56 sm:overflow-x-hidden sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-4">
+          <aside className="flex w-full min-w-0 max-w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-white/5 bg-sidebar p-2 sm:block sm:h-full sm:w-56 sm:overflow-x-hidden sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-4">
             <div className="mb-4 hidden px-2 sm:block">
               <NexoraLogo className="h-6 w-auto" surface="dark" />
             </div>
 
             {MENU_GROUPS.map(group => (
               <div key={group.title} className="shrink-0 sm:mb-4">
-                <p className="hidden px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#B5BAC1] sm:block">
+                <p className="hidden px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted2 sm:block">
                   {group.title}
                 </p>
                 <nav className="flex gap-1 sm:block sm:space-y-0.5">
@@ -137,7 +142,7 @@ export function UserSettingsModal({
                         "flex w-auto items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors sm:w-full sm:py-1.5",
                         tab === t.id
                           ? "bg-[#5865F2]/20 text-[#5865F2]"
-                          : "text-[#B5BAC1] hover:bg-white/5 hover:text-white"
+                          : "text-muted2 hover:bg-white/5 hover:text-white"
                       )}
                     >
                       <span>{t.label}</span>
@@ -149,17 +154,17 @@ export function UserSettingsModal({
           </aside>
 
           {/* Right Main Content */}
-          <div className="relative min-h-0 min-w-0 flex-1 bg-[#313338]">
+          <div className="relative min-h-0 min-w-0 flex-1 bg-chat">
             {/* ESC close button */}
             <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 sm:top-5 sm:right-6">
               <button
                 onClick={() => onOpenChange(false)}
-                className="flex items-center justify-center h-8 w-8 rounded-full border border-white/20 text-[#B5BAC1] hover:bg-white/10 hover:text-white transition-colors"
+                className="flex items-center justify-center h-8 w-8 rounded-full border border-white/20 text-muted2 hover:bg-white/10 hover:text-white transition-colors"
                 title="Fechar (ESC)"
               >
                 <X className="h-4 w-4" />
               </button>
-              <span className="hidden text-[10px] font-bold text-[#B5BAC1] uppercase tracking-wider sm:inline">
+              <span className="hidden text-[10px] font-bold text-muted2 uppercase tracking-wider sm:inline">
                 ESC
               </span>
             </div>
@@ -168,6 +173,8 @@ export function UserSettingsModal({
               <div className="mx-auto w-full min-w-0 max-w-3xl p-4 pr-14 sm:p-8 sm:pr-20">
                 {tab === "account" && <AccountTab />}
                 {tab === "profile" && <ProfileTab />}
+                {tab === "standing" && <StandingTab />}
+                {tab === "sensitive" && <SensitiveContentTab />}
                 {tab === "privacy" && <PrivacyTab />}
                 {tab === "connections" && <ConnectionsTab />}
                 {tab === "appearance" && <AppearanceTab />}
@@ -215,12 +222,12 @@ function AccountTab() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-white">Minha conta</h2>
-        <p className="text-xs text-[#B5BAC1] mt-1">
+        <p className="text-xs text-muted2 mt-1">
           Gerencie suas credenciais e segurança de acesso à Nexora.
         </p>
       </div>
 
-      <div className="flex items-center gap-4 rounded-xl bg-[#2B2D31] border border-white/10 p-4 shadow-lg">
+      <div className="flex items-center gap-4 rounded-xl bg-sidebar border border-white/10 p-4 shadow-lg">
         <Avatar
           userId={user?.id}
           name={user?.name}
@@ -232,49 +239,49 @@ function AccountTab() {
           <p className="font-bold text-white text-base truncate">
             {user?.name}
           </p>
-          <p className="text-xs text-[#B5BAC1] truncate">
+          <p className="text-xs text-muted2 truncate">
             @{user?.username ?? "usuario-nexora"}
           </p>
         </div>
       </div>
 
       {user?.username ? (
-        <div className="space-y-4 rounded-xl bg-[#2B2D31] border border-white/10 p-5">
+        <div className="space-y-4 rounded-xl bg-sidebar border border-white/10 p-5">
           <h3 className="text-sm font-bold text-white">Alterar senha</h3>
           <div className="space-y-2">
-            <Label htmlFor="cur-pass" className="text-xs text-[#B5BAC1]">
+            <Label htmlFor="cur-pass" className="text-xs text-muted2">
               Senha atual
             </Label>
             <Input
               id="cur-pass"
               type="password"
-              className="bg-[#313338] border-white/10 text-white"
+              className="bg-chat border-white/10 text-white"
               value={currentPassword}
               onChange={e => setCurrentPassword(e.target.value)}
               autoComplete="current-password"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="new-pass" className="text-xs text-[#B5BAC1]">
+            <Label htmlFor="new-pass" className="text-xs text-muted2">
               Nova senha
             </Label>
             <Input
               id="new-pass"
               type="password"
-              className="bg-[#313338] border-white/10 text-white"
+              className="bg-chat border-white/10 text-white"
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
               autoComplete="new-password"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="conf-pass" className="text-xs text-[#B5BAC1]">
+            <Label htmlFor="conf-pass" className="text-xs text-muted2">
               Confirmar nova senha
             </Label>
             <Input
               id="conf-pass"
               type="password"
-              className="bg-[#313338] border-white/10 text-white"
+              className="bg-chat border-white/10 text-white"
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
@@ -293,7 +300,7 @@ function AccountTab() {
           </Button>
         </div>
       ) : (
-        <p className="text-xs text-[#B5BAC1]">
+        <p className="text-xs text-muted2">
           Esta conta utiliza autenticação externa da plataforma.
         </p>
       )}
@@ -376,7 +383,7 @@ function ProfileTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold text-white">Perfil da Nexora</h2>
-        <p className="text-xs text-[#B5BAC1] mt-1">
+        <p className="text-xs text-muted2 mt-1">
           Personalize como você aparece para seus amigos e comunidades.
         </p>
       </div>
@@ -404,7 +411,7 @@ function ProfileTab() {
               <button
                 type="button"
                 onClick={() => setBannerUrl("")}
-                className="min-h-9 rounded-lg border border-white/10 bg-[#11131A]/85 px-3 text-[11px] font-semibold text-[#DBDEE1] hover:bg-[#11131A] hover:text-white"
+                className="min-h-9 rounded-lg border border-white/10 bg-[#11131A]/85 px-3 text-[11px] font-semibold text-bodyx hover:bg-[#11131A] hover:text-white"
               >
                 Remover banner
               </button>
@@ -469,10 +476,10 @@ function ProfileTab() {
             <p className="truncate text-sm font-bold text-white">
               {displayName || user?.name || "Seu perfil"}
             </p>
-            <p className="truncate text-[11px] text-[#949BA4]">
+            <p className="truncate text-[11px] text-faint">
               @{username || user?.username || "sem-usuario"}
             </p>
-            <p className="mt-1 text-[10px] text-[#777E8B]">
+            <p className="mt-1 text-[10px] text-faint">
               PNG, JPG, WEBP ou GIF
             </p>
           </div>
@@ -480,36 +487,36 @@ function ProfileTab() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="display-name" className="text-xs text-[#B5BAC1]">
+        <Label htmlFor="display-name" className="text-xs text-muted2">
           Nome de exibição
         </Label>
         <Input
           id="display-name"
-          className="bg-[#2B2D31] border-white/10 text-white"
+          className="bg-sidebar border-white/10 text-white"
           value={displayName}
           onChange={e => setDisplayName(e.target.value)}
         />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="username" className="text-xs text-[#B5BAC1]">
+        <Label htmlFor="username" className="text-xs text-muted2">
           Nome de usuário (@username)
         </Label>
         <Input
           id="username"
-          className="bg-[#2B2D31] border-white/10 text-white"
+          className="bg-sidebar border-white/10 text-white"
           value={username}
           onChange={e => setUsername(e.target.value.toLowerCase())}
         />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="bio" className="text-xs text-[#B5BAC1]">
+        <Label htmlFor="bio" className="text-xs text-muted2">
           Sobre mim
         </Label>
         <Textarea
           id="bio"
-          className="bg-[#2B2D31] border-white/10 text-white"
+          className="bg-sidebar border-white/10 text-white"
           value={bio}
           onChange={e => setBio(e.target.value)}
           rows={3}
@@ -531,11 +538,11 @@ function PrivacyTab() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-white">Privacidade e Segurança</h2>
-      <p className="text-xs text-[#B5BAC1]">
+      <p className="text-xs text-muted2">
         Controle quem pode enviar mensagens diretas e solicitações de amizade na
         Nexora.
       </p>
-      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-4 space-y-3 text-xs">
+      <div className="rounded-xl bg-sidebar border border-white/10 p-4 space-y-3 text-xs">
         <div className="flex items-center justify-between">
           <span>Permitir mensagens diretas de membros do servidor</span>
           <Switch defaultChecked />
@@ -553,10 +560,10 @@ function ConnectionsTab() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-white">Conexões</h2>
-      <p className="text-xs text-[#B5BAC1]">
+      <p className="text-xs text-muted2">
         Conecte suas contas para exibir no perfil da Nexora.
       </p>
-      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-6 text-center text-xs text-[#B5BAC1]">
+      <div className="rounded-xl bg-sidebar border border-white/10 p-6 text-center text-xs text-muted2">
         Nenhuma integração externa vinculada ainda.
       </div>
     </div>
@@ -578,18 +585,18 @@ function NotificationsTab() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-white">Notificações e Som</h2>
-        <p className="text-xs text-[#B5BAC1] mt-1">
+        <p className="text-xs text-muted2 mt-1">
           Ajuste os efeitos sonoros originais e notificações da Nexora.
         </p>
       </div>
 
-      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-5 space-y-4">
+      <div className="rounded-xl bg-sidebar border border-white/10 p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-bold text-white">
               Ativar efeitos sonoros
             </p>
-            <p className="text-xs text-[#B5BAC1]">
+            <p className="text-xs text-muted2">
               Sons de chamadas, mutes, DMs e avisos da Nexora.
             </p>
           </div>
@@ -617,8 +624,8 @@ function NotificationsTab() {
         </div>
       </div>
 
-      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-5 space-y-3 text-xs">
-        <h3 className="text-xs font-bold uppercase text-[#B5BAC1] tracking-wider mb-2">
+      <div className="rounded-xl bg-sidebar border border-white/10 p-5 space-y-3 text-xs">
+        <h3 className="text-xs font-bold uppercase text-muted2 tracking-wider mb-2">
           Eventos de Som Individuais
         </h3>
         {(
@@ -802,7 +809,7 @@ function VoiceTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold text-white">Voz e Vídeo</h2>
-        <p className="text-xs text-[#B5BAC1] mt-1">
+        <p className="text-xs text-muted2 mt-1">
           Configure seus dispositivos de áudio e pré-visualize sua câmera.
         </p>
       </div>
@@ -822,7 +829,7 @@ function VoiceTab() {
             >
               Supressão de ruído
             </p>
-            <p className="mt-1 text-[11px] leading-relaxed text-[#B5BAC1]">
+            <p className="mt-1 text-[11px] leading-relaxed text-muted2">
               Escolha o áudio nativo do navegador ou o processamento Nexora
               ClearVoice. A chamada continua com fallback automático se o modo
               avançado não estiver disponível.
@@ -864,7 +871,7 @@ function VoiceTab() {
       </section>
 
       <div className="space-y-2">
-        <Label className="text-xs text-[#B5BAC1]">
+        <Label className="text-xs text-muted2">
           Dispositivo de Entrada (Microfone)
         </Label>
         <Select
@@ -873,10 +880,10 @@ function VoiceTab() {
             void updatePref({ audioInputId: v === "default" ? undefined : v })
           }
         >
-          <SelectTrigger className="bg-[#2B2D31] border-white/10 text-white">
+          <SelectTrigger className="bg-sidebar border-white/10 text-white">
             <SelectValue placeholder="Microfone Padrão" />
           </SelectTrigger>
-          <SelectContent className="bg-[#232428] border-white/10 text-white">
+          <SelectContent className="bg-panel border-white/10 text-white">
             <SelectItem value="default">Microfone Padrão</SelectItem>
             {audioInputs
               .filter(d => d.deviceId !== "default")
@@ -890,7 +897,7 @@ function VoiceTab() {
       </div>
 
       <div className="space-y-2">
-        <Label className="text-xs text-[#B5BAC1]">Dispositivo de saída</Label>
+        <Label className="text-xs text-muted2">Dispositivo de saída</Label>
         <Select
           disabled={!supportsOutputSelection}
           value={prefs.audioOutputId ?? "default"}
@@ -900,10 +907,10 @@ function VoiceTab() {
             })
           }
         >
-          <SelectTrigger className="bg-[#2B2D31] border-white/10 text-white">
+          <SelectTrigger className="bg-sidebar border-white/10 text-white">
             <SelectValue placeholder="Saída padrão" />
           </SelectTrigger>
-          <SelectContent className="bg-[#232428] border-white/10 text-white">
+          <SelectContent className="bg-panel border-white/10 text-white">
             <SelectItem value="default">Saída padrão</SelectItem>
             {audioOutputs
               .filter(device => device.deviceId !== "default")
@@ -922,17 +929,17 @@ function VoiceTab() {
       </div>
 
       <div className="space-y-2">
-        <Label className="text-xs text-[#B5BAC1]">Câmera</Label>
+        <Label className="text-xs text-muted2">Câmera</Label>
         <Select
           value={prefs.videoInputId ?? "default"}
           onValueChange={v =>
             void updatePref({ videoInputId: v === "default" ? undefined : v })
           }
         >
-          <SelectTrigger className="bg-[#2B2D31] border-white/10 text-white">
+          <SelectTrigger className="bg-sidebar border-white/10 text-white">
             <SelectValue placeholder="Câmera Padrão" />
           </SelectTrigger>
-          <SelectContent className="bg-[#232428] border-white/10 text-white">
+          <SelectContent className="bg-panel border-white/10 text-white">
             <SelectItem value="default">Câmera Padrão</SelectItem>
             {videoInputs
               .filter(d => d.deviceId !== "default")
@@ -945,11 +952,11 @@ function VoiceTab() {
         </Select>
       </div>
 
-      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-5 space-y-4">
+      <div className="rounded-xl bg-sidebar border border-white/10 p-5 space-y-4">
         <Label className="text-xs text-white font-bold">
           Teste de Microfone
         </Label>
-        <div className="h-3 w-full rounded-full bg-[#313338] overflow-hidden p-0.5 border border-white/5">
+        <div className="h-3 w-full rounded-full bg-chat overflow-hidden p-0.5 border border-white/5">
           <div
             className={cn(
               "h-full rounded-full transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-75",
@@ -993,7 +1000,7 @@ function VoiceTab() {
         )}
       </div>
 
-      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-5 space-y-4">
+      <div className="rounded-xl bg-sidebar border border-white/10 p-5 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold text-white">
@@ -1069,7 +1076,7 @@ function AppearanceTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold text-white">Aparência da Nexora</h2>
-        <p className="text-xs text-[#B5BAC1] mt-1">
+        <p className="text-xs text-muted2 mt-1">
           Escolha o tema visual para a plataforma.
         </p>
       </div>
@@ -1086,12 +1093,12 @@ function AppearanceTab() {
               "rounded-xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity] relative overflow-hidden select-none",
               theme === opt.id
                 ? "border-[#5865F2] bg-[#5865F2]/10 text-white shadow-lg shadow-[#5865F2]/10"
-                : "border-white/10 bg-[#2B2D31] text-[#B5BAC1] hover:border-white/20 hover:text-white"
+                : "border-white/10 bg-sidebar text-muted2 hover:border-white/20 hover:text-white"
             )}
           >
             <opt.icon className="h-5 w-5 mb-2 text-[#5865F2]" />
             <p className="text-sm font-bold text-white">{opt.label}</p>
-            <p className="text-[11px] text-[#B5BAC1] mt-1 leading-snug">
+            <p className="text-[11px] text-muted2 mt-1 leading-snug">
               {opt.description}
             </p>
             {theme === opt.id && (
@@ -1110,14 +1117,14 @@ function AccessibilityTab() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-white">Acessibilidade</h2>
-      <p className="text-xs text-[#B5BAC1]">
+      <p className="text-xs text-muted2">
         Ajuste preferências de navegação e animações.
       </p>
-      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-4 space-y-3 text-xs">
+      <div className="rounded-xl bg-sidebar border border-white/10 p-4 space-y-3 text-xs">
         <div className="flex items-center justify-between">
           <div>
             <p className="font-bold text-white">Reduzir animações</p>
-            <p className="text-[#B5BAC1] text-[11px]">
+            <p className="text-muted2 text-[11px]">
               Desativa transições para movimentação reduzida.
             </p>
           </div>
@@ -1132,7 +1139,7 @@ function ShortcutsTab() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-white">Atalhos do Teclado</h2>
-      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-4 space-y-2 text-xs">
+      <div className="rounded-xl bg-sidebar border border-white/10 p-4 space-y-2 text-xs">
         <div className="flex justify-between py-1 border-b border-white/5">
           <span>Quick Switcher</span>
           <kbd className="px-2 py-0.5 rounded bg-white/10 font-mono text-[10px]">
@@ -1160,7 +1167,7 @@ function LanguageTab() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-white">Idioma</h2>
-      <p className="text-xs text-[#B5BAC1]">
+      <p className="text-xs text-muted2">
         Português (Brasil) - Idioma padrão da Nexora.
       </p>
     </div>
@@ -1171,9 +1178,118 @@ function AdvancedTab() {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-white">Avançado</h2>
-      <p className="text-xs text-[#B5BAC1]">
+      <p className="text-xs text-muted2">
         Aceleração de hardware e estatísticas WebRTC.
       </p>
+    </div>
+  );
+}
+
+// ── Status da Conta (Account Standing) ─────────────────────────
+function StandingTab() {
+  const { user } = useAuth();
+  const safety = trpc.safety.me.useQuery();
+  const setSensitiveMediaPref = useAppStore(s => s.setSensitiveMediaPref);
+
+  useEffect(() => {
+    if (safety.data) {
+      setSensitiveMediaPref(safety.data.safety.sensitiveMediaPref);
+    }
+  }, [safety.data, setSensitiveMediaPref]);
+
+  if (!user || safety.isLoading) {
+    return (
+      <div className="flex h-40 items-center justify-center text-sm text-muted2">
+        Carregando status da conta...
+      </div>
+    );
+  }
+  if (!safety.data) return null;
+
+  return (
+    <AccountStanding
+      user={{
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        avatar: user.avatar ?? null,
+      }}
+      safety={safety.data.safety}
+      violations={safety.data.violations}
+    />
+  );
+}
+
+// ── Conteúdo Sensível ──────────────────────────────────────────
+const SENSITIVE_OPTIONS: {
+  value: "hide" | "warn" | "auto";
+  label: string;
+  desc: string;
+}[] = [
+  { value: "hide", label: "Sempre ocultar", desc: "Mídia sensível nunca é revelada por você." },
+  { value: "warn", label: "Mostrar com aviso", desc: "Mídia +18 aparece borrada até você clicar em mostrar." },
+  { value: "auto", label: "Mostrar automaticamente", desc: "Disponível apenas para contas elegíveis." },
+];
+
+function SensitiveContentTab() {
+  const utils = trpc.useUtils();
+  const safety = trpc.safety.me.useQuery();
+  const setPref = trpc.safety.setSensitiveMediaPref.useMutation({
+    onSuccess: data => {
+      void utils.safety.me.invalidate();
+      void data;
+    },
+    onError: e => toast.error(e.message),
+  });
+  const storePref = useAppStore(s => s.sensitiveMediaPref);
+  const setStorePref = useAppStore(s => s.setSensitiveMediaPref);
+
+  const current = safety.data?.safety.sensitiveMediaPref ?? storePref;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-base font-bold">Conteúdo Sensível</h3>
+        <p className="mt-1 text-xs text-muted2">
+          Controla como o Nexora exibe mídias marcadas como sensíveis pela
+          verificação automática de segurança.
+        </p>
+      </div>
+      <div className="space-y-2">
+        {SENSITIVE_OPTIONS.map(opt => (
+          <label
+            key={opt.value}
+            className={cn(
+              "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+              current === opt.value
+                ? "border-[#5865F2]/60 bg-[#5865F2]/[0.08]"
+                : "border-white/10 hover:bg-white/[0.04]",
+              opt.value === "auto" && "cursor-not-allowed opacity-60"
+            )}
+          >
+            <input
+              type="radio"
+              name="sensitive-pref"
+              className="mt-0.5 accent-[#5865F2]"
+              checked={current === opt.value}
+              disabled={opt.value === "auto"}
+              onChange={() => {
+                setStorePref(opt.value);
+                setPref.mutate({ pref: opt.value });
+              }}
+            />
+            <span>
+              <span className="block text-sm font-semibold">{opt.label}</span>
+              <span className="mt-0.5 block text-xs text-faint">
+                {opt.desc}
+              </span>
+            </span>
+          </label>
+        ))}
+        <p className="text-[11px] text-faint">
+          A opção automática exige verificação de idade na sua conta.
+        </p>
+      </div>
     </div>
   );
 }

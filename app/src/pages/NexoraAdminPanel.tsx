@@ -40,13 +40,14 @@ import {
 } from "@/components/ui/select";
 import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
+import { SafetySection } from "./admin/SafetySection";
 import type {
   OfficialAnnouncementKind,
   PlatformBadgeDTO,
   PublicUser,
 } from "@contracts/types";
 
-type AdminSection = "broadcasts" | "badges";
+type AdminSection = "broadcasts" | "badges" | "safety";
 
 const kinds: Array<{
   id: OfficialAnnouncementKind;
@@ -756,6 +757,7 @@ export function NexoraAdminPanel() {
           <p className="px-2 pb-1 pt-2 text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#69717c]">Plataforma</p>
           <AdminNavButton active={section === "broadcasts"} icon={Megaphone} label="Comunicados" description="Mensagens oficiais globais" onClick={() => setSection("broadcasts")} />
           <AdminNavButton active={section === "badges"} icon={BadgeCheck} label="Emblemas" description="Identidade e equipe" onClick={() => setSection("badges")} />
+          <AdminNavButton active={section === "safety"} icon={ShieldAlert} label="Segurança" description="Moderação de conteúdo" onClick={() => setSection("safety")} />
           <div className="my-3 h-px bg-white/[0.055]" />
           <div className="rounded-lg border border-white/[0.055] bg-[#191b20] p-3">
             <div className="flex items-center gap-2 text-[10px] font-semibold text-[#bdc2ca]">
@@ -811,7 +813,11 @@ export function NexoraAdminPanel() {
                   Administração da plataforma
                 </p>
                 <h2 className="mt-1 text-xl font-bold tracking-tight text-[#f4f5f7]">
-                  {section === "broadcasts" ? "Comunicados oficiais" : "Emblemas de perfil"}
+                  {section === "broadcasts"
+                    ? "Comunicados oficiais"
+                    : section === "badges"
+                      ? "Emblemas de perfil"
+                      : "Segurança e moderação"}
                 </h2>
                 <p className="mt-1 max-w-2xl text-xs leading-5 text-[#858c96]">
                   {section === "broadcasts"
@@ -826,8 +832,10 @@ export function NexoraAdminPanel() {
             </div>
             {section === "broadcasts" ? (
               <BroadcastsSection />
-            ) : (
+            ) : section === "badges" ? (
               <BadgesSection canManageStaffBadges={authority.data.canManageStaffBadges} />
+            ) : (
+              <SafetySection />
             )}
           </div>
         </div>

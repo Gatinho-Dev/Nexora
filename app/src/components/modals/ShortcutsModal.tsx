@@ -24,7 +24,7 @@ export function ShortcutsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-6 bg-[#2B2D31] border border-white/10 text-white rounded-2xl shadow-2xl select-none">
+      <DialogContent className="max-w-md p-6 bg-sidebar border border-white/10 text-white rounded-2xl shadow-2xl select-none">
         <DialogTitle className="flex items-center gap-2 text-lg font-bold text-white mb-2">
           <Keyboard className="h-5 w-5 text-[#5865F2]" /> Atalhos da Nexora
         </DialogTitle>
@@ -49,12 +49,12 @@ export function ShortcutsModal({
 function ShortcutRow({ label, keys }: { label: string; keys: string[] }) {
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-white/5">
-      <span className="text-[#B5BAC1] font-medium">{label}</span>
+      <span className="text-muted2 font-medium">{label}</span>
       <div className="flex gap-1">
         {keys.map(k => (
           <kbd
             key={k}
-            className="px-2 py-0.5 rounded-md bg-[#313338] border border-white/10 font-mono text-[10px] font-bold text-white shadow-xs"
+            className="px-2 py-0.5 rounded-md bg-chat border border-white/10 font-mono text-[10px] font-bold text-white shadow-xs"
           >
             {k}
           </kbd>

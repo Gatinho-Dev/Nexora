@@ -18,6 +18,13 @@ import * as schema from "@db/schema";
 import { rateLimit } from "./utils/rateLimit";
 import { env } from "./lib/env";
 import { publicFileUrl } from "./lib/urls";
+import {
+  enqueueModeration,
+  moderationStatusForUploader,
+  shouldModerate,
+} from "./services/mediaModeration";
+import { isPlatformAdmin } from "./utils/platformAuth";
+import { assertCanInteract } from "./services/accountSafety";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -52,6 +59,12 @@ app.post("/api/upload", async c => {
     user = await authenticateRequest(c.req.raw.headers);
   } catch {
     return c.json({ error: "Não autenticado." }, 401);
+  }
+  // Suspended / banned accounts cannot upload media.
+  try {
+    await assertCanInteract(user.id);
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "Conta restrita." }, 403);
   }
   try {
     rateLimit(
@@ -98,13 +111,39 @@ app.post("/api/upload", async c => {
     })
     .$returningId();
 
+  // Images go through content-safety analysis before becoming public.
+  let moderationStatus: string | null = null;
+  if (shouldModerate(mimeType)) {
+    await enqueueModeration(id, user.id);
+    moderationStatus = "processing";
+  }
+
   return c.json({
     id,
     url: publicFileUrl(id, c.req.url),
     filename,
     mimeType,
     size: buffer.length,
+    moderationStatus,
   });
+});
+
+// ── Upload moderation status (poll from the sender's chips) ───
+app.get("/api/moderation/status", async c => {
+  let user;
+  try {
+    user = await authenticateRequest(c.req.raw.headers);
+  } catch {
+    return c.json({ error: "Não autenticado." }, 401);
+  }
+  const idsParam = c.req.query("ids") ?? "";
+  const ids = idsParam
+    .split(",")
+    .map(v => parseInt(v, 10))
+    .filter(v => Number.isFinite(v) && v > 0)
+    .slice(0, 20);
+  const statuses = await moderationStatusForUploader(user.id, ids);
+  return c.json({ statuses });
 });
 
 // ── File download ─────────────────────────────────────────────
@@ -121,6 +160,31 @@ app.get("/api/files/:id", async c => {
     where: eq(schema.files.id, id),
   });
   if (!file) return c.json({ error: "Arquivo não encontrado." }, 404);
+
+  // Moderation gate: blocked media is never served to anyone.
+  const [moderation] = await getDb()
+    .select()
+    .from(schema.mediaModeration)
+    .where(eq(schema.mediaModeration.fileId, id));
+  if (moderation) {
+    if (moderation.status === "blocked") {
+      return c.json({ error: "Esta mídia foi bloqueada pela segurança do Nexora." }, 403);
+    }
+    if (moderation.status === "processing" || moderation.status === "review_required") {
+      // While unverified, only the uploader may fetch the bytes.
+      let viewer;
+      try {
+        viewer = await authenticateRequest(c.req.raw.headers);
+      } catch {
+        return c.json({ error: "Não autenticado." }, 401);
+      }
+      const privileged =
+        viewer.id === file.uploaderId || isPlatformAdmin(viewer);
+      if (!privileged) {
+        return c.json({ error: "Verificando mídia..." }, 403);
+      }
+    }
+  }
 
   const safeName = file.filename.replace(/[^\w.\- ]/g, "_");
   return new Response(new Uint8Array(file.data), {
