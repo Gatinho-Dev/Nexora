@@ -8,8 +8,15 @@ import { formatSize } from "@/lib/formatSize";
 import { apiUrl } from "@/lib/endpoints";
 import { cn } from "@/lib/utils";
 import {
-  PlusCircle,
-  Smile,
+  IconEmojis,
+  IconUploads,
+  IconUploadImage,
+  IconVisibility,
+  IconNoVisibility,
+} from "../icons/figmaChannelIcons";
+import {
+
+
   Mic,
   SendHorizonal,
   X,
@@ -17,9 +24,6 @@ import {
   Square,
   Play,
   Trash2,
-  UploadCloud,
-  Eye,
-  EyeOff,
   Bold,
   Italic,
   Underline,
@@ -65,7 +69,7 @@ type ToolbarAction =
   | "quote";
 
 const TOOLBAR_ACTIONS: {
-  icon: typeof Bold;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   action: ToolbarAction;
 }[] = [
@@ -73,7 +77,7 @@ const TOOLBAR_ACTIONS: {
   { icon: Italic, label: "Itálico (*itálico*)", action: "italic" },
   { icon: Underline, label: "Sublinhado (__sublinhado__)", action: "underline" },
   { icon: Strikethrough, label: "Tachado (~~tachado~~)", action: "strike" },
-  { icon: EyeOff, label: "Spoiler (||texto||)", action: "spoiler" },
+  { icon: IconNoVisibility, label: "Spoiler (||texto||)", action: "spoiler" },
   { icon: Code, label: "Código inline (`código`)", action: "code" },
   { icon: FileCode, label: "Bloco de código", action: "codeblock" },
   { icon: Quote, label: "Citação (> texto)", action: "quote" },
@@ -503,7 +507,7 @@ export function MessageInput({
       {/* Dropzone overlay */}
       {isDraggingOver && (
         <div className="fixed inset-0 z-50 bg-rail/90 border-4 border-dashed border-[#5865F2] backdrop-blur-xs flex flex-col items-center justify-center gap-3 text-white pointer-events-none animate-in fade-in duration-150">
-          <UploadCloud className="h-16 w-16 text-[#5865F2]" />
+          <IconUploadImage className="h-16 w-16 text-primary" />
           <h2 className="text-2xl font-bold tracking-tight">
             Solte para enviar
           </h2>
@@ -582,9 +586,9 @@ export function MessageInput({
                     className="rounded-full bg-white/10 p-0.5 text-muted2 hover:text-white transition-colors"
                   >
                     {isSpoiler ? (
-                      <EyeOff className="h-3 w-3" />
+                      <IconNoVisibility className="h-3.5 w-3.5" />
                     ) : (
-                      <Eye className="h-3 w-3" />
+                      <IconVisibility className="h-3.5 w-3.5" />
                     )}
                   </button>
                 )}
@@ -744,7 +748,7 @@ export function MessageInput({
                   disabled={disabled || uploading}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <PlusCircle className="h-5 w-5" />
+                  <IconUploads className="h-[22px] w-[22px]" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">Enviar arquivo</TooltipContent>
@@ -777,7 +781,7 @@ export function MessageInput({
               title="Emojis"
               type="button"
             >
-              <Smile className="h-5 w-5" />
+              <IconEmojis className="h-[22px] w-[22px]" />
             </button>
           </EmojiPicker>
 

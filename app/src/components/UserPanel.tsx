@@ -17,12 +17,14 @@ import {
   Headphones,
   VolumeX,
   Settings,
-  LogOut,
-  Pencil,
   PhoneOff,
   Wifi,
   WifiOff,
 } from "lucide-react";
+import {
+  IconLogout,
+  IconEditProfile,
+} from "./icons/figmaChannelIcons";
 import {
   Tooltip,
   TooltipContent,
@@ -195,7 +197,7 @@ export function UserPanel() {
                   onClick={() => openSettings("profile")}
                   className="mb-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#5865F2] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#4752C4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
                 >
-                  <Pencil className="h-3.5 w-3.5" />
+                  <IconEditProfile className="h-4 w-4" />
                   Editar perfil
                 </button>
               </div>
@@ -306,7 +308,7 @@ export function UserPanel() {
                   onClick={() => logout()}
                   className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                 >
-                  <LogOut className="h-4 w-4" />
+                  <IconLogout className="h-4 w-4" />
                   Sair da Nexora
                 </button>
               </div>

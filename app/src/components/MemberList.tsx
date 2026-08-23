@@ -2,7 +2,7 @@ import type { MemberDTO, ServerDetailsDTO } from "@contracts/types";
 import { Avatar } from "./Avatar";
 import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
-import { Crown } from "lucide-react";
+import { IconOwner } from "./icons/figmaChannelIcons";
 
 export function MemberList({
   details,
@@ -148,7 +148,7 @@ function MemberRow({
             {member.nickname ?? member.user.name ?? member.user.username}
           </span>
           {member.isOwner && (
-            <Crown className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+            <IconOwner className="h-4 w-4 text-amber-400 shrink-0" />
           )}
         </div>
         {topRole && (

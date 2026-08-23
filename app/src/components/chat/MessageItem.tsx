@@ -9,16 +9,18 @@ import {
   CornerUpLeft,
   Pencil,
   Trash2,
-  SmilePlus,
   Check,
   X,
-  MoreHorizontal,
   Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatSize } from "@/lib/formatSize";
 import { SensitiveMedia } from "../safety/SensitiveMedia";
 import { useAppStore } from "@/store/useAppStore";
+import {
+  IconSuperReaction,
+  IconMoreHorizontal,
+} from "../icons/figmaChannelIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -298,7 +300,7 @@ function MessageItemBase({
                     onClick={() => setEmojiBarOpen(v => !v)}
                     className="p-1.5 rounded-md text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors"
                   >
-                    <SmilePlus className="h-4 w-4" />
+                    <IconSuperReaction className="h-[18px] w-[18px]" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top">Adicionar reação</TooltipContent>
@@ -339,7 +341,7 @@ function MessageItemBase({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="p-1.5 rounded-md text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors">
-                  <MoreHorizontal className="h-4 w-4" />
+                  <IconMoreHorizontal className="h-[18px] w-[18px]" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent

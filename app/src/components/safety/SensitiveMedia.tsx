@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, TriangleAlert, Loader2 } from "lucide-react";
+import { TriangleAlert, Loader2 } from "lucide-react";
+import { IconVisibility, IconNoVisibility } from "../icons/figmaChannelIcons";
 
 type Props = {
   src: string;
@@ -135,11 +136,11 @@ export function SensitiveMedia({
         >
           {revealed ? (
             <>
-              <EyeOff className="h-3.5 w-3.5" aria-hidden /> Ocultar novamente
+              <IconNoVisibility className="h-3.5 w-3.5" aria-hidden /> Ocultar novamente
             </>
           ) : (
             <>
-              <Eye className="h-3.5 w-3.5" aria-hidden /> Mostrar conteúdo
+              <IconVisibility className="h-3.5 w-3.5" aria-hidden /> Mostrar conteúdo
             </>
           )}
         </button>

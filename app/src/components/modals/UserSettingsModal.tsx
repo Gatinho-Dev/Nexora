@@ -2,6 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { AccountStanding } from "../safety/AccountStanding";
+import {
+  IconMyAccount,
+  IconEditProfile,
+  IconNoVisibility,
+  IconSoundCheck,
+  IconPermissions,
+} from "../icons/figmaChannelIcons";
 import { toast } from "sonner";
 import { apiUrl } from "@/lib/endpoints";
 import {
@@ -67,10 +74,10 @@ const MENU_GROUPS: {
   {
     title: "MINHA CONTA",
     items: [
-      { id: "account", label: "Minha conta" },
-      { id: "profile", label: "Perfil" },
+      { id: "account", label: "Minha conta", icon: <IconMyAccount className="h-4 w-4 text-faint" /> },
+      { id: "profile", label: "Perfil", icon: <IconEditProfile className="h-4 w-4 text-faint" /> },
       { id: "standing", label: "Status da Conta" },
-      { id: "privacy", label: "Conteúdo e Privacidade" },
+      { id: "privacy", label: "Conteúdo e Privacidade", icon: <IconNoVisibility className="h-4 w-4 text-faint" /> },
       { id: "connections", label: "Conexões" },
     ],
   },
@@ -79,7 +86,7 @@ const MENU_GROUPS: {
     items: [
       { id: "appearance", label: "Aparência" },
       { id: "accessibility", label: "Acessibilidade" },
-      { id: "voice", label: "Voz e vídeo" },
+      { id: "voice", label: "Voz e vídeo", icon: <IconSoundCheck className="h-4 w-4 text-faint" /> },
       { id: "notifications", label: "Notificações" },
       { id: "shortcuts", label: "Atalhos" },
       { id: "language", label: "Idioma" },
@@ -87,7 +94,7 @@ const MENU_GROUPS: {
   },
   {
     title: "APP",
-    items: [{ id: "advanced", label: "Avançado" }],
+    items: [{ id: "advanced", label: "Avançado", icon: <IconPermissions className="h-4 w-4 text-faint" /> }],
   },
 ];
 
@@ -145,6 +152,7 @@ export function UserSettingsModal({
                           : "text-muted2 hover:bg-white/5 hover:text-white"
                       )}
                     >
+                      {t.icon}
                       <span>{t.label}</span>
                     </button>
                   ))}
