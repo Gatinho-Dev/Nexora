@@ -6,7 +6,8 @@ import { Avatar } from "./Avatar";
 import { MessageContent } from "./chat/MessageContent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessagesSquare, Loader2, MessageSquare, ArrowLeft, SendHorizonal, Plus } from "lucide-react";
+import { Loader2, MessageSquare, ArrowLeft, SendHorizonal, Plus } from "lucide-react";
+import { IconForum } from "./icons/channelIcons";
 import { toast } from "sonner";
 import type { AppOutletContext } from "@/lib/appOutletContext";
 import type { MessageDTO } from "@contracts/types";
@@ -117,7 +118,7 @@ export function ForumView({ channelId }: { channelId: number }) {
               <ArrowLeft className="h-4 w-4" />
             </button>
           ) : (
-            <MessagesSquare className="h-5 w-5 shrink-0 text-faint" />
+            <IconForum className="h-[22px] w-[22px] shrink-0 text-faint" />
           )}
           <span className="truncate text-sm font-bold">
             {openPostId !== null
@@ -198,7 +199,7 @@ export function ForumView({ channelId }: { channelId: number }) {
               </div>
             ) : (postsQuery.data?.posts.length ?? 0) === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-                <MessagesSquare className="h-10 w-10 text-faint" />
+                <IconForum className="h-11 w-11 text-faint" />
                 <p className="text-sm font-semibold">Nenhum post ainda</p>
                 <p className="max-w-xs text-xs text-muted2">
                   Comece a primeira discussão deste fórum criando um novo post.
