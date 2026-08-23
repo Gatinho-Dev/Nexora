@@ -1,7 +1,7 @@
 import { authRouter } from "./auth-router";
 import { accountRouter } from "./accountRouter";
 import { serverRouter } from "./serverRouter";
-import { messageRouter } from "./messageRouter";
+import { messageRouter, forumRouter } from "./messageRouter";
 import { friendRouter } from "./friendRouter";
 import { dmRouter } from "./dmRouter";
 import { notificationRouter } from "./notificationRouter";
@@ -16,6 +16,7 @@ export const appRouter = createRouter({
   account: accountRouter,
   server: serverRouter,
   message: messageRouter,
+  forum: forumRouter,
   friend: friendRouter,
   dm: dmRouter,
   notification: notificationRouter,

@@ -107,6 +107,7 @@ async function buildMessageDTO(
       mimeType: a.mimeType,
       size: a.size,
       url: publicFileUrl(a.fileId),
+      spoiler: a.spoiler,
     })),
     reactions: [...reactionMap.values()],
     replyTo,
@@ -241,6 +242,102 @@ const targetSchema = z
     message: "Informe um canal ou uma conversa.",
   });
 
+// ── Forum channels ────────────────────────────────────────────
+// A post is any top-level message in a FORUM channel; replies are regular
+// messages whose replyToId points at the post.
+export const forumRouter = createRouter({
+  posts: authedQuery
+    .input(
+      z.object({
+        channelId: z.number(),
+        before: z.number().optional(),
+        limit: z.number().min(1).max(100).default(50),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { perms } = await requireChannelAccess(ctx.user.id, input.channelId);
+      if (!perms.has("READ_MESSAGES")) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Você não pode ver este canal.",
+        });
+      }
+      const db = getDb();
+      const conditions = [
+        eq(schema.messages.channelId, input.channelId),
+        sql`${schema.messages.replyToId} IS NULL`,
+      ];
+      if (input.before)
+        conditions.push(sql`${schema.messages.id} < ${input.before}`);
+
+      const rows = await db
+        .select()
+        .from(schema.messages)
+        .where(and(...conditions))
+        .orderBy(desc(schema.messages.id))
+        .limit(input.limit);
+
+      // Reply counts in one grouped query
+      const postIds = rows.map(r => r.id);
+      const replyCounts: Record<number, number> = {};
+      if (postIds.length > 0) {
+        const counts = await db
+          .select({
+            replyToId: schema.messages.replyToId,
+            count: sql<number>`count(*)`,
+          })
+          .from(schema.messages)
+          .where(inArray(schema.messages.replyToId, postIds))
+          .groupBy(schema.messages.replyToId);
+        for (const c of counts) {
+          if (c.replyToId != null) replyCounts[c.replyToId] = Number(c.count);
+        }
+      }
+
+      const posts: MessageDTO[] = [];
+      for (const row of rows) {
+        posts.push(await buildMessageDTO(row));
+      }
+      return { posts, replyCounts };
+    }),
+
+  thread: authedQuery
+    .input(z.object({ channelId: z.number(), postId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const { perms } = await requireChannelAccess(ctx.user.id, input.channelId);
+      if (!perms.has("READ_MESSAGES")) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Você não pode ver este canal.",
+        });
+      }
+      const db = getDb();
+      const [post] = await db
+        .select()
+        .from(schema.messages)
+        .where(
+          and(
+            eq(schema.messages.id, input.postId),
+            eq(schema.messages.channelId, input.channelId)
+          )
+        )
+        .limit(1);
+      if (!post) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Post não encontrado." });
+      }
+      const rows = await db
+        .select()
+        .from(schema.messages)
+        .where(eq(schema.messages.replyToId, input.postId))
+        .orderBy(schema.messages.id);
+      const replies: MessageDTO[] = [];
+      for (const row of rows) {
+        replies.push(await buildMessageDTO(row));
+      }
+      return { post: await buildMessageDTO(post), replies };
+    }),
+});
+
 export const messageRouter = createRouter({
   list: authedQuery
     .input(
@@ -287,6 +384,7 @@ export const messageRouter = createRouter({
         content: z.string().max(4000),
         replyToId: z.number().optional(),
         attachmentIds: z.array(z.number()).max(10).optional(),
+        spoilerIds: z.array(z.number()).max(10).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -348,6 +446,7 @@ export const messageRouter = createRouter({
             filename: file.filename,
             mimeType: file.mimeType,
             size: file.size,
+            spoiler: (input.spoilerIds ?? []).includes(file.id),
           });
         }
       }

@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Hash, Volume2 } from "lucide-react";
+import { Hash, Volume2, MessagesSquare, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 import type { CategoryDTO } from "@contracts/types";
 
@@ -34,7 +34,7 @@ export function CreateChannelModal({
 }) {
   const utils = trpc.useUtils();
   const [name, setName] = useState("");
-  const [type, setType] = useState<"TEXT" | "VOICE">("TEXT");
+  const [type, setType] = useState<"TEXT" | "VOICE" | "FORUM" | "STAGE">("TEXT");
   const [categoryId, setCategoryId] = useState<string>("none");
 
   const create = trpc.server.createChannel.useMutation({
@@ -47,7 +47,7 @@ export function CreateChannelModal({
   });
 
   const relevantCategories = categories.filter((c) =>
-    type === "TEXT" ? c.kind === "text" : c.kind === "voice",
+    type === "VOICE" || type === "STAGE" ? c.kind === "voice" : c.kind === "text",
   );
 
   return (
@@ -72,7 +72,12 @@ export function CreateChannelModal({
         >
           <div className="space-y-2">
             <Label>Tipo de canal</Label>
-            <RadioGroup value={type} onValueChange={(v) => setType(v as "TEXT" | "VOICE")}>
+            <RadioGroup
+              value={type}
+              onValueChange={(v) =>
+                setType(v as "TEXT" | "VOICE" | "FORUM" | "STAGE")
+              }
+            >
               <label className="flex items-center gap-3 rounded-md border border-border p-3 cursor-pointer hover:bg-hover">
                 <RadioGroupItem value="TEXT" id="t-text" />
                 <Hash className="h-5 w-5 text-muted-foreground" />
@@ -93,6 +98,26 @@ export function CreateChannelModal({
                   </div>
                 </div>
               </label>
+              <label className="flex items-center gap-3 rounded-md border border-border p-3 cursor-pointer hover:bg-hover">
+                <RadioGroupItem value="FORUM" id="t-forum" />
+                <MessagesSquare className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <div className="font-medium text-sm">Fórum</div>
+                  <div className="text-xs text-muted-foreground">
+                    Publique posts e converse por tópicos, como um fórum
+                  </div>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 rounded-md border border-border p-3 cursor-pointer hover:bg-hover">
+                <RadioGroupItem value="STAGE" id="t-stage" />
+                <Megaphone className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <div className="font-medium text-sm">Palco</div>
+                  <div className="text-xs text-muted-foreground">
+                    Audiência assiste e só quem for autorizado pode falar
+                  </div>
+                </div>
+              </label>
             </RadioGroup>
           </div>
 
@@ -102,7 +127,15 @@ export function CreateChannelModal({
               id="channel-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={type === "TEXT" ? "novo-canal" : "Sala de voz"}
+              placeholder={
+                type === "TEXT"
+                  ? "novo-canal"
+                  : type === "FORUM"
+                    ? "novo-forum"
+                    : type === "STAGE"
+                      ? "Palco principal"
+                      : "Sala de voz"
+              }
               required
               maxLength={64}
             />

@@ -22,6 +22,9 @@ const DMConversation = lazy(() =>
     default: module.DMConversation,
   }))
 );
+const DMRequests = lazy(() =>
+  import("./pages/DMRequests").then(module => ({ default: module.DMRequests }))
+);
 const OfficialAnnouncements = lazy(() =>
   import("./pages/OfficialAnnouncements").then(module => ({
     default: module.OfficialAnnouncements,
@@ -109,6 +112,14 @@ export default function App() {
           element={
             <Deferred>
               <OfficialAnnouncements />
+            </Deferred>
+          }
+        />
+        <Route
+          path="/channels/@me/requests"
+          element={
+            <Deferred>
+              <DMRequests />
             </Deferred>
           }
         />

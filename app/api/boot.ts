@@ -149,6 +149,94 @@ app.get("/api/rtc-config", c => {
   return c.json({ iceServers });
 });
 
+// ── KLIPY GIF proxy (server-side API key, never exposed) ──────
+// KLIPY exposes a Tenor-compatible migration API (api.klipy.com/v2) with the
+// same search/featured endpoints and response shape, so GIFs keep working
+// after the Tenor shutdown.
+// Get a key at https://partner.klipy.com/api-keys
+const gifsApiKey = process.env.KLIPY_API_KEY ?? process.env.TENOR_API_KEY ?? "";
+const gifsClientKey = process.env.KLIPY_CLIENT_KEY || "nexora";
+const GIFS_API_BASE = "https://api.klipy.com/v2";
+
+type GifItem = { id: string; url: string; preview: string; desc: string };
+
+async function gifsFetch(
+  endpoint: "search" | "featured",
+  params: Record<string, string>
+): Promise<GifItem[]> {
+  const url = new URL(`${GIFS_API_BASE}/${endpoint}`);
+  url.searchParams.set("key", gifsApiKey);
+  url.searchParams.set("client_key", gifsClientKey);
+  url.searchParams.set("media_filter", "gif,tinygif");
+  url.searchParams.set("contentfilter", "high");
+  url.searchParams.set("locale", "pt_BR");
+  url.searchParams.set("country", "BR");
+  url.searchParams.set("limit", "24");
+  for (const [k, v] of Object.entries(params)) {
+    if (v) url.searchParams.set(k, v);
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`KLIPY respondeu ${res.status}`);
+  const data = (await res.json()) as {
+    results?: {
+      id: string;
+      title?: string;
+      content_description?: string;
+      itemurl?: string;
+      media_formats?: Record<string, { url?: string } | undefined>;
+    }[];
+  };
+  return (data.results ?? [])
+    .map(r => {
+      const gif = r.media_formats?.gif?.url;
+      const preview = r.media_formats?.tinygif?.url ?? gif;
+      if (!gif) return null;
+      return {
+        id: r.id,
+        url: gif,
+        preview,
+        desc: r.content_description || r.title || "",
+      };
+    })
+    .filter((g): g is GifItem => g !== null);
+}
+
+app.get("/api/gifs/trending", async c => {
+  if (!gifsApiKey) {
+    return c.json(
+      { error: "GIFs indisponíveis: configure KLIPY_API_KEY no servidor." },
+      503
+    );
+  }
+  try {
+    return c.json({ results: await gifsFetch("featured", {}) });
+  } catch (e) {
+    return c.json(
+      { error: e instanceof Error ? e.message : "Erro no provedor de GIFs." },
+      502
+    );
+  }
+});
+
+app.get("/api/gifs/search", async c => {
+  if (!gifsApiKey) {
+    return c.json(
+      { error: "GIFs indisponíveis: configure KLIPY_API_KEY no servidor." },
+      503
+    );
+  }
+  const q = (c.req.query("q") ?? "").trim().slice(0, 100);
+  if (!q) return c.json({ error: "Informe uma busca." }, 400);
+  try {
+    return c.json({ results: await gifsFetch("search", { q }) });
+  } catch (e) {
+    return c.json(
+      { error: e instanceof Error ? e.message : "Erro no provedor de GIFs." },
+      502
+    );
+  }
+});
+
 app.use("/api/trpc/*", async c => {
   return fetchRequestHandler({
     endpoint: "/api/trpc",

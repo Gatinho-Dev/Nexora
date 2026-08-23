@@ -421,21 +421,7 @@ export function MessageItem({
 
 function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
   if (att.mimeType.startsWith("image/")) {
-    return (
-      <a
-        href={att.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="group/img relative overflow-hidden rounded-xl border border-white/10"
-      >
-        <img
-          src={att.url}
-          alt={att.filename}
-          className="max-h-72 max-w-full sm:max-w-md rounded-xl object-contain bg-[#2B2D31] transition-transform duration-200 group-hover/img:scale-[1.02]"
-          loading="lazy"
-        />
-      </a>
-    );
+    return <SpoilerableImage att={att} />;
   }
   if (att.mimeType.startsWith("video/")) {
     return (
@@ -471,5 +457,51 @@ function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
         <div className="text-[11px] text-[#B5BAC1]">{formatSize(att.size)}</div>
       </div>
     </a>
+  );
+}
+
+function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
+  const [revealed, setRevealed] = useState(!att.spoiler);
+
+  if (!att.spoiler || revealed) {
+    return (
+      <a
+        href={att.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group/img relative overflow-hidden rounded-xl border border-white/10"
+      >
+        <img
+          src={att.url}
+          alt={att.filename}
+          className="max-h-72 max-w-full sm:max-w-md rounded-xl object-contain bg-[#2B2D31] transition-transform duration-200 group-hover/img:scale-[1.02]"
+          loading="lazy"
+        />
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setRevealed(true)}
+      title="Contém spoiler — clique para revelar"
+      aria-label={`Revelar imagem com spoiler: ${att.filename}`}
+      className={cn(
+        "relative flex h-48 w-full sm:w-72 items-center justify-center overflow-hidden rounded-xl border border-white/10",
+        "transition-all duration-200 hover:border-white/25"
+      )}
+    >
+      <img
+        src={att.url}
+        alt=""
+        aria-hidden
+        className="absolute inset-0 h-full w-full object-cover blur-2xl scale-110"
+        loading="lazy"
+      />
+      <span className="relative z-10 rounded-lg bg-black/80 px-3 py-1.5 text-xs font-bold tracking-[0.2em] text-white">
+        SPOILER
+      </span>
+    </button>
   );
 }

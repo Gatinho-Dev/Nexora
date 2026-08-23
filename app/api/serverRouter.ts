@@ -18,7 +18,7 @@ import {
   requirePermission,
   toPublicUser,
 } from "./utils/permissions";
-import { broadcastToServer, sendToUsers } from "./realtime";
+import { broadcastToServer, sendToUsers, setLiveStageSpeaker } from "./realtime";
 
 const permissionEnum = z.enum(PERMISSIONS);
 
@@ -301,7 +301,7 @@ export const serverRouter = createRouter({
       z.object({
         serverId: z.number(),
         name: z.string().min(1, "Dê um nome ao canal.").max(64),
-        type: z.enum(["TEXT", "VOICE"]),
+        type: z.enum(["TEXT", "VOICE", "FORUM", "STAGE"]),
         categoryId: z.number().optional(),
       }),
     )
@@ -309,7 +309,7 @@ export const serverRouter = createRouter({
       await requirePermission(ctx.user.id, input.serverId, "MANAGE_CHANNELS");
       const db = getDb();
       const cleanName =
-        input.type === "TEXT"
+        input.type === "TEXT" || input.type === "FORUM"
           ? input.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9_-]/g, "")
           : input.name;
       if (!cleanName) {
@@ -379,7 +379,7 @@ export const serverRouter = createRouter({
         .select({ position: schema.categories.position })
         .from(schema.categories)
         .where(eq(schema.categories.serverId, input.serverId));
-      const [{ id }] = await db
+      const [{ id }] =       await db
         .insert(schema.categories)
         .values({
           serverId: input.serverId,
@@ -390,6 +390,189 @@ export const serverRouter = createRouter({
         .$returningId();
       await refreshServer(input.serverId);
       return { id };
+    }),
+
+  updateCategory: authedQuery
+    .input(
+      z.object({
+        categoryId: z.number(),
+        name: z.string().min(1, "Dê um nome à categoria.").max(64),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const category = await db.query.categories.findFirst({
+        where: eq(schema.categories.id, input.categoryId),
+      });
+      if (!category) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Categoria não encontrada." });
+      }
+      await requirePermission(ctx.user.id, category.serverId, "MANAGE_CHANNELS");
+      await db
+        .update(schema.categories)
+        .set({ name: input.name })
+        .where(eq(schema.categories.id, input.categoryId));
+      await refreshServer(category.serverId);
+      return { ok: true };
+    }),
+
+  deleteCategory: authedQuery
+    .input(z.object({ categoryId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const category = await db.query.categories.findFirst({
+        where: eq(schema.categories.id, input.categoryId),
+      });
+      if (!category) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Categoria não encontrada." });
+      }
+      await requirePermission(ctx.user.id, category.serverId, "MANAGE_CHANNELS");
+      // Channels inside the category are kept and become uncategorized.
+      await db
+        .update(schema.channels)
+        .set({ categoryId: null })
+        .where(eq(schema.channels.categoryId, input.categoryId));
+      await db
+        .delete(schema.categories)
+        .where(eq(schema.categories.id, input.categoryId));
+      await refreshServer(category.serverId);
+      return { ok: true };
+    }),
+
+  // ── Stage speakers ──────────────────────────────────────────
+  stageSetSpeaker: authedQuery
+    .input(
+      z.object({
+        channelId: z.number(),
+        userId: z.number(),
+        speaker: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const channel = await db.query.channels.findFirst({
+        where: eq(schema.channels.id, input.channelId),
+      });
+      if (!channel || channel.type !== "STAGE") {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Canal de palco não encontrado." });
+      }
+      const perms = await getMemberPermissions(ctx.user.id, channel.serverId);
+      if (!perms) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Você não é membro deste servidor." });
+      }
+      const isSelf = ctx.user.id === input.userId;
+      const canManage = perms.has("MANAGE_CHANNELS") || perms.has("ADMINISTRATOR");
+      // Self-promotion requires SPEAK; promoting others requires manage.
+      if (!canManage && !(isSelf && perms.has("SPEAK"))) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Você não tem permissão para alterar o palco.",
+        });
+      }
+      if (input.speaker) {
+        await db
+          .insert(schema.stageSpeakers)
+          .values({
+            channelId: input.channelId,
+            userId: input.userId,
+            grantedByUserId: ctx.user.id,
+          })
+          .onDuplicateKeyUpdate({ set: { grantedByUserId: ctx.user.id } });
+      } else if (!canManage && !isSelf) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Você não pode remover outros palestrantes.",
+        });
+      } else {
+        await db
+          .delete(schema.stageSpeakers)
+          .where(
+            and(
+              eq(schema.stageSpeakers.channelId, input.channelId),
+              eq(schema.stageSpeakers.userId, input.userId),
+            ),
+          );
+      }
+      // If the user is connected right now, flip them live.
+      await setLiveStageSpeaker(input.channelId, input.userId, input.speaker);
+      await refreshServer(channel.serverId);
+      return { ok: true };
+    }),
+
+  stageSpeakers: authedQuery
+    .input(z.object({ channelId: z.number() }))
+    .query(async ({ input }) => {
+      const rows = await getDb()
+        .select({ userId: schema.stageSpeakers.userId })
+        .from(schema.stageSpeakers)
+        .where(eq(schema.stageSpeakers.channelId, input.channelId));
+      return rows.map(r => r.userId);
+    }),
+
+  // ── Server events ───────────────────────────────────────────
+  createEvent: authedQuery
+    .input(
+      z.object({
+        serverId: z.number(),
+        channelId: z.number().optional(),
+        name: z.string().min(1, "Dê um nome ao evento.").max(120),
+        description: z.string().max(2000).optional(),
+        startsAt: z.string(),
+        endsAt: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      rateLimit(`eventCreate:${ctx.user.id}`, 10, 60 * 60_000);
+      await requirePermission(ctx.user.id, input.serverId, "MANAGE_CHANNELS");
+      const startsAt = new Date(input.startsAt);
+      if (Number.isNaN(startsAt.getTime())) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Data de início inválida." });
+      }
+      const [{ id }] = await getDb()
+        .insert(schema.serverEvents)
+        .values({
+          serverId: input.serverId,
+          channelId: input.channelId ?? null,
+          createdByUserId: ctx.user.id,
+          name: input.name,
+          description: input.description ?? null,
+          startsAt,
+          endsAt: input.endsAt ? new Date(input.endsAt) : null,
+        })
+        .$returningId();
+      await broadcastToServer(input.serverId, { t: "events:refresh", serverId: input.serverId });
+      return { id };
+    }),
+
+  listEvents: authedQuery
+    .input(z.object({ serverId: z.number() }))
+    .query(async ({ input }) => {
+      const rows = await getDb()
+        .select()
+        .from(schema.serverEvents)
+        .where(eq(schema.serverEvents.serverId, input.serverId));
+      return rows
+        .filter(e => e.status !== "CANCELLED")
+        .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    }),
+
+  cancelEvent: authedQuery
+    .input(z.object({ eventId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const event = await db.query.serverEvents.findFirst({
+        where: eq(schema.serverEvents.id, input.eventId),
+      });
+      if (!event) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Evento não encontrado." });
+      }
+      await requirePermission(ctx.user.id, event.serverId, "MANAGE_CHANNELS");
+      await db
+        .update(schema.serverEvents)
+        .set({ status: "CANCELLED" })
+        .where(eq(schema.serverEvents.id, input.eventId));
+      await broadcastToServer(event.serverId, { t: "events:refresh", serverId: event.serverId });
+      return { ok: true };
     }),
 
   // ── Invites ─────────────────────────────────────────────────

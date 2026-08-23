@@ -55,6 +55,40 @@ async function buildConversationDTO(
       ),
     );
 
+  // Message request: 1:1 conversation with a non-friend where the viewer
+  // never sent anything. Once the viewer replies it becomes a normal DM.
+  let isRequest = false;
+  if (!conversation.isGroup) {
+    const other = members.find((m) => m.id !== viewerId);
+    if (other) {
+      const friendship = await db.query.friendships.findFirst({
+        where: or(
+          and(
+            eq(schema.friendships.requesterId, viewerId),
+            eq(schema.friendships.addresseeId, other.id),
+          ),
+          and(
+            eq(schema.friendships.requesterId, other.id),
+            eq(schema.friendships.addresseeId, viewerId),
+          ),
+        ),
+      });
+      const isFriend = friendship?.status === "ACCEPTED";
+      if (!isFriend && friendship?.status !== "BLOCKED") {
+        const [{ count: sentCount }] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.messages)
+          .where(
+            and(
+              eq(schema.messages.conversationId, conversationId),
+              eq(schema.messages.authorId, viewerId),
+            ),
+          );
+        isRequest = Number(sentCount) === 0;
+      }
+    }
+  }
+
   return {
     id: conversation.id,
     isGroup: conversation.isGroup,
@@ -69,6 +103,7 @@ async function buildConversationDTO(
         }
       : null,
     unreadCount: Number(count),
+    isRequest,
   };
 }
 
@@ -182,5 +217,33 @@ export const dmRouter = createRouter({
       const dto = await buildConversationDTO(input.conversationId, ctx.user.id);
       if (!dto) throw new TRPCError({ code: "NOT_FOUND", message: "Conversa não encontrada." });
       return dto;
+    }),
+
+  delete: authedQuery
+    .input(z.object({ conversationId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireConversationAccess(ctx.user.id, input.conversationId);
+      const db = getDb();
+      // Only allow removing empty request-style 1:1 conversations.
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.messages)
+        .where(eq(schema.messages.conversationId, input.conversationId));
+      if (Number(count) > 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Conversas com mensagens não podem ser excluídas.",
+        });
+      }
+      await db
+        .delete(schema.conversationMembers)
+        .where(
+          and(
+            eq(schema.conversationMembers.conversationId, input.conversationId),
+            eq(schema.conversationMembers.userId, ctx.user.id),
+          ),
+        );
+      sendToUsers([ctx.user.id], { t: "dm:refresh" });
+      return { ok: true };
     }),
 });

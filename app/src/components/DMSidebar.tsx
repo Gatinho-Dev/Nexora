@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
-import { BadgeCheck, ShieldCheck, Users } from "lucide-react";
+import { BadgeCheck, ShieldCheck, Users, Inbox } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar } from "./Avatar";
 import { UserPanel } from "./UserPanel";
@@ -119,71 +119,101 @@ export function DMSidebar({
             Nenhuma conversa. Adicione amigos para começar na Nexora!
           </p>
         ) : (
-          <div className="space-y-0.5">
-            {conversations.data?.map(conv => {
-              const other = conv.otherUser;
-              const unread = unreadConversations[conv.id] ?? 0;
-              return (
-                <div
-                  key={conv.id}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors group",
-                    activeConversationId === conv.id
-                      ? "bg-[#404249] text-white font-medium"
-                      : "text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]"
-                  )}
-                >
-                  {other?.id ? (
-                    <button
-                      type="button"
-                      onClick={() => onOpenProfile?.(other.id)}
-                      className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
-                      aria-label={`Ver perfil de ${other.name ?? other.username ?? "usuário"}`}
-                      title="Ver perfil"
-                    >
-                      <Avatar
-                        userId={other.id}
-                        name={other.name ?? other.username}
-                        src={other.avatar}
-                        size="sm"
-                        showStatus
-                        statusOverride={other.status ?? "online"}
-                      />
-                    </button>
-                  ) : (
-                    <Avatar name="Conversa" size="sm" />
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/channels/@me/${conv.id}`)}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none"
-                    aria-label={`Abrir conversa com ${other?.name ?? other?.username ?? "usuário"}`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={cn(
-                          "truncate text-xs font-semibold group-hover:text-white transition-colors",
-                          unread > 0 && "text-white font-bold"
-                        )}
-                      >
-                        {other?.name ?? other?.username ?? "Conversa"}
-                      </p>
-                      {conv.lastMessage && (
-                        <p className="truncate text-[11px] text-[#B5BAC1]/70">
-                          {conv.lastMessage.content || "📎 Anexo enviado"}
-                        </p>
+          <>
+            {/* Message requests */}
+            {(conversations.data?.filter(c => c.isRequest).length ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={() => navigate("/channels/@me/requests")}
+                className={cn(
+                  "mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
+                  location.pathname === "/channels/@me/requests"
+                    ? "bg-[#404249] text-white"
+                    : "text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]"
+                )}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/5">
+                  <Inbox className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-xs font-bold">
+                  Solicitações
+                </span>
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground border border-rail">
+                  {conversations.data!.filter(c => c.isRequest).length}
+                </span>
+              </button>
+            )}
+            <p className="px-2 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-[#949BA4]">
+              Mensagens
+            </p>
+            <div className="space-y-0.5">
+              {conversations.data
+                ?.filter(c => !c.isRequest)
+                .map(conv => {
+                  const other = conv.otherUser;
+                  const unread = unreadConversations[conv.id] ?? 0;
+                  return (
+                    <div
+                      key={conv.id}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors group",
+                        activeConversationId === conv.id
+                          ? "bg-[#404249] text-white font-medium"
+                          : "text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]"
                       )}
+                    >
+                      {other?.id ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenProfile?.(other.id)}
+                          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                          aria-label={`Ver perfil de ${other.name ?? other.username ?? "usuário"}`}
+                          title="Ver perfil"
+                        >
+                          <Avatar
+                            userId={other.id}
+                            name={other.name ?? other.username}
+                            src={other.avatar}
+                            size="sm"
+                            showStatus
+                            statusOverride={other.status ?? "online"}
+                          />
+                        </button>
+                      ) : (
+                        <Avatar name="Conversa" size="sm" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/channels/@me/${conv.id}`)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none"
+                        aria-label={`Abrir conversa com ${other?.name ?? other?.username ?? "usuário"}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={cn(
+                              "truncate text-xs font-semibold group-hover:text-white transition-colors",
+                              unread > 0 && "text-white font-bold"
+                            )}
+                          >
+                            {other?.name ?? other?.username ?? "Conversa"}
+                          </p>
+                          {conv.lastMessage && (
+                            <p className="truncate text-[11px] text-[#B5BAC1]/70">
+                              {conv.lastMessage.content || "📎 Anexo enviado"}
+                            </p>
+                          )}
+                        </div>
+                        {unread > 0 && (
+                          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground border border-rail">
+                            {unread > 99 ? "99+" : unread}
+                          </span>
+                        )}
+                      </button>
                     </div>
-                    {unread > 0 && (
-                      <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground border border-rail">
-                        {unread > 99 ? "99+" : unread}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+            </div>
+          </>
         )}
       </div>
 

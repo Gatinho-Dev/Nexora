@@ -3,6 +3,7 @@ import { trpc } from "@/providers/trpc";
 import { realtime } from "@/lib/ws";
 import { useChatUIStore } from "@/store/useChatUIStore";
 import { EmojiPicker } from "./EmojiPicker";
+import { GifPicker } from "./GifPicker";
 import { formatSize } from "@/lib/formatSize";
 import { apiUrl } from "@/lib/endpoints";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,8 @@ import {
   Play,
   Trash2,
   UploadCloud,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -51,6 +54,7 @@ export function MessageInput({
 }: Props) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
+  const [spoilerIds, setSpoilerIds] = useState<number[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -130,6 +134,12 @@ export function MessageInput({
     textareaRef.current?.focus();
   };
 
+  const toggleSpoiler = (id: number) => {
+    setSpoilerIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
   const doSend = () => {
     const content = text.trim();
     if ((!content && files.length === 0) || send.isPending) return;
@@ -140,11 +150,13 @@ export function MessageInput({
         content,
         replyToId: replyingTo?.id,
         attachmentIds: files.map(f => f.id),
+        spoilerIds: spoilerIds.filter(id => files.some(f => f.id === id)),
       },
       {
         onSuccess: () => {
           setText("");
           setFiles([]);
+          setSpoilerIds([]);
           setReplyingTo(null);
         },
       }
@@ -357,34 +369,67 @@ export function MessageInput({
       {/* Pending attachments */}
       {files.length > 0 && (
         <div className="flex flex-wrap gap-2 rounded-t-xl bg-[#2B2D31] border border-white/10 px-3.5 py-2.5">
-          {files.map(f => (
-            <div
-              key={f.id}
-              className="relative flex items-center gap-2 rounded-lg border border-white/10 bg-[#232428] px-2.5 py-1.5 text-xs text-white"
-            >
-              {f.mimeType.startsWith("image/") ? (
-                <img
-                  src={f.url}
-                  alt={f.filename}
-                  className="h-10 w-10 rounded-md object-cover"
-                />
-              ) : (
-                <span className="text-lg">📄</span>
-              )}
-              <div className="max-w-32">
-                <div className="truncate font-medium">{f.filename}</div>
-                <div className="text-[#B5BAC1]">{formatSize(f.size)}</div>
-              </div>
-              <button
-                className="absolute -top-1.5 -right-1.5 rounded-full bg-red-500 text-white p-0.5 shadow hover:bg-red-600 transition-colors"
-                onClick={() =>
-                  setFiles(prev => prev.filter(x => x.id !== f.id))
-                }
+          {files.map(f => {
+            const isSpoiler = spoilerIds.includes(f.id);
+            return (
+              <div
+                key={f.id}
+                className="relative flex items-center gap-2 rounded-lg border border-white/10 bg-[#232428] px-2.5 py-1.5 text-xs text-white"
               >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          ))}
+                {f.mimeType.startsWith("image/") ? (
+                  <div className="relative">
+                    <img
+                      src={f.url}
+                      alt={isSpoiler ? "Spoiler" : f.filename}
+                      className={cn(
+                        "h-10 w-10 rounded-md object-cover transition-all",
+                        isSpoiler && "blur-md"
+                      )}
+                    />
+                    {isSpoiler && (
+                      <span className="absolute inset-0 flex items-center justify-center rounded-md bg-black/60 text-[9px] font-bold tracking-widest">
+                        SPOILER
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-lg">📄</span>
+                )}
+                <div className="max-w-32">
+                  <div className="truncate font-medium">{f.filename}</div>
+                  <div className="text-[#B5BAC1]">{formatSize(f.size)}</div>
+                </div>
+                {/* Attachment actions */}
+                {f.mimeType.startsWith("image/") && (
+                  <button
+                    type="button"
+                    title={
+                      isSpoiler ? "Remover marcação de spoiler" : "Marcar como spoiler"
+                    }
+                    aria-label={
+                      isSpoiler ? "Remover marcação de spoiler" : "Marcar como spoiler"
+                    }
+                    onClick={() => toggleSpoiler(f.id)}
+                    className="rounded-full bg-white/10 p-0.5 text-[#B5BAC1] hover:text-white transition-colors"
+                  >
+                    {isSpoiler ? (
+                      <EyeOff className="h-3 w-3" />
+                    ) : (
+                      <Eye className="h-3 w-3" />
+                    )}
+                  </button>
+                )}
+                <button
+                  className="absolute -top-1.5 -right-1.5 rounded-full bg-red-500 text-white p-0.5 shadow hover:bg-red-600 transition-colors"
+                  onClick={() =>
+                    setFiles(prev => prev.filter(x => x.id !== f.id))
+                  }
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -528,6 +573,19 @@ export function MessageInput({
               <Smile className="h-5 w-5" />
             </button>
           </EmojiPicker>
+
+          {!disabled && (
+            <GifPicker onPick={url => setText(t => `${t}${t ? " " : ""}${url} `)}>
+              <button
+                className="p-0.5 text-[10px] font-extrabold tracking-wider rounded bg-white/5 hover:bg-white/15 border border-[#B5BAC1]/40 text-[#B5BAC1] hover:text-white transition-colors disabled:opacity-40"
+                title="GIFs"
+                type="button"
+                disabled={disabled}
+              >
+                GIF
+              </button>
+            </GifPicker>
+          )}
 
           {text.trim() || files.length > 0 ? (
             <TooltipProvider delayDuration={200}>
