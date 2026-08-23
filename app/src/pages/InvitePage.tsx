@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,6 +17,20 @@ export function InvitePage() {
     { code },
     { enabled: !!code && !!user, retry: false }
   );
+
+  const infoError = info.error;
+  const byVanity = trpc.server.byVanity.useQuery(
+    { slug: code },
+    { enabled: !!code && !!user && !!infoError, retry: false }
+  );
+
+  // Vanity link: entra direto no servidor apontado pelo slug.
+  useEffect(() => {
+    if (byVanity.data && user) {
+      toast.success(`Você entrou em ${byVanity.data.name}!`);
+      navigate(`/channels/${byVanity.data.serverId}/first`);
+    }
+  }, [byVanity.data, user, navigate]);
 
   const join = trpc.server.joinByCode.useMutation({
     onSuccess: ({ serverId }) => {

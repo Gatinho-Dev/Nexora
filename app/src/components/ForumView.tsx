@@ -4,7 +4,9 @@ import { trpc } from "@/providers/trpc";
 import { realtime } from "@/lib/ws";
 import { Avatar } from "./Avatar";
 import { MessageContent } from "./chat/MessageContent";
+import { MessageInput } from "./chat/MessageInput";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Loader2, MessageSquare, ArrowLeft, SendHorizonal, Plus } from "lucide-react";
 import { IconForum } from "./icons/channelIcons";
@@ -22,19 +24,35 @@ function postBody(post: MessageDTO): string {
   return lines.slice(1).join("\n").trim();
 }
 
-export function ForumView({ channelId }: { channelId: number }) {
+export function ForumView({
+  channelId,
+  channelType,
+  tags,
+  forcedTags,
+}: {
+  channelId: number;
+  channelType: "FORUM" | "MEDIA";
+  tags?: string[] | null;
+  forcedTags?: boolean;
+}) {
+  const isMedia = channelType === "MEDIA";
   const { onOpenProfile } = useOutletContext<AppOutletContext>();
   const me = trpc.auth.me.useQuery().data;
   const utils = trpc.useUtils();
   const [openPostId, setOpenPostId] = useState<number | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "gallery">(
+    isMedia ? "gallery" : "list"
+  );
+  const [tagFilter, setTagFilter] = useState<string>("all");
+  const [postTag, setPostTag] = useState<string>("");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [replyText, setReplyText] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
   const postsQuery = trpc.forum.posts.useQuery(
-    { channelId, limit: 50 },
+    { channelId, limit: 50, tag: tagFilter !== "all" ? tagFilter : undefined },
     { enabled: openPostId === null }
   );
   const threadQuery = trpc.forum.thread.useQuery(
@@ -84,13 +102,18 @@ export function ForumView({ channelId }: { channelId: number }) {
   const createPost = () => {
     const t = title.trim();
     if (!t) return;
+    if (forcedTags && tags && tags.length > 0 && !postTag) {
+      toast.error("Escolha uma tag para publicar.");
+      return;
+    }
     const content = body.trim() ? `${t}\n${body.trim()}` : t;
     send.mutate(
-      { channelId, content },
+      { channelId, content, tag: postTag || undefined },
       {
         onSuccess: () => {
           setTitle("");
           setBody("");
+          setPostTag("");
           setComposerOpen(false);
           utils.forum.posts.invalidate({ channelId });
         },
@@ -129,13 +152,33 @@ export function ForumView({ channelId }: { channelId: number }) {
           </span>
         </div>
         {openPostId === null && (
-          <Button
-            size="sm"
-            onClick={() => setComposerOpen(o => !o)}
-            className="bg-[#5865F2] hover:bg-[#4752C4] text-xs font-semibold"
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" /> Novo post
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <div className="flex overflow-hidden rounded-lg border border-white/10">
+              {(["list", "gallery"] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  aria-label={mode === "list" ? "Visualizar em lista" : "Visualizar em galeria"}
+                  title={mode === "list" ? "Lista" : "Galeria"}
+                  className={cn(
+                    "px-2 py-1.5 text-xs font-bold transition-colors",
+                    viewMode === mode
+                      ? "bg-[#5865F2] text-white"
+                      : "text-muted2 hover:bg-white/10"
+                  )}
+                >
+                  {mode === "list" ? "☰" : "▦"}
+                </button>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setComposerOpen(o => !o)}
+              className="bg-[#5865F2] hover:bg-[#4752C4] text-xs font-semibold"
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Novo post
+            </Button>
+          </div>
         )}
       </header>
 
@@ -158,14 +201,36 @@ export function ForumView({ channelId }: { channelId: number }) {
                   }
                 }}
               />
-              <textarea
-                value={body}
-                onChange={e => setBody(e.target.value)}
-                placeholder="Escreva o conteúdo do post (opcional)"
-                rows={3}
-                maxLength={3800}
-                className="w-full resize-none rounded-md bg-[#383A40] px-3 py-2 text-sm outline-none placeholder:text-faint"
-              />
+              {!isMedia && (
+                <textarea
+                  value={body}
+                  onChange={e => setBody(e.target.value)}
+                  placeholder="Escreva o conteúdo do post (opcional)"
+                  rows={3}
+                  maxLength={3800}
+                  className="w-full resize-none rounded-md bg-[#383A40] px-3 py-2 text-sm outline-none placeholder:text-faint"
+                />
+              )}
+              {tags && tags.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(forcedTags ? tags : ["", ...tags]).map(t => (
+                    <button
+                      key={t || "__none__"}
+                      type="button"
+                      onClick={() => setPostTag(t)}
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors",
+                        postTag === t
+                          ? "bg-[#5865F2] text-white"
+                          : "bg-white/5 text-muted2 hover:bg-white/10",
+                        forcedTags && !t && "opacity-50 line-through"
+                      )}
+                    >
+                      {t || "sem tag"}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center justify-end gap-2">
                 <Button
                   size="sm"
@@ -191,6 +256,26 @@ export function ForumView({ channelId }: { channelId: number }) {
             </div>
           )}
 
+          {/* Tag filter */}
+          {tags && tags.length > 0 && (
+            <div className="mb-3 flex gap-1.5 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none]">
+              {["all", ...tags].map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTagFilter(t)}
+                  className={cn(
+                    "shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
+                    tagFilter === t
+                      ? "bg-[#5865F2] text-white"
+                      : "bg-white/5 text-muted2 hover:bg-white/10"
+                  )}
+                >
+                  {t === "all" ? "Todas" : `#${t}`}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Post grid */}
           <div ref={listRef} className="flex-1 overflow-y-auto p-4">
             {postsQuery.isLoading ? (
@@ -206,7 +291,13 @@ export function ForumView({ channelId }: { channelId: number }) {
                 </p>
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div
+                className={cn(
+                  viewMode === "gallery"
+                    ? "grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4"
+                    : "grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                )}
+              >
                 {postsQuery.data!.posts.map(post => (
                   <button
                     key={post.id}
@@ -257,6 +348,15 @@ export function ForumView({ channelId }: { channelId: number }) {
               </div>
             )}
           </div>
+
+          {isMedia && (
+            <div className="shrink-0 border-t border-black/20">
+              <MessageInput
+                channelId={channelId}
+                placeholder="Envie uma imagem ou vídeo..."
+              />
+            </div>
+          )}
         </>
       ) : (
         <>

@@ -86,6 +86,7 @@ export type MessageDTO = {
   content: string;
   replyToId: number | null;
   threadId?: number | null;
+  tag?: string | null;
   createdAt: string | Date;
   editedAt: string | Date | null;
   author: PublicUser;
@@ -105,6 +106,10 @@ export type ChannelDTO = {
   name: string;
   type: "TEXT" | "VOICE" | "ANNOUNCEMENT" | "FORUM" | "STAGE" | "MEDIA";
   position: number;
+  topic?: string | null;
+  syncedWithCategory?: boolean;
+  tags?: string[] | null;
+  forcedTags?: boolean;
 };
 
 export type CategoryDTO = {
@@ -137,6 +142,8 @@ export type ServerDTO = {
   id: number;
   name: string;
   iconUrl: string | null;
+  bannerUrl?: string | null;
+  vanitySlug?: string | null;
   description: string | null;
   ownerId: number;
   createdAt: string | Date;

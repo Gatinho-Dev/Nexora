@@ -15,6 +15,13 @@ import type { ServerDetailsDTO, RoleDTO } from "@contracts/types";
 import { PERMISSIONS, type Permission } from "@contracts/constants";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -65,7 +72,7 @@ const PERMISSION_DESCRIPTIONS: Partial<Record<Permission, string>> = {
 };
 
 type Tab =
-  "overview" | "roles" | "members" | "invites" | "moderation" | "danger";
+  "overview" | "roles" | "members" | "invites" | "moderation" | "danger" | "permissions" | "integrations";
 
 export function ServerSettingsModal({
   open,
@@ -93,6 +100,8 @@ export function ServerSettingsModal({
       visible: canKick || canBan || canManageRoles,
     },
     { id: "invites", label: "Convites", visible: canManageServer },
+    { id: "permissions", label: "Permissões", visible: canManageServer },
+    { id: "integrations", label: "Integrações", visible: canManageServer },
     { id: "moderation", label: "Moderação", visible: canBan },
     { id: "danger", label: "Excluir servidor", visible: isOwner },
   ];
@@ -133,6 +142,8 @@ export function ServerSettingsModal({
             <ScrollArea className="h-full">
               <div className="p-6">
                 {activeTab === "overview" && <OverviewTab details={details} />}
+                {activeTab === "permissions" && <PermissionsTab details={details} />}
+                {activeTab === "integrations" && <IntegrationsTab details={details} />}
                 {activeTab === "roles" && <RolesTab details={details} />}
                 {activeTab === "members" && (
                   <MembersTab
@@ -169,6 +180,8 @@ function OverviewTab({ details }: { details: ServerDetailsDTO }) {
   const [description, setDescription] = useState(
     details.server.description ?? ""
   );
+  const [banner, setBanner] = useState(details.server.bannerUrl ?? "");
+  const [vanity, setVanity] = useState(details.server.vanitySlug ?? "");
   const update = trpc.server.update.useMutation({
     onSuccess: () => {
       toast.success("Servidor atualizado.");
@@ -191,6 +204,28 @@ function OverviewTab({ details }: { details: ServerDetailsDTO }) {
         />
       </div>
       <div className="space-y-2">
+        <Label htmlFor="srv-banner">Banner do topo (URL) — aparece atrás do header do servidor</Label>
+        <Input
+          id="srv-banner"
+          value={banner}
+          onChange={e => setBanner(e.target.value)}
+          placeholder="https://..."
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="srv-vanity">Link personalizado (vanity URL)</Label>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-faint">/invite/</span>
+          <Input
+            id="srv-vanity"
+            value={vanity}
+            onChange={e => setVanity(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+            placeholder="meu-servidor"
+            maxLength={32}
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
         <Label htmlFor="srv-desc">Descrição</Label>
         <Textarea
           id="srv-desc"
@@ -207,6 +242,8 @@ function OverviewTab({ details }: { details: ServerDetailsDTO }) {
           update.mutate({
             serverId: details.server.id,
             name: name.trim() || details.server.name,
+            bannerUrl: banner.trim() || null,
+            vanitySlug: vanity.trim() || null,
             description: description.trim() || null,
           })
         }
@@ -756,6 +793,360 @@ function DangerTab({
       >
         {del.isPending ? "Excluindo..." : "Excluir servidor permanentemente"}
       </Button>
+    </div>
+  );
+}
+
+// ── Permissões (overrides por categoria/canal × cargo) ────────
+function PermissionsTab({ details }: { details: ServerDetailsDTO }) {
+  const utils = trpc.useUtils();
+  const targets = [
+    ...details.categories.map(c => ({
+      id: c.id,
+      type: "category" as const,
+      label: `📂 ${c.name}`,
+    })),
+    ...details.channels.map(c => ({
+      id: c.id,
+      type: "channel" as const,
+      label: `${c.type === "VOICE" || c.type === "STAGE" ? "🔊" : "#"} ${c.name}`,
+    })),
+  ];
+  const [target, setTarget] = useState<{ type: "category" | "channel"; id: number } | null>(
+    targets[0] ? { type: targets[0].type, id: targets[0].id } : null
+  );
+  const [roleId, setRoleId] = useState<number | null>(null);
+  const [states, setStates] = useState<Record<string, "off" | "allow" | "deny">>({});
+
+  const overrides = trpc.server.listOverrides.useQuery(
+    { targetType: target?.type ?? "channel", targetId: target?.id ?? 0 },
+    { enabled: !!target }
+  );
+  const upsert = trpc.server.upsertOverride.useMutation({
+    onSuccess: () => {
+      toast.success("Permissões salvas.");
+      utils.server.listOverrides.invalidate();
+      utils.server.get.invalidate({ serverId: details.server.id });
+    },
+    onError: e => toast.error(e.message),
+  });
+  const removeOv = trpc.server.deleteOverride.useMutation({
+    onSuccess: () => utils.server.listOverrides.invalidate(),
+    onError: e => toast.error(e.message),
+  });
+  const setSynced = trpc.server.setChannelSynced.useMutation({
+    onSuccess: () => utils.server.get.invalidate({ serverId: details.server.id }),
+    onError: e => toast.error(e.message),
+  });
+
+  const selectedChannel =
+    target?.type === "channel"
+      ? details.channels.find(c => c.id === target.id)
+      : undefined;
+
+  // Load existing override for chosen role: adjust state during render.
+  const loadKey =
+    target ? `${target.type}:${target.id}:${roleId}:${overrides.dataUpdatedAt}` : "";
+  const [lastLoadKey, setLastLoadKey] = useState(loadKey);
+  if (loadKey !== lastLoadKey) {
+    setLastLoadKey(loadKey);
+    const ov = overrides.data?.find(o => o.roleId === roleId);
+    const next: Record<string, "off" | "allow" | "deny"> = {};
+    for (const p of ov?.allow ?? []) next[p] = "allow";
+    for (const p of ov?.deny ?? []) next[p] = "deny";
+    setStates(next);
+  }
+
+  if (targets.length === 0) {
+    return <p className="text-xs text-faint">Crie categorias ou canais primeiro.</p>;
+  }
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <h2 className="text-lg font-semibold">Permissões avançadas</h2>
+      <p className="text-xs text-muted2">
+        Cargos → categoria (canais sincronizados herdam na hora). Canais com
+        regras próprias ficam dessincronizados automaticamente ao salvar aqui.
+        Sem <b>Ver canal</b>, o canal fica invisível para o cargo.
+      </p>
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Select
+          value={target ? String(target.id) : ""}
+          onValueChange={v => {
+            const t = targets.find(x => String(x.id) === v)!;
+            setTarget({ type: t.type, id: t.id });
+          }}
+        >
+          <SelectTrigger><SelectValue placeholder="Categoria ou canal" /></SelectTrigger>
+          <SelectContent className="max-h-64">
+            {targets.map(t => (
+              <SelectItem key={`${t.type}-${t.id}`} value={String(t.id)}>
+                {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={roleId === null ? "everyone" : String(roleId)}
+          onValueChange={v => setRoleId(v === "everyone" ? null : Number(v))}
+        >
+          <SelectTrigger><SelectValue placeholder="Cargo" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="everyone">@everyone</SelectItem>
+            {details.roles.map(r => (
+              <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {selectedChannel && (
+        <label className="flex items-center gap-2 text-xs text-muted2">
+          <input
+            type="checkbox"
+            className="accent-[#5865F2]"
+            checked={selectedChannel.syncedWithCategory ?? true}
+            onChange={e =>
+              setSynced.mutate({
+                channelId: selectedChannel.id,
+                synced: e.target.checked,
+              })
+            }
+          />
+          Sincronizar permissões com a categoria
+        </label>
+      )}
+
+      {/* Permission grid */}
+      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+        {(Object.keys(PERMISSION_LABELS) as Array<keyof typeof PERMISSION_LABELS>).map(perm => {
+          const st = states[perm] ?? "off";
+          const cycle = () =>
+            setStates(prev => {
+              const next = { ...prev };
+              next[perm] = st === "off" ? "allow" : st === "allow" ? "deny" : "off";
+              return next;
+            });
+          return (
+            <button
+              key={perm}
+              onClick={cycle}
+              title={`Clique para alternar: neutro → permitir → negar (${PERMISSION_LABELS[perm]})`}
+              className={cn(
+                "flex min-h-[40px] items-center justify-between rounded-lg border px-3 text-left text-xs transition-colors",
+                st === "allow"
+                  ? "border-emerald-500/40 bg-emerald-500/[0.08]"
+                  : st === "deny"
+                    ? "border-red-500/40 bg-red-500/[0.08]"
+                    : "border-white/10 hover:bg-white/5"
+              )}
+            >
+              <span className="truncate">{PERMISSION_LABELS[perm]}</span>
+              <span
+                className={cn(
+                  "ml-2 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase",
+                  st === "allow"
+                    ? "bg-emerald-500/20 text-emerald-300"
+                    : st === "deny"
+                      ? "bg-red-500/20 text-red-300"
+                      : "text-faint"
+                )}
+              >
+                {st === "off" ? "—" : st === "allow" ? "✓" : "✗"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <Button
+        disabled={!target}
+        onClick={() =>
+          target &&
+          upsert.mutate({
+            targetType: target.type,
+            targetId: target.id,
+            roleId,
+            allow: Object.entries(states)
+              .filter(([, v]) => v === "allow")
+              .map(([k]) => k as Permission),
+            deny: Object.entries(states)
+              .filter(([, v]) => v === "deny")
+              .map(([k]) => k as Permission),
+          })
+        }
+      >
+        {upsert.isPending ? "Salvando..." : "Salvar permissões"}
+      </Button>
+
+      {/* Existing overrides */}
+      {overrides.data && overrides.data.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-faint">
+            Regras ativas neste alvo
+          </p>
+          {overrides.data.map(ov => {
+            const roleName =
+              ov.roleId === null
+                ? "@everyone"
+                : details.roles.find(r => r.id === ov.roleId)?.name ?? `Cargo ${ov.roleId}`;
+            return (
+              <div
+                key={ov.id}
+                className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.04] px-3 py-2 text-xs"
+              >
+                <span className="min-w-0 truncate">
+                  <b>{roleName}</b> · ✓{ov.allow.length} ✗{ov.deny.length}
+                </span>
+                <button
+                  onClick={() => removeOv.mutate({ overrideId: ov.id })}
+                  className="rounded px-2 py-1 text-[11px] font-bold text-red-400 hover:bg-red-500/10"
+                >
+                  Remover
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Integrações / Webhooks ────────────────────────────────────
+function IntegrationsTab({ details }: { details: ServerDetailsDTO }) {
+  const utils = trpc.useUtils();
+  const list = trpc.webhook.list.useQuery({ serverId: details.server.id });
+  const [name, setName] = useState("");
+  const [channelId, setChannelId] = useState<string>(
+    String(details.channels.find(c => c.type !== "VOICE")?.id ?? "")
+  );
+  const [justCreated, setJustCreated] = useState<{ url: string } | null>(null);
+
+  const create = trpc.webhook.create.useMutation({
+    onSuccess: data => {
+      utils.webhook.list.invalidate({ serverId: details.server.id });
+      setName("");
+      setJustCreated({ url: data.url });
+    },
+    onError: e => toast.error(e.message),
+  });
+  const remove = trpc.webhook.remove.useMutation({
+    onSuccess: () => utils.webhook.list.invalidate({ serverId: details.server.id }),
+    onError: e => toast.error(e.message),
+  });
+
+  const fullUrl = justCreated ? `${window.location.origin}${justCreated.url}` : "";
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <h2 className="text-lg font-semibold">Integrações e Webhooks</h2>
+      <p className="text-xs leading-relaxed text-muted2">
+        Webhooks permitem que serviços externos enviem mensagens para um canal.
+        A URL contém um token criptográfico — <b>trate como segredo</b>. Dica:
+        mantenha bots/webhooks em categorias privadas e conceda apenas os
+        direitos necessários (gerenciar mensagens e webhooks).
+      </p>
+
+      <form
+        className="flex flex-col gap-2 sm:flex-row"
+        onSubmit={e => {
+          e.preventDefault();
+          if (!name.trim() || !channelId) return;
+          create.mutate({ channelId: Number(channelId), name: name.trim() });
+        }}
+      >
+        <Input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Nome do webhook (ex.: Alertas de Deploy)"
+          maxLength={80}
+        />
+        <Select value={channelId} onValueChange={setChannelId}>
+          <SelectTrigger className="sm:w-52"><SelectValue placeholder="Canal" /></SelectTrigger>
+          <SelectContent className="max-h-64">
+            {details.channels
+              .filter(c => c.type !== "VOICE" && c.type !== "STAGE")
+              .map(c => (
+                <SelectItem key={c.id} value={String(c.id)}>#{c.name}</SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+        <Button type="submit" disabled={!name.trim() || !channelId || create.isPending}>
+          Criar
+        </Button>
+      </form>
+
+      {justCreated && (
+        <div className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/[0.07] p-3">
+          <p className="text-xs font-bold text-amber-200">
+            Copie agora — esta URL não será exibida novamente:
+          </p>
+          <code className="block break-all rounded-lg bg-black/50 p-2 text-[11px]">
+            POST {fullUrl}
+          </code>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                navigator.clipboard.writeText(fullUrl).catch(() => {});
+                toast.success("URL copiada.");
+              }}
+            >
+              Copiar URL
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setJustCreated(null)}>
+              Fechar
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted2">
+            Exemplo de uso:
+            <code className="mt-1 block break-all rounded bg-black/40 p-1.5 text-[10px]">
+{`curl -X POST ${fullUrl} -H "Content-Type: application/json" -d '{"content":"Deploy concluído ✅"}'`}
+            </code>
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-faint">
+          Webhooks do servidor ({list.data?.length ?? 0})
+        </p>
+        {list.isLoading ? (
+          <p className="py-6 text-center text-xs text-muted2">Carregando...</p>
+        ) : (list.data?.length ?? 0) === 0 ? (
+          <p className="rounded-lg bg-white/[0.04] px-3 py-2.5 text-xs text-muted2">
+            Nenhum webhook criado ainda.
+          </p>
+        ) : (
+          list.data!.map(({ webhook, channelName }) => (
+            <div
+              key={webhook.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{webhook.name}</p>
+                <p className="truncate text-[11px] text-faint">
+                  canal #{channelName ?? "?"} · criado em{" "}
+                  {new Date(webhook.createdAt).toLocaleDateString("pt-BR")}
+                </p>
+              </div>
+              <button
+                onClick={() =>
+                  confirm(`Excluir o webhook "${webhook.name}"?`) &&
+                  remove.mutate({ webhookId: webhook.id })
+                }
+                className="rounded px-2 py-1 text-xs font-bold text-red-400 hover:bg-red-500/10"
+              >
+                Excluir
+              </button>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
