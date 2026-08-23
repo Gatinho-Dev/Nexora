@@ -85,6 +85,63 @@ export async function requirePermission(
 }
 
 /** Verifies channel access: user must be a member of the channel's server. Returns the channel. */
+/**
+ * Effective permissions for a specific channel:
+ * member roles → category overrides (when synced) → channel overrides
+ * (when the channel has its own rules). Pure allow/deny application.
+ */
+export async function getEffectiveChannelPermissions(
+  userId: number,
+  channel: typeof schema.channels.$inferSelect
+): Promise<Set<Permission> | null> {
+  const base = await getMemberPermissions(userId, channel.serverId);
+  if (!base) return null;
+  const perms = new Set<Permission>(base);
+
+  const db = getDb();
+  const targets: Array<"category" | "channel"> = [];
+  // Order matters: category first (inherited), then channel-specific.
+  if (channel.categoryId && channel.syncedWithCategory)
+    targets.push("category");
+  if (!channel.syncedWithCategory) targets.push("channel");
+
+  for (const targetType of targets) {
+    const targetId =
+      targetType === "category" ? channel.categoryId! : channel.id;
+    const overrides = await db
+      .select()
+      .from(schema.permissionOverrides)
+      .where(
+        and(
+          eq(schema.permissionOverrides.targetType, targetType),
+          eq(schema.permissionOverrides.targetId, targetId),
+        ),
+      );
+    for (const ov of overrides) {
+      // null roleId = @everyone tier; role must match one of the user's roles.
+      let applies = ov.roleId === null;
+      if (!applies && ov.roleId !== null) {
+        const [mr] = await db
+          .select({ id: schema.memberRoles.id })
+          .from(schema.memberRoles)
+          .where(
+            and(
+              eq(schema.memberRoles.userId, userId),
+              eq(schema.memberRoles.roleId, ov.roleId),
+            ),
+          )
+          .limit(1);
+        applies = !!mr;
+      }
+      if (!applies) continue;
+      for (const d of ov.deny ?? []) perms.delete(d as Permission);
+      for (const a of ov.allow ?? []) perms.add(a as Permission);
+    }
+  }
+  return perms;
+}
+
+/** Loads a channel enforcing VIEW_CHANNEL — hidden channels are invisible. */
 export async function requireChannelAccess(userId: number, channelId: number) {
   const db = getDb();
   const channel = await db.query.channels.findFirst({
@@ -93,12 +150,10 @@ export async function requireChannelAccess(userId: number, channelId: number) {
   if (!channel) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Canal não encontrado." });
   }
-  const perms = await getMemberPermissions(userId, channel.serverId);
-  if (!perms) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Você não tem acesso a este canal.",
-    });
+  const perms = await getEffectiveChannelPermissions(userId, channel);
+  if (!perms || !perms.has("VIEW_CHANNEL")) {
+    // Hidden means hidden: indistinguishable from a nonexistent channel.
+    throw new TRPCError({ code: "NOT_FOUND", message: "Canal não encontrado." });
   }
   return { channel, perms };
 }

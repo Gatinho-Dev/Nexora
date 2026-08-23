@@ -370,6 +370,7 @@ export const messageRouter = createRouter({
     .input(
       targetSchema.extend({
         before: z.number().optional(),
+        threadId: z.number().optional(),
         limit: z.number().min(1).max(100).default(50),
       })
     )
@@ -383,6 +384,13 @@ export const messageRouter = createRouter({
         await requireConversationAccess(ctx.user.id, input.conversationId!);
         conditions.push(
           eq(schema.messages.conversationId, input.conversationId!)
+        );
+      }
+      if (input.threadId != null) {
+        conditions.push(
+          input.threadId === 0
+            ? sql`${schema.messages.threadId} IS NULL`
+            : eq(schema.messages.threadId, input.threadId)
         );
       }
       if (input.before)
@@ -410,6 +418,7 @@ export const messageRouter = createRouter({
       targetSchema.extend({
         content: z.string().max(4000),
         replyToId: z.number().optional(),
+        threadId: z.number().optional(),
         attachmentIds: z.array(z.number()).max(10).optional(),
         spoilerIds: z.array(z.number()).max(10).optional(),
       })

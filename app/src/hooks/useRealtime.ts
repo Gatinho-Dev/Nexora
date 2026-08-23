@@ -173,6 +173,14 @@ export function useRealtime(myUserId: number | undefined) {
         case "friends:refresh":
           utils.friend.list.invalidate();
           break;
+        case "stage:hands": {
+          const key =
+            event.channelId != null ? `c:${event.channelId}` : undefined;
+          if (key) {
+            useAppStore.getState().setStageHands(key, event.userIds);
+          }
+          break;
+        }
       }
     });
 

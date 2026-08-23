@@ -15,6 +15,8 @@ type Props = {
   members?: { id: number; username: string | null; name: string | null }[];
   myId: number;
   canManageMessages?: boolean;
+  channelType?: string;
+  canPublish?: boolean;
   sendDisabled?: boolean;
   onOpenProfile?: (userId: number) => void;
   header: React.ReactNode;
@@ -22,6 +24,8 @@ type Props = {
 
 export function ChatArea({
   channelId,
+  channelType,
+  canPublish,
   conversationId,
   placeholder,
   members = [],
@@ -210,6 +214,8 @@ export function ChatArea({
               messages,
               myId,
               canManageMessages,
+              channelType,
+              canPublish,
               jumpTo,
               onOpenProfile
             )}
@@ -270,6 +276,8 @@ function renderMessages(
   >,
   myId: number,
   canManage: boolean,
+  channelType: string | undefined,
+  canPublish: boolean | undefined,
   jumpTo: (id: number) => void,
   onOpenProfile?: (userId: number) => void
 ) {
@@ -313,6 +321,8 @@ function renderMessages(
         grouped={grouped}
         myId={myId}
         canManageMessages={canManage}
+        channelType={channelType}
+        canPublish={canPublish}
         onJumpTo={jumpTo}
         onOpenProfile={onOpenProfile}
       />

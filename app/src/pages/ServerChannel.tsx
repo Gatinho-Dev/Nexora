@@ -9,7 +9,7 @@ import { VoiceView } from "@/components/VoiceView";
 import { ForumView } from "@/components/ForumView";
 import { SidebarPortal } from "@/components/SidebarPortal";
 import { NotificationsBell } from "@/components/NotificationsBell";
-import { Users, X } from "lucide-react";
+import { Users, X, ArrowLeft } from "lucide-react";
 import {
   IconHash,
   IconVoice,
@@ -95,6 +95,14 @@ export function ServerChannel() {
   const header = channel ? (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/20 px-4 bg-chat text-foreground select-none shadow-sm">
       <div className="flex items-center gap-2 min-w-0">
+        <button
+          onClick={() => navigate(`/channels/${serverId}`)}
+          className="-ml-1 rounded p-1 text-muted2 hover:bg-white/10 hover:text-foreground md:hidden"
+          aria-label="Voltar aos canais"
+          title="Voltar"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
         {channel.type === "VOICE" ? (
           <IconVoice className="h-5 w-5 text-emerald-400 shrink-0" />
         ) : channel.type === "STAGE" ? (
@@ -171,6 +179,8 @@ export function ServerChannel() {
             }))}
             myId={me.id}
             canManageMessages={canManageMessages}
+            channelType={channel.type}
+            canPublish={canManageMessages}
             onOpenProfile={onOpenProfile}
             header={header}
           />

@@ -221,7 +221,7 @@ export function ChannelSidebar({
                   <span>{category.name}</span>
                 </button>
                 {canManageChannels && (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-0 touch-show group-hover:opacity-100 transition-opacity">
                     <CategoryActions categoryId={category.id} name={category.name} />
                     <button
                       className="text-muted2 hover:text-foreground"
@@ -314,7 +314,7 @@ export function ChannelSidebar({
                               e.stopPropagation();
                               setInviteOpen(true);
                             }}
-                            className="h-3.5 w-3.5 text-muted2 hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-3.5 w-3.5 text-muted2 hover:text-foreground opacity-0 touch-show group-hover:opacity-100 transition-opacity"
                           />
                         </button>
 
@@ -446,7 +446,7 @@ function TextChannelRow({
 }: {
   id: number;
   name: string;
-  type: "TEXT" | "VOICE" | "ANNOUNCEMENT" | "FORUM" | "STAGE";
+  type: "TEXT" | "VOICE" | "ANNOUNCEMENT" | "FORUM" | "STAGE" | "MEDIA";
   active: boolean;
   unread: boolean;
   unreadCount: number;
@@ -514,7 +514,7 @@ function TextChannelRow({
                   e.stopPropagation();
                   onInviteClick?.();
                 }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 text-muted2 hover:text-foreground transition-opacity"
+                className="opacity-0 touch-show group-hover:opacity-100 p-0.5 text-muted2 hover:text-foreground transition-opacity"
               >
                 <UserPlus className="h-3.5 w-3.5" />
               </button>
@@ -528,7 +528,7 @@ function TextChannelRow({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="opacity-0 group-hover:opacity-100 p-0.5 text-muted2 hover:text-red-400 transition-opacity"
+                  className="opacity-0 touch-show group-hover:opacity-100 p-0.5 text-muted2 hover:text-red-400 transition-opacity"
                   onClick={e => {
                     e.stopPropagation();
                     if (

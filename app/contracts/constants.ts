@@ -16,6 +16,7 @@ export const Paths = {
 // ── Permissions ───────────────────────────────────────────────
 export const PERMISSIONS = [
   "ADMINISTRATOR",
+  "VIEW_CHANNEL",
   "MANAGE_SERVER",
   "MANAGE_CHANNELS",
   "MANAGE_ROLES",
@@ -36,6 +37,7 @@ export const ALL_PERMISSIONS: Permission[] = [...PERMISSIONS];
 export const DEFAULT_MEMBER_PERMISSIONS: Permission[] = [
   "SEND_MESSAGES",
   "READ_MESSAGES",
+  "VIEW_CHANNEL",
   "CONNECT",
   "SPEAK",
   "STREAM",

@@ -431,3 +431,44 @@ button:active:not(:disabled) {
     scroll-behavior: auto !important;
   }
 }
+
+
+/* ── Mobile-first adaptations ─────────────────────────────────── */
+html {
+  overscroll-behavior-y: none;
+}
+body {
+  padding-right: env(safe-area-inset-right);
+  padding-left: env(safe-area-inset-left);
+}
+
+/* iOS Safari: inputs < 16px disparam zoom automático */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Em telas de toque, botões que só aparecem no hover ficam sempre visíveis */
+@media (hover: none) {
+  .msg-actions {
+    display: none;
+  }
+  .touch-show {
+    opacity: 1 !important;
+  }
+}
+
+/* Respeita usuários que preferem menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

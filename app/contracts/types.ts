@@ -85,6 +85,7 @@ export type MessageDTO = {
   authorId: number;
   content: string;
   replyToId: number | null;
+  threadId?: number | null;
   createdAt: string | Date;
   editedAt: string | Date | null;
   author: PublicUser;
@@ -102,7 +103,7 @@ export type ChannelDTO = {
   serverId: number;
   categoryId: number | null;
   name: string;
-  type: "TEXT" | "VOICE" | "ANNOUNCEMENT" | "FORUM" | "STAGE";
+  type: "TEXT" | "VOICE" | "ANNOUNCEMENT" | "FORUM" | "STAGE" | "MEDIA";
   position: number;
 };
 
@@ -268,6 +269,7 @@ export type WSClientEvent =
   | { t: "ping" }
   | { t: "typing"; channelId?: number; conversationId?: number }
   | { t: "presence"; status: UserStatus }
+  | { t: "stage:hand"; channelId?: number; raised: boolean }
   | { t: "voice:join"; channelId?: number; conversationId?: number }
   | { t: "voice:leave"; voiceSessionId?: string }
   | {
@@ -336,5 +338,6 @@ export type WSServerEvent =
   | { t: "official:announcement"; announcement: OfficialAnnouncementDTO }
   | { t: "server:refresh"; serverId: number }
   | { t: "events:refresh"; serverId: number }
+  | { t: "stage:hands"; channelId?: number; userIds: number[] }
   | { t: "dm:refresh" }
   | { t: "friends:refresh" };

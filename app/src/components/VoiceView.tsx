@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
+import { realtime } from "@/lib/ws";
 import { Avatar } from "./Avatar";
 import { UserSettingsModal } from "./modals/UserSettingsModal";
 import { Button } from "@/components/ui/button";
@@ -201,8 +202,30 @@ export function VoiceView({
   const myParticipant = participants.find(p => p.userId === me?.id);
   const amAudience = isStage && !!myParticipant && myParticipant.speaker === false;
   const canSelfPromote =
-    isStage && permissions.includes("SPEAK") || permissions.includes("ADMINISTRATOR");
+    (isStage && permissions.includes("SPEAK")) ||
+    permissions.includes("ADMINISTRATOR");
   const audience = isStage ? participants.filter(p => !p.speaker) : [];
+  const raisedHands = useAppStore(s => s.stageHandsByRoom)[roomKey] ?? [];
+  const setStageHands = useAppStore(s => s.setStageHands);
+  const myHandRaised = raisedHands.includes(me?.id ?? -1);
+  const canManageStage =
+    permissions.includes("MANAGE_MESSAGES") || permissions.includes("MANAGE_CHANNELS");
+
+  const toggleHand = () => {
+    if (!me || channelId == null) return;
+    realtime.send({
+      t: "stage:hand",
+      channelId,
+      raised: !myHandRaised,
+    });
+    // Optimistic local echo until the broadcast arrives.
+    setStageHands(
+      roomKey,
+      myHandRaised
+        ? raisedHands.filter(id => id !== me.id)
+        : [...raisedHands, me.id]
+    );
+  };
 
   const joinAsSpeaker = async () => {
     if (!me) return;
@@ -406,6 +429,19 @@ export function VoiceView({
               <Mic className="mr-1 h-3.5 w-3.5" /> Subir ao palco
             </Button>
           )}
+          {!canSelfPromote && (
+            <Button
+              size="sm"
+              variant={myHandRaised ? "default" : "secondary"}
+              onClick={toggleHand}
+              className={cn(
+                "h-7 px-3 text-xs font-bold",
+                myHandRaised && "bg-[#5865F2] hover:bg-[#4752C4]"
+              )}
+            >
+              ✋ {myHandRaised ? "Mão levantada" : "Levantar a mão"}
+            </Button>
+          )}
         </div>
       )}
       {/* Live Screen Share Banner */}
@@ -429,6 +465,41 @@ export function VoiceView({
             >
               Foco
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Stage moderator queue */}
+      {isStage && canManageStage && raisedHands.length > 0 && (
+        <div className="border-b border-white/[0.06] bg-panel/60 px-4 py-2">
+          <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-faint">
+            ✋ Mãos levantadas ({raisedHands.length})
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {raisedHands.map(uid => {
+              const p = participants.find(x => x.userId === uid);
+              return (
+                <span
+                  key={uid}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white/5 py-1 pl-1 pr-2 text-xs"
+                >
+                  <Avatar userId={uid} name={p?.name ?? "?"} src={p?.avatar ?? null} size="xs" showStatus={false} />
+                  <span className="max-w-28 truncate font-medium text-bodyx">
+                    {p?.name ?? uid}
+                  </span>
+                  <button
+                    title="Promover a palestrante"
+                    onClick={() =>
+                      channelId != null &&
+                      setSpeaker.mutateAsync({ channelId, userId: uid, speaker: true })
+                    }
+                    className="rounded px-1.5 py-0.5 text-[10px] font-bold text-emerald-300 hover:bg-emerald-400/10"
+                  >
+                    Promover
+                  </button>
+                </span>
+              );
+            })}
           </div>
         </div>
       )}

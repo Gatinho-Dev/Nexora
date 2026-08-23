@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 
 const PERMISSION_LABELS: Record<Permission, string> = {
   ADMINISTRATOR: "Administrador",
+  VIEW_CHANNEL: "Ver canal",
   MANAGE_SERVER: "Gerenciar servidor",
   MANAGE_CHANNELS: "Gerenciar canais",
   MANAGE_ROLES: "Gerenciar cargos",
