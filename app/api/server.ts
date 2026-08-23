@@ -8,7 +8,7 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const port = parseInt(process.env.PORT || "3000");
-const server = serve({ fetch: app.fetch, port }, () => {
+const server = serve({ fetch: app.fetch, port, hostname: "0.0.0.0" }, () => {
   console.log(`Server running on http://localhost:${port}/`);
 });
 attachRealtime(server as unknown as import("http").Server);

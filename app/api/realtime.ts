@@ -15,6 +15,8 @@ import { findUserByUnionId } from "./queries/users";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
 import { getMemberPermissions, toPublicUser } from "./utils/permissions";
+import { env } from "./lib/env";
+import { randomUUID } from "node:crypto";
 
 // ── Connection registry ───────────────────────────────────────
 type Client = {
@@ -32,6 +34,8 @@ const manualStatus = new Map<number, UserStatus>();
 // Voice rooms: "c:<channelId>" or "dm:<conversationId>" -> participants
 const voiceRooms = new Map<string, Map<number, VoiceParticipant>>();
 const userVoiceRoom = new Map<number, string>();
+const voiceClientByUser = new Map<number, Client>();
+const voiceSessionByUser = new Map<number, string>();
 
 function channelRoomKey(channelId: number) {
   return `c:${channelId}`;
@@ -88,19 +92,30 @@ export function sendToUsers(userIds: Iterable<number>, event: WSServerEvent) {
   }
 }
 
+/** Broadcast a platform-scoped event to every currently authenticated socket. */
+export function broadcastToAll(event: WSServerEvent) {
+  for (const client of clients) send(client, event);
+}
+
 async function serverMemberIds(serverId: number): Promise<number[]> {
   const rows = await getDb()
     .select({ userId: schema.serverMembers.userId })
     .from(schema.serverMembers)
     .where(eq(schema.serverMembers.serverId, serverId));
-  return rows.map((r) => r.userId);
+  return rows.map(r => r.userId);
 }
 
-export async function broadcastToServer(serverId: number, event: WSServerEvent) {
+export async function broadcastToServer(
+  serverId: number,
+  event: WSServerEvent
+) {
   sendToUsers(await serverMemberIds(serverId), event);
 }
 
-export async function broadcastToChannel(channelId: number, event: WSServerEvent) {
+export async function broadcastToChannel(
+  channelId: number,
+  event: WSServerEvent
+) {
   const channel = await getDb().query.channels.findFirst({
     where: eq(schema.channels.id, channelId),
   });
@@ -110,15 +125,15 @@ export async function broadcastToChannel(channelId: number, event: WSServerEvent
 
 export async function broadcastToConversation(
   conversationId: number,
-  event: WSServerEvent,
+  event: WSServerEvent
 ) {
   const rows = await getDb()
     .select({ userId: schema.conversationMembers.userId })
     .from(schema.conversationMembers)
     .where(eq(schema.conversationMembers.conversationId, conversationId));
   sendToUsers(
-    rows.map((r) => r.userId),
-    event,
+    rows.map(r => r.userId),
+    event
   );
 }
 
@@ -134,10 +149,10 @@ export async function contactIds(userId: number): Promise<Set<number>> {
       and(
         or(
           eq(schema.friendships.requesterId, userId),
-          eq(schema.friendships.addresseeId, userId),
+          eq(schema.friendships.addresseeId, userId)
         ),
-        eq(schema.friendships.status, "ACCEPTED"),
-      ),
+        eq(schema.friendships.status, "ACCEPTED")
+      )
     );
   for (const f of friendRows) {
     ids.add(f.requesterId === userId ? f.addresseeId : f.requesterId);
@@ -154,8 +169,8 @@ export async function contactIds(userId: number): Promise<Set<number>> {
       .where(
         and(
           eq(schema.serverMembers.serverId, s.serverId),
-          ne(schema.serverMembers.userId, userId),
-        ),
+          ne(schema.serverMembers.userId, userId)
+        )
       );
     for (const m of members) ids.add(m.userId);
   }
@@ -204,7 +219,7 @@ async function broadcastVoiceParticipants(roomKey: string) {
 
 async function voiceJoin(
   client: Client,
-  target: { channelId?: number; conversationId?: number },
+  target: { channelId?: number; conversationId?: number }
 ) {
   const db = getDb();
   let roomKey: string;
@@ -221,7 +236,7 @@ async function voiceJoin(
     const member = await db.query.conversationMembers.findFirst({
       where: and(
         eq(schema.conversationMembers.conversationId, target.conversationId),
-        eq(schema.conversationMembers.userId, client.userId),
+        eq(schema.conversationMembers.userId, client.userId)
       ),
     });
     if (!member) return;
@@ -230,6 +245,12 @@ async function voiceJoin(
     return;
   }
 
+  // A user has one active voice socket. This prevents duplicate signaling from
+  // being delivered to every open Nexora tab for the same account.
+  const previousVoiceClient = voiceClientByUser.get(client.userId);
+  if (previousVoiceClient && previousVoiceClient !== client) {
+    await voiceLeave(previousVoiceClient);
+  }
   // Leave any previous voice room first.
   await voiceLeave(client);
 
@@ -253,6 +274,15 @@ async function voiceJoin(
     screen: false,
   });
   userVoiceRoom.set(client.userId, roomKey);
+  voiceClientByUser.set(client.userId, client);
+  const voiceSessionId = randomUUID();
+  voiceSessionByUser.set(client.userId, voiceSessionId);
+  send(client, {
+    t: "voice:ready",
+    channelId: target.channelId,
+    conversationId: target.conversationId,
+    voiceSessionId,
+  });
 
   // Audit row for server voice channels (best-effort).
   if (target.channelId) {
@@ -265,9 +295,13 @@ async function voiceJoin(
 }
 
 async function voiceLeave(client: Client) {
+  const activeVoiceClient = voiceClientByUser.get(client.userId);
+  if (activeVoiceClient && activeVoiceClient !== client) return;
   const roomKey = userVoiceRoom.get(client.userId);
   if (!roomKey) return;
   userVoiceRoom.delete(client.userId);
+  voiceClientByUser.delete(client.userId);
+  voiceSessionByUser.delete(client.userId);
   const room = voiceRooms.get(roomKey);
   if (room) {
     room.delete(client.userId);
@@ -280,8 +314,8 @@ async function voiceLeave(client: Client) {
       .where(
         and(
           eq(schema.voiceSessions.channelId, Number(roomKey.slice(2))),
-          eq(schema.voiceSessions.userId, client.userId),
-        ),
+          eq(schema.voiceSessions.userId, client.userId)
+        )
       )
       .catch(() => {});
   }
@@ -290,15 +324,25 @@ async function voiceLeave(client: Client) {
 
 async function voiceStateUpdate(
   client: Client,
-  patch: Partial<Pick<VoiceParticipant, "muted" | "deafened" | "camera" | "screen">>,
+  patch: Partial<
+    Pick<VoiceParticipant, "muted" | "deafened" | "camera" | "screen">
+  > & { voiceSessionId?: string }
 ) {
+  if (patch.voiceSessionId !== voiceSessionByUser.get(client.userId)) return;
+  const statePatch: Partial<
+    Pick<VoiceParticipant, "muted" | "deafened" | "camera" | "screen">
+  > = {};
+  if (typeof patch.muted === "boolean") statePatch.muted = patch.muted;
+  if (typeof patch.deafened === "boolean") statePatch.deafened = patch.deafened;
+  if (typeof patch.camera === "boolean") statePatch.camera = patch.camera;
+  if (typeof patch.screen === "boolean") statePatch.screen = patch.screen;
   const roomKey = userVoiceRoom.get(client.userId);
   if (!roomKey) return;
   const room = voiceRooms.get(roomKey);
   const participant = room?.get(client.userId);
   if (!participant) return;
-  Object.assign(participant, patch);
-  if (patch.deafened) participant.muted = true;
+  Object.assign(participant, statePatch);
+  if (statePatch.deafened) participant.muted = true;
   await broadcastVoiceParticipants(roomKey);
 }
 
@@ -326,17 +370,19 @@ async function handleEvent(client: Client, event: WSClientEvent) {
         if (!channel) return;
         const members = await serverMemberIds(channel.serverId);
         sendToUsers(
-          members.filter((id) => id !== client.userId),
-          payload,
+          members.filter(id => id !== client.userId),
+          payload
         );
       } else if (event.conversationId) {
         const rows = await getDb()
           .select({ userId: schema.conversationMembers.userId })
           .from(schema.conversationMembers)
-          .where(eq(schema.conversationMembers.conversationId, event.conversationId));
+          .where(
+            eq(schema.conversationMembers.conversationId, event.conversationId)
+          );
         sendToUsers(
-          rows.map((r) => r.userId).filter((id) => id !== client.userId),
-          payload,
+          rows.map(r => r.userId).filter(id => id !== client.userId),
+          payload
         );
       }
       break;
@@ -350,7 +396,9 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       await voiceJoin(client, event);
       break;
     case "voice:leave":
-      await voiceLeave(client);
+      if (event.voiceSessionId === voiceSessionByUser.get(client.userId)) {
+        await voiceLeave(client);
+      }
       break;
     case "voice:state":
       await voiceStateUpdate(client, event);
@@ -358,6 +406,8 @@ async function handleEvent(client: Client, event: WSClientEvent) {
     case "signal": {
       const myRoom = userVoiceRoom.get(client.userId);
       if (!myRoom) return;
+      if (event.voiceSessionId !== voiceSessionByUser.get(client.userId))
+        return;
       const expected = event.channelId
         ? channelRoomKey(event.channelId)
         : event.conversationId
@@ -366,7 +416,10 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       if (expected !== myRoom) return;
       const room = voiceRooms.get(myRoom);
       if (!room?.has(event.to)) return;
-      sendToUsers([event.to], {
+      if (!isValidSignalData(event.data)) return;
+      const targetClient = voiceClientByUser.get(event.to);
+      if (!targetClient) return;
+      send(targetClient, {
         t: "signal",
         from: client.userId,
         channelId: event.channelId,
@@ -376,6 +429,32 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       break;
     }
   }
+}
+
+export function isValidSignalData(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const signal = value as {
+    description?: { type?: unknown; sdp?: unknown };
+    candidate?: unknown;
+  };
+  if (signal.description) {
+    if (
+      !["offer", "answer", "pranswer", "rollback"].includes(
+        String(signal.description.type)
+      )
+    ) {
+      return false;
+    }
+    if (
+      signal.description.sdp !== undefined &&
+      (typeof signal.description.sdp !== "string" ||
+        signal.description.sdp.length > 1_000_000)
+    ) {
+      return false;
+    }
+    return true;
+  }
+  return "candidate" in signal;
 }
 
 // ── Attach to HTTP server ─────────────────────────────────────
@@ -394,6 +473,28 @@ export function attachRealtime(server: HttpServer) {
       }
       if (pathname !== "/ws") return; // let other upgrade handlers run
 
+      const origin = req.headers.origin?.replace(/\/$/, "") ?? "";
+      const forwardedHost = req.headers["x-forwarded-host"];
+      const host =
+        (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) ??
+        req.headers.host ??
+        "";
+      const forwardedProto = req.headers["x-forwarded-proto"];
+      const protocol =
+        (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto) ??
+        (env.isProduction ? "https" : "http");
+      const requestOrigin = host ? `${protocol}://${host}` : "";
+
+      if (
+        origin &&
+        origin !== requestOrigin &&
+        !env.allowedOrigins.includes(origin)
+      ) {
+        socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+
       try {
         const cookies = cookie.parse(req.headers.cookie ?? "");
         const token = cookies[Session.cookieName];
@@ -404,13 +505,13 @@ export function attachRealtime(server: HttpServer) {
           socket.destroy();
           return;
         }
-        wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.handleUpgrade(req, socket, head, ws => {
           wss.emit("connection", ws, req, user.id);
         });
       } catch {
         socket.destroy();
       }
-    },
+    }
   );
 
   const heartbeat = setInterval(() => {
@@ -425,38 +526,41 @@ export function attachRealtime(server: HttpServer) {
   }, 30_000);
   heartbeat.unref();
 
-  wss.on("connection", async (ws: WebSocket, _req: IncomingMessage, userId: number) => {
-    const client: Client = { ws, userId, alive: true };
-    addClient(client);
-    send(client, { t: "ready", userId });
-    await broadcastPresence(userId);
+  wss.on(
+    "connection",
+    async (ws: WebSocket, _req: IncomingMessage, userId: number) => {
+      const client: Client = { ws, userId, alive: true };
+      addClient(client);
+      send(client, { t: "ready", userId });
+      await broadcastPresence(userId);
 
-    ws.on("pong", () => {
-      client.alive = true;
-    });
-
-    ws.on("message", (raw) => {
-      client.alive = true;
-      let event: WSClientEvent;
-      try {
-        event = JSON.parse(raw.toString());
-      } catch {
-        return;
-      }
-      handleEvent(client, event).catch((err) => {
-        console.error("[realtime] event error:", err);
+      ws.on("pong", () => {
+        client.alive = true;
       });
-    });
 
-    ws.on("close", () => {
-      const wasLastConnection = (byUser.get(userId)?.size ?? 0) <= 1;
-      removeClient(client);
-      voiceLeave(client).catch(() => {});
-      if (wasLastConnection && !byUser.has(userId)) {
-        broadcastPresence(userId).catch(() => {});
-      }
-    });
-  });
+      ws.on("message", raw => {
+        client.alive = true;
+        let event: WSClientEvent;
+        try {
+          event = JSON.parse(raw.toString());
+        } catch {
+          return;
+        }
+        handleEvent(client, event).catch(err => {
+          console.error("[realtime] event error:", err);
+        });
+      });
+
+      ws.on("close", () => {
+        const wasLastConnection = (byUser.get(userId)?.size ?? 0) <= 1;
+        removeClient(client);
+        voiceLeave(client).catch(() => {});
+        if (wasLastConnection && !byUser.has(userId)) {
+          broadcastPresence(userId).catch(() => {});
+        }
+      });
+    }
+  );
 
   console.log("[realtime] WebSocket server attached at /ws");
 }

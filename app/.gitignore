@@ -26,12 +26,10 @@ dist-ssr
 .env
 .env.local
 .env.*.local
-# Database
+# Local database files. Versioned SQL migrations remain tracked.
 *.db
 *.sqlite
 *.sqlite3
-db/migrations/*.sql
-!db/migrations/*.sql
 # TypeScript cache
 *.tsbuildinfo
 # Build outputs

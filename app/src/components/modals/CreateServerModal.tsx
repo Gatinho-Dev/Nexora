@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Camera } from "lucide-react";
 import { toast } from "sonner";
+import { apiUrl } from "@/lib/endpoints";
 
 export function CreateServerModal({
   open,
@@ -31,7 +32,7 @@ export function CreateServerModal({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const create = trpc.server.create.useMutation({
-    onSuccess: async (data) => {
+    onSuccess: async data => {
       await utils.server.list.invalidate();
       onOpenChange(false);
       setName("");
@@ -39,7 +40,7 @@ export function CreateServerModal({
       setIconUrl(null);
       navigate(`/channels/${data.server.id}/first`);
     },
-    onError: (e) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
 
   const uploadIcon = async (file: File) => {
@@ -47,7 +48,11 @@ export function CreateServerModal({
     try {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: form });
+      const res = await fetch(apiUrl("/api/upload"), {
+        method: "POST",
+        body: form,
+        credentials: "include",
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Falha no upload");
       setIconUrl(data.url);
@@ -62,7 +67,9 @@ export function CreateServerModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-center text-xl">Criar servidor</DialogTitle>
+          <DialogTitle className="text-center text-xl">
+            Criar servidor
+          </DialogTitle>
           <DialogDescription className="text-center">
             Seu servidor é o lugar onde você e seus amigos conversam.
           </DialogDescription>
@@ -70,9 +77,14 @@ export function CreateServerModal({
 
         <form
           className="space-y-4"
-          onSubmit={(e) => {
+          onSubmit={e => {
             e.preventDefault();
-            if (name.trim()) create.mutate({ name: name.trim(), description: description.trim() || undefined, iconUrl: iconUrl ?? undefined });
+            if (name.trim())
+              create.mutate({
+                name: name.trim(),
+                description: description.trim() || undefined,
+                iconUrl: iconUrl ?? undefined,
+              });
           }}
         >
           <div className="flex justify-center">
@@ -82,23 +94,29 @@ export function CreateServerModal({
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
             >
-            {iconUrl ? (
-              <img src={iconUrl} alt="Ícone" className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex flex-col items-center text-muted-foreground">
-                <Camera className="h-6 w-6" />
-                <span className="text-[10px] font-semibold mt-1">
-                  {uploading ? "ENVIANDO..." : "ENVIAR"}
-                </span>
-              </div>
-            )}
+              {iconUrl ? (
+                <img
+                  src={iconUrl}
+                  alt="Ícone"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex flex-col items-center text-muted-foreground">
+                  <Camera className="h-6 w-6" />
+                  <span className="text-[10px] font-semibold mt-1">
+                    {uploading ? "ENVIANDO..." : "ENVIAR"}
+                  </span>
+                </div>
+              )}
             </button>
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && uploadIcon(e.target.files[0])}
+              onChange={e =>
+                e.target.files?.[0] && uploadIcon(e.target.files[0])
+              }
             />
           </div>
 
@@ -107,7 +125,7 @@ export function CreateServerModal({
             <Input
               id="server-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={e => setName(e.target.value)}
               placeholder="Servidor incrível"
               required
               maxLength={100}
@@ -119,14 +137,18 @@ export function CreateServerModal({
             <Textarea
               id="server-desc"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={e => setDescription(e.target.value)}
               placeholder="Sobre o que é este servidor?"
               maxLength={500}
               rows={2}
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={create.isPending || uploading}>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={create.isPending || uploading}
+          >
             {create.isPending ? "Criando..." : "Criar servidor"}
           </Button>
         </form>

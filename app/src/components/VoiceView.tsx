@@ -3,6 +3,7 @@ import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
 import { Avatar } from "./Avatar";
+import { UserSettingsModal } from "./modals/UserSettingsModal";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -19,7 +20,17 @@ import {
   Maximize2,
   Minimize2,
   Loader2,
+  Settings,
+  Wifi,
+  WifiOff,
+  TriangleAlert,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { VoiceParticipant } from "@contracts/types";
 
 function VideoTile({
@@ -28,27 +39,40 @@ function VideoTile({
   isLocal,
   focused,
   onToggleFocus,
+  onOpenProfile,
+  speaking,
 }: {
   participant: VoiceParticipant;
   stream: MediaStream | null;
   isLocal: boolean;
   focused: boolean;
   onToggleFocus: () => void;
+  onOpenProfile?: (userId: number) => void;
+  speaking: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const hasVideo = !!stream && (participant.camera || participant.screen) && stream.getVideoTracks().length > 0;
+  const hasVideo =
+    !!stream &&
+    (participant.camera || participant.screen) &&
+    stream.getVideoTracks().length > 0;
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = hasVideo ? stream : null;
+    if (hasVideo) video.play().catch(() => {});
+    return () => {
+      video.pause();
+      video.srcObject = null;
+    };
   }, [stream, hasVideo]);
 
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-lg bg-black/60 border border-border",
-        focused ? "col-span-full row-span-full min-h-[320px]" : "aspect-video",
+        "voice-participant group relative overflow-hidden rounded-[14px] bg-[#292a31] border border-white/[0.08] transition-[border-color,box-shadow,transform,opacity] duration-200",
+        focused ? "col-span-full row-span-full min-h-[380px]" : "aspect-video",
+        speaking && "speaking-glow border-[#3bbd72]"
       )}
     >
       {hasVideo ? (
@@ -56,36 +80,67 @@ function VideoTile({
           ref={videoRef}
           autoPlay
           playsInline
-          muted={isLocal}
-          className={cn("h-full w-full", participant.screen ? "object-contain" : "object-cover")}
+          muted
+          className={cn(
+            "h-full w-full",
+            participant.screen ? "object-contain bg-black" : "object-cover"
+          )}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center">
-          <Avatar
-            user={{ id: participant.userId, name: participant.name, avatar: participant.avatar }}
-            size="xl"
-            showStatus={false}
-          />
+        <div className="flex h-full w-full items-center justify-center bg-[#2B2D31]">
+          <button
+            type="button"
+            onClick={() => onOpenProfile?.(participant.userId)}
+            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF] focus-visible:ring-offset-4 focus-visible:ring-offset-[#2B2D31]"
+            aria-label={`Abrir perfil de ${participant.name}`}
+          >
+            <Avatar
+              userId={participant.userId}
+              name={participant.name}
+              src={participant.avatar}
+              size="xl"
+              showStatus={false}
+            />
+          </button>
         </div>
       )}
 
-      {/* Nome + indicadores */}
-      <div className="absolute bottom-0 left-0 right-0 flex items-center gap-1.5 bg-gradient-to-t from-black/80 to-transparent px-2.5 py-1.5">
-        <span className="text-xs font-medium text-white truncate">{participant.name}{isLocal ? " (você)" : ""}</span>
-        <div className="ml-auto flex items-center gap-1">
+      {/* Participant Name & Status Overlay */}
+      <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between bg-gradient-to-t from-black/90 via-black/40 to-transparent px-3 py-2 select-none">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "text-xs font-bold text-white truncate",
+              speaking && "text-[#55d98b]"
+            )}
+          >
+            {participant.name}
+            {isLocal ? " (você)" : ""}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs">
           {participant.muted && <MicOff className="h-3.5 w-3.5 text-red-400" />}
-          {participant.deafened && <VolumeX className="h-3.5 w-3.5 text-red-400" />}
-          {participant.screen && <MonitorUp className="h-3.5 w-3.5 text-green-400" />}
+          {participant.deafened && (
+            <VolumeX className="h-3.5 w-3.5 text-red-400" />
+          )}
+          {participant.screen && (
+            <MonitorUp className="h-3.5 w-3.5 text-[#23A559] animate-pulse" />
+          )}
         </div>
       </div>
 
       {hasVideo && (
         <button
           onClick={onToggleFocus}
-          className="absolute top-2 right-2 rounded-md bg-black/60 p-1.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
-          title={focused ? "Restaurar" : "Expandir"}
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover:opacity-100"
+          title={focused ? "Restaurar visualização" : "Expandir stream"}
+          aria-label={focused ? "Restaurar visualização" : "Expandir stream"}
         >
-          {focused ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          {focused ? (
+            <Minimize2 className="h-4 w-4" />
+          ) : (
+            <Maximize2 className="h-4 w-4" />
+          )}
         </button>
       )}
     </div>
@@ -97,11 +152,13 @@ export function VoiceView({
   conversationId,
   serverId,
   title,
+  onOpenProfile,
 }: {
   channelId?: number;
   conversationId?: number;
   serverId?: number;
   title: string;
+  onOpenProfile?: (userId: number) => void;
 }) {
   const me = trpc.auth.me.useQuery().data;
   const store = useAppStore();
@@ -112,61 +169,104 @@ export function VoiceView({
     : store.voiceConversationId === conversationId;
   const connectedElsewhere =
     (store.voiceChannelId !== null && store.voiceChannelId !== channelId) ||
-    (store.voiceConversationId !== null && store.voiceConversationId !== conversationId);
+    (store.voiceConversationId !== null &&
+      store.voiceConversationId !== conversationId);
 
   const [joining, setJoining] = useState(false);
   const [focusUserId, setFocusUserId] = useState<number | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const join = async () => {
     if (!me) return;
     setJoining(true);
     try {
-      await voiceManager.join({ channelId, conversationId, serverId, myId: me.id });
+      await voiceManager.join({
+        channelId,
+        conversationId,
+        serverId,
+        myId: me.id,
+      });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Não foi possível entrar na chamada de voz.");
+      toast.error(
+        e instanceof Error
+          ? e.message
+          : "Não foi possível entrar na chamada da Nexora."
+      );
     } finally {
       setJoining(false);
     }
   };
 
-  const sharingParticipant = participants.find((p) => p.screen);
+  const sharingParticipant = participants.find(p => p.screen);
+  const connectionStatus = store.voiceConnectionStatus;
+  const connectionLabel = {
+    idle: "Desconectado",
+    connecting: "Conectando",
+    connected: "Conectado",
+    reconnecting: "Reconectando",
+    failed: "Falha na conexão",
+  }[connectionStatus];
 
   if (!connected) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-[var(--chat-bg)] p-8">
-        <div className="rounded-full bg-primary/10 p-6">
-          <Headphones className="h-10 w-10 text-primary" />
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-[#313338] p-8 text-white select-none">
+        <div className="rounded-2xl bg-[#2B2D31] p-6 text-[#B5BAC1] border border-black/20">
+          <Headphones className="h-12 w-12" />
         </div>
-        <div className="text-center">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <div className="text-center max-w-sm">
+          <h2 className="text-xl font-bold text-white tracking-wide">
+            {title}
+          </h2>
+          <p className="mt-1 text-xs text-[#B5BAC1]">
             {participants.length > 0
-              ? `${participants.length} ${participants.length === 1 ? "pessoa conectada" : "pessoas conectadas"}`
-              : "Ninguém por aqui ainda"}
+              ? `${participants.length} ${participants.length === 1 ? "pessoa conectada nesta sala da Nexora" : "pessoas conectadas nesta sala da Nexora"}`
+              : "Ninguém conectado por aqui ainda"}
           </p>
         </div>
+
         {participants.length > 0 && (
-          <div className="flex -space-x-2">
-            {participants.slice(0, 8).map((p) => (
-              <Avatar
+          <div className="flex -space-x-2 my-1">
+            {participants.slice(0, 8).map(p => (
+              <button
                 key={p.userId}
-                user={{ id: p.userId, name: p.name, avatar: p.avatar }}
-                size="md"
-                showStatus={false}
-              />
+                type="button"
+                onClick={() => onOpenProfile?.(p.userId)}
+                className="rounded-full focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                aria-label={`Abrir perfil de ${p.name}`}
+              >
+                <Avatar
+                  userId={p.userId}
+                  name={p.name}
+                  src={p.avatar}
+                  size="md"
+                  showStatus={false}
+                />
+              </button>
             ))}
           </div>
         )}
+
         {connectedElsewhere ? (
           <div className="flex flex-col items-center gap-2">
-            <p className="text-sm text-muted-foreground">Você já está em outra chamada.</p>
-            <Button onClick={join} disabled={joining}>
+            <p className="text-xs text-[#B5BAC1]">
+              Você já está em outra chamada na Nexora.
+            </p>
+            <Button
+              onClick={join}
+              disabled={joining}
+              className="bg-[#4654D8] hover:bg-[#3D49BF] text-white"
+            >
               {joining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Mudar para esta chamada
             </Button>
           </div>
         ) : (
-          <Button onClick={join} disabled={joining || !me} size="lg">
+          <Button
+            onClick={join}
+            disabled={joining || !me}
+            size="lg"
+            className="bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold px-6"
+          >
             {joining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Entrar na chamada de voz
           </Button>
@@ -175,37 +275,103 @@ export function VoiceView({
     );
   }
 
-  const focused = focusUserId !== null ? participants.find((p) => p.userId === focusUserId) : null;
+  const focused =
+    focusUserId !== null
+      ? participants.find(p => p.userId === focusUserId)
+      : null;
   const visibleParticipants = focused ? [focused] : participants;
 
   return (
-    <div className="flex flex-1 flex-col bg-black/40 min-h-0">
+    <div className="flex flex-1 flex-col bg-[#303139] min-h-0 relative select-none">
+      <div
+        className="flex min-h-11 items-center justify-between border-b border-white/[0.06] bg-[#2b2c33] px-3 sm:px-4"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-white">{title}</p>
+          <p className="text-[11px] text-[#aeb1bd]">
+            {participants.length}{" "}
+            {participants.length === 1 ? "participante" : "participantes"}
+          </p>
+        </div>
+        <div
+          className={cn(
+            "flex items-center gap-1.5 text-xs font-medium",
+            connectionStatus === "connected"
+              ? "text-[#55d98b]"
+              : connectionStatus === "failed"
+                ? "text-red-400"
+                : "text-amber-300"
+          )}
+        >
+          {connectionStatus === "connected" ? (
+            <Wifi className="h-3.5 w-3.5" />
+          ) : connectionStatus === "failed" ? (
+            <TriangleAlert className="h-3.5 w-3.5" />
+          ) : (
+            <WifiOff className="h-3.5 w-3.5" />
+          )}
+          {connectionLabel}
+        </div>
+      </div>
+
+      {store.voicePlaybackBlocked && (
+        <button
+          type="button"
+          onClick={() => voiceManager.resumeRemotePlayback()}
+          className="flex min-h-11 items-center justify-center gap-2 border-b border-amber-300/20 bg-amber-300/10 px-4 text-xs font-semibold text-amber-100 hover:bg-amber-300/15"
+          aria-label="Liberar a reprodução do áudio remoto"
+        >
+          <VolumeX className="h-4 w-4" />
+          Clique para liberar o áudio da chamada
+        </button>
+      )}
+      {/* Live Screen Share Banner */}
       {sharingParticipant && (
-        <div className="flex items-center gap-2 bg-green-600/20 px-4 py-1.5 text-xs text-green-400">
-          <MonitorUp className="h-3.5 w-3.5" />
-          {sharingParticipant.userId === me?.id
-            ? "Você está compartilhando a tela"
-            : `${sharingParticipant.name} está compartilhando a tela`}
+        <div className="flex items-center justify-between bg-[#23A559]/15 border-b border-[#23A559]/30 px-4 py-2 text-xs font-bold text-[#23A559]">
+          <div className="flex items-center gap-2">
+            <MonitorUp className="h-4 w-4 animate-pulse" />
+            <span>
+              {sharingParticipant.userId === me?.id
+                ? "Você está compartilhando a tela na Nexora"
+                : `${sharingParticipant.name} está compartilhando a tela`}
+            </span>
+            <span className="bg-[#23A559] text-black px-1.5 py-0.5 rounded font-extrabold text-[10px]">
+              AO VIVO
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setFocusUserId(sharingParticipant.userId)}
+              className="hover:underline text-xs"
+            >
+              Foco
+            </button>
+          </div>
         </div>
       )}
 
+      {/* Video Grid */}
       <div className="flex-1 overflow-y-auto p-4 min-h-0">
         <div
           className={cn(
-            "grid gap-3 h-full",
+            "grid gap-4 h-full items-center",
             focused
               ? "grid-cols-1"
               : visibleParticipants.length <= 1
-                ? "grid-cols-1 max-w-2xl mx-auto"
+                ? "grid-cols-1 max-w-3xl mx-auto"
                 : visibleParticipants.length <= 4
                   ? "grid-cols-1 sm:grid-cols-2"
-                  : "grid-cols-2 lg:grid-cols-3",
+                  : "grid-cols-2 lg:grid-cols-3"
           )}
         >
-          {visibleParticipants.map((p) => {
+          {visibleParticipants.map(p => {
             if (!p) return null;
             const isLocal = p.userId === me?.id;
-            const stream = isLocal ? store.localVideo : (store.remoteStreams[p.userId] ?? null);
+            const stream = isLocal
+              ? store.localVideo
+              : (store.remoteStreams[p.userId] ?? null);
             return (
               <VideoTile
                 key={p.userId}
@@ -214,64 +380,178 @@ export function VoiceView({
                 isLocal={isLocal}
                 focused={!!focused}
                 onToggleFocus={() => setFocusUserId(focused ? null : p.userId)}
+                onOpenProfile={onOpenProfile}
+                speaking={!!store.speakingByUser[p.userId] && !p.muted}
               />
             );
           })}
         </div>
       </div>
 
-      {/* Controles */}
-      <div className="flex items-center justify-center gap-2 pb-6 pt-2">
-        <Button
-          variant={store.muted ? "destructive" : "secondary"}
-          size="icon"
-          className="h-11 w-11 rounded-full"
-          title={store.muted ? "Ativar microfone" : "Silenciar"}
-          onClick={() => voiceManager.toggleMute()}
-        >
-          {store.muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-        </Button>
-        <Button
-          variant={store.deafened ? "destructive" : "secondary"}
-          size="icon"
-          className="h-11 w-11 rounded-full"
-          title={store.deafened ? "Ativar áudio" : "Ensurdecer"}
-          onClick={() => voiceManager.toggleDeafen()}
-        >
-          {store.deafened ? <VolumeX className="h-5 w-5" /> : <Headphones className="h-5 w-5" />}
-        </Button>
-        <Button
-          variant={store.cameraOn ? "default" : "secondary"}
-          size="icon"
-          className="h-11 w-11 rounded-full"
-          title={store.cameraOn ? "Desligar câmera" : "Ligar câmera"}
-          onClick={() => voiceManager.toggleCamera().catch((e) => toast.error(e.message))}
-        >
-          {store.cameraOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-        </Button>
-        <Button
-          variant={store.screenOn ? "default" : "secondary"}
-          size="icon"
-          className="h-11 w-11 rounded-full"
-          title={store.screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
-          onClick={() =>
-            store.screenOn
-              ? voiceManager.stopScreenShare().catch((e) => toast.error(e.message))
-              : voiceManager.startScreenShare().catch((e) => toast.error(e.message))
-          }
-        >
-          {store.screenOn ? <MonitorX className="h-5 w-5" /> : <MonitorUp className="h-5 w-5" />}
-        </Button>
-        <Button
-          variant="destructive"
-          size="icon"
-          className="h-11 w-11 rounded-full"
-          title="Desconectar"
-          onClick={() => voiceManager.leave()}
-        >
-          <PhoneOff className="h-5 w-5" />
-        </Button>
-      </div>
+      {/* Floating Interactive Call Controls Toolbar */}
+      <TooltipProvider delayDuration={150}>
+        <div className="flex items-center justify-center gap-2 border-t border-white/[0.06] bg-[#292a31]/95 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur-md sm:gap-3 sm:pb-4">
+          {/* Mic */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={store.muted ? "destructive" : "secondary"}
+                size="icon"
+                className="h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95"
+                onClick={() => voiceManager.toggleMute()}
+                aria-label={
+                  store.muted ? "Ativar microfone" : "Silenciar microfone"
+                }
+                title={store.muted ? "Ativar microfone" : "Silenciar microfone"}
+              >
+                {store.muted ? (
+                  <MicOff className="h-5 w-5" />
+                ) : (
+                  <Mic className="h-5 w-5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {store.muted ? "Ativar microfone" : "Silenciar microfone"}
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Headphones */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={store.deafened ? "destructive" : "secondary"}
+                size="icon"
+                className="h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95"
+                onClick={() => voiceManager.toggleDeafen()}
+                aria-label={
+                  store.deafened ? "Ativar áudio" : "Ensurdecer áudio"
+                }
+                title={store.deafened ? "Ativar áudio" : "Ensurdecer áudio"}
+              >
+                {store.deafened ? (
+                  <VolumeX className="h-5 w-5" />
+                ) : (
+                  <Headphones className="h-5 w-5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {store.deafened ? "Ativar áudio" : "Ensurdecer áudio"}
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Camera */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={store.cameraOn ? "default" : "secondary"}
+                size="icon"
+                className={cn(
+                  "h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95",
+                  store.cameraOn && "bg-[#4654D8] text-white hover:bg-[#3D49BF]"
+                )}
+                onClick={() =>
+                  voiceManager.toggleCamera().catch(e => toast.error(e.message))
+                }
+                aria-label={store.cameraOn ? "Desligar câmera" : "Ligar câmera"}
+                title={store.cameraOn ? "Desligar câmera" : "Ligar câmera"}
+              >
+                {store.cameraOn ? (
+                  <Video className="h-5 w-5" />
+                ) : (
+                  <VideoOff className="h-5 w-5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {store.cameraOn ? "Desligar câmera" : "Ligar câmera"}
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Screen Share */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={store.screenOn ? "default" : "secondary"}
+                size="icon"
+                className={cn(
+                  "h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95",
+                  store.screenOn && "bg-[#23A559] text-black hover:bg-[#16a34a]"
+                )}
+                onClick={() =>
+                  store.screenOn
+                    ? voiceManager
+                        .stopScreenShare()
+                        .catch(e => toast.error(e.message))
+                    : voiceManager
+                        .startScreenShare()
+                        .catch(e => toast.error(e.message))
+                }
+                aria-label={
+                  store.screenOn
+                    ? "Parar compartilhamento"
+                    : "Compartilhar tela"
+                }
+                title={
+                  store.screenOn
+                    ? "Parar compartilhamento"
+                    : "Compartilhar tela"
+                }
+              >
+                {store.screenOn ? (
+                  <MonitorX className="h-5 w-5" />
+                ) : (
+                  <MonitorUp className="h-5 w-5" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {store.screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-12 w-12 rounded-2xl transition-transform active:scale-95"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Abrir configurações de voz e vídeo"
+                title="Configurações de voz e vídeo"
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              Configurações de voz e vídeo
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Leave Call */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="destructive"
+                size="icon"
+                className="h-12 w-12 rounded-2xl shadow-lg shadow-red-500/20 transition-transform active:scale-95 bg-red-600 hover:bg-red-700"
+                onClick={() => voiceManager.leave()}
+                aria-label="Desconectar da chamada"
+                title="Desconectar da chamada"
+              >
+                <PhoneOff className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="top">Desconectar da chamada</TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
+      <UserSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        initialTab="voice"
+      />
     </div>
   );
 }

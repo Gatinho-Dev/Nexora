@@ -1,4 +1,5 @@
 import type { WSClientEvent, WSServerEvent } from "@contracts/types";
+import { websocketUrl } from "./endpoints";
 
 type Handler = (event: WSServerEvent) => void;
 
@@ -14,27 +15,40 @@ class RealtimeClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private shouldConnect = false;
   private connectListeners = new Set<(connected: boolean) => void>();
+  private connectionWaiters = new Set<{
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
 
   connect() {
     this.shouldConnect = true;
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
     this.open();
   }
 
   private open() {
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+    const ws = new WebSocket(websocketUrl());
     this.ws = ws;
 
     ws.onopen = () => {
       this.reconnectDelay = 1000;
       this.notifyConnect(true);
       this.startHeartbeat();
+      for (const waiter of this.connectionWaiters) {
+        clearTimeout(waiter.timer);
+        waiter.resolve();
+      }
+      this.connectionWaiters.clear();
     };
 
-    ws.onmessage = (raw) => {
+    ws.onmessage = raw => {
       try {
         const event = JSON.parse(raw.data as string) as WSServerEvent;
         for (const handler of this.handlers) handler(event);
@@ -82,10 +96,28 @@ class RealtimeClient {
     for (const listener of this.connectListeners) listener(connected);
   }
 
-  send(event: WSClientEvent) {
+  send(event: WSClientEvent): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(event));
+      return true;
     }
+    return false;
+  }
+
+  waitUntilConnected(timeoutMs = 10_000): Promise<void> {
+    if (this.connected) return Promise.resolve();
+    this.connect();
+    return new Promise((resolve, reject) => {
+      const waiter = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          this.connectionWaiters.delete(waiter);
+          reject(new Error("Tempo esgotado ao conectar o realtime da Nexora."));
+        }, timeoutMs),
+      };
+      this.connectionWaiters.add(waiter);
+    });
   }
 
   on(handler: Handler): () => void {
@@ -111,6 +143,11 @@ class RealtimeClient {
     this.stopHeartbeat();
     this.ws?.close();
     this.ws = null;
+    for (const waiter of this.connectionWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.reject(new Error("Conexão realtime encerrada."));
+    }
+    this.connectionWaiters.clear();
   }
 }
 

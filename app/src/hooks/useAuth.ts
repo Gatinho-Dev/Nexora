@@ -2,6 +2,8 @@ import { trpc } from "@/providers/trpc";
 import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { LOGIN_PATH } from "@/const";
+import { voiceManager } from "@/lib/rtc";
+import { realtime } from "@/lib/ws";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -19,6 +21,7 @@ export function useAuth(options?: UseAuthOptions) {
   const {
     data: user,
     isLoading,
+    isError,
     error,
     refetch,
   } = trpc.auth.me.useQuery(undefined, {
@@ -33,7 +36,11 @@ export function useAuth(options?: UseAuthOptions) {
     },
   });
 
-  const logout = useCallback(() => logoutMutation.mutate(), [logoutMutation]);
+  const logout = useCallback(() => {
+    void voiceManager.leave();
+    realtime.disconnect();
+    logoutMutation.mutate();
+  }, [logoutMutation]);
 
   useEffect(() => {
     if (redirectOnUnauthenticated && !isLoading && !user) {
@@ -44,15 +51,18 @@ export function useAuth(options?: UseAuthOptions) {
     }
   }, [redirectOnUnauthenticated, isLoading, user, navigate, redirectPath]);
 
+  // If query errored (e.g., 401 UNAUTHORIZED), treat as not authenticated and not loading
+  const isAuthLoading = isLoading && !isError;
+
   return useMemo(
     () => ({
       user: user ?? null,
       isAuthenticated: !!user,
-      isLoading: isLoading || logoutMutation.isPending,
+      isLoading: isAuthLoading || logoutMutation.isPending,
       error,
       logout,
       refresh: refetch,
     }),
-    [user, isLoading, logoutMutation.isPending, error, logout, refetch],
+    [user, isAuthLoading, logoutMutation.isPending, error, logout, refetch]
   );
 }

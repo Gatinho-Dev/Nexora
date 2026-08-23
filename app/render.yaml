@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: nexora
+    runtime: node
+    plan: free
+    rootDir: app
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: APP_ID
+        sync: false
+      - key: APP_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: KIMI_AUTH_URL
+        sync: false
+      - key: KIMI_OPEN_URL
+        sync: false
+      - key: OWNER_UNION_ID
+        sync: false
+      - key: NEXORA_OWNER_USER_IDS
+        sync: false
+      - key: APP_ORIGIN
+        sync: false
+      - key: PUBLIC_API_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false

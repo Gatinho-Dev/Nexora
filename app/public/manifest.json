@@ -1,17 +1,16 @@
 {
-  "name": "Pulsar",
-  "short_name": "Pulsar",
-  "description": "Plataforma de comunicação em tempo real com servidores, canais de texto e voz.",
+  "name": "Nexora",
+  "short_name": "Nexora",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0d1117",
-  "theme_color": "#0d1117",
+  "background_color": "#11131A",
+  "theme_color": "#4654D8",
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }

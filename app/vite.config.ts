@@ -1,15 +1,14 @@
-import path from "path"
-import { fileURLToPath } from "url"
-import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
-import { inspectAttr } from 'kimi-plugin-inspect-react'
+import path from "path";
+import { fileURLToPath } from "url";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+import { inspectAttr } from "kimi-plugin-inspect-react";
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
-  plugins: [
-    inspectAttr(), react()],
+  plugins: [inspectAttr(), react()],
   server: {
     port: 5173,
     proxy: {
@@ -28,7 +27,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
       "@contracts": path.resolve(__dirname, "./contracts"),
       "@db": path.resolve(__dirname, "./db"),
-      "db": path.resolve(__dirname, "./db"),
+      db: path.resolve(__dirname, "./db"),
     },
   },
   envDir: path.resolve(__dirname),

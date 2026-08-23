@@ -1,28 +1,158 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route } from "react-router";
-import Home from "./pages/Home";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import NotFound from "./pages/NotFound";
-import { AppLayout } from "./pages/AppLayout";
-import { ServerChannel } from "./pages/ServerChannel";
-import { DMHome } from "./pages/DMHome";
-import { DMConversation } from "./pages/DMConversation";
-import { InvitePage } from "./pages/InvitePage";
+import { NexoraAppIcon } from "@/components/NexoraBrand";
+
+const Home = lazy(() => import("./pages/Home"));
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const AppLayout = lazy(() =>
+  import("./pages/AppLayout").then(module => ({ default: module.AppLayout }))
+);
+const ServerChannel = lazy(() =>
+  import("./pages/ServerChannel").then(module => ({
+    default: module.ServerChannel,
+  }))
+);
+const DMHome = lazy(() =>
+  import("./pages/DMHome").then(module => ({ default: module.DMHome }))
+);
+const DMConversation = lazy(() =>
+  import("./pages/DMConversation").then(module => ({
+    default: module.DMConversation,
+  }))
+);
+const OfficialAnnouncements = lazy(() =>
+  import("./pages/OfficialAnnouncements").then(module => ({
+    default: module.OfficialAnnouncements,
+  }))
+);
+const NexoraAdminPanel = lazy(() =>
+  import("./pages/NexoraAdminPanel").then(module => ({
+    default: module.NexoraAdminPanel,
+  }))
+);
+const InvitePage = lazy(() =>
+  import("./pages/InvitePage").then(module => ({ default: module.InvitePage }))
+);
+
+function PageLoader() {
+  return (
+    <main
+      className="flex min-h-[100dvh] items-center justify-center bg-[#313338]"
+      aria-busy="true"
+    >
+      <NexoraAppIcon className="h-12 w-12 animate-pulse" />
+      <span className="sr-only" role="status">
+        Carregando...
+      </span>
+    </main>
+  );
+}
+
+function Deferred({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
+}
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/invite/:code" element={<InvitePage />} />
-      <Route element={<AppLayout />}>
-        <Route path="/channels/@me" element={<DMHome />} />
-        <Route path="/channels/@me/:conversationId" element={<DMConversation />} />
-        <Route path="/channels/:serverId/:channelId" element={<ServerChannel />} />
-        <Route path="/channels/:serverId" element={<ServerChannel />} />
+      <Route
+        path="/"
+        element={
+          <Deferred>
+            <Home />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/login"
+        element={
+          <Deferred>
+            <Login />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <Deferred>
+            <Register />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/invite/:code"
+        element={
+          <Deferred>
+            <InvitePage />
+          </Deferred>
+        }
+      />
+      <Route
+        element={
+          <Deferred>
+            <AppLayout />
+          </Deferred>
+        }
+      >
+        <Route
+          path="/channels/@me"
+          element={
+            <Deferred>
+              <DMHome />
+            </Deferred>
+          }
+        />
+        <Route
+          path="/channels/@me/official"
+          element={
+            <Deferred>
+              <OfficialAnnouncements />
+            </Deferred>
+          }
+        />
+        <Route
+          path="/channels/@me/:conversationId"
+          element={
+            <Deferred>
+              <DMConversation />
+            </Deferred>
+          }
+        />
+        <Route
+          path="/nexora-admin"
+          element={
+            <Deferred>
+              <NexoraAdminPanel />
+            </Deferred>
+          }
+        />
+        <Route
+          path="/channels/:serverId/:channelId"
+          element={
+            <Deferred>
+              <ServerChannel />
+            </Deferred>
+          }
+        />
+        <Route
+          path="/channels/:serverId"
+          element={
+            <Deferred>
+              <ServerChannel />
+            </Deferred>
+          }
+        />
       </Route>
-      <Route path="*" element={<NotFound />} />
+      <Route
+        path="*"
+        element={
+          <Deferred>
+            <NotFound />
+          </Deferred>
+        }
+      />
     </Routes>
   );
 }

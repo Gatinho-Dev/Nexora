@@ -58,7 +58,7 @@ export default function AuthLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[100dvh]">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-6">
             <h1 className="text-2xl font-semibold tracking-tight text-center">
@@ -74,7 +74,7 @@ export default function AuthLayout({
               window.location.href = LOGIN_PATH;
             }}
             size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
+            className="w-full shadow-lg hover:shadow-xl transition-[color,background-color,border-color,box-shadow,transform,opacity]"
           >
             Sign in
           </Button>
@@ -119,7 +119,9 @@ function AuthLayoutContent({
 
   useEffect(() => {
     if (isCollapsed) {
-      setIsResizing(false);
+      // Use setTimeout to avoid calling setState synchronously in effect
+      const timeout = setTimeout(() => setIsResizing(false), 0);
+      return () => clearTimeout(timeout);
     }
   }, [isCollapsed]);
 
@@ -162,7 +164,7 @@ function AuthLayoutContent({
 
         >
           <SidebarHeader className="h-16 justify-center">
-            <div className="flex items-center gap-3 px-2 transition-all w-full">
+            <div className="flex items-center gap-3 px-2 transition-[color,background-color,border-color,box-shadow,transform,opacity] w-full">
               <button
                 onClick={toggleSidebar}
                 className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
@@ -190,7 +192,7 @@ function AuthLayoutContent({
                       isActive={isActive}
                       onClick={() => navigate(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      className={`h-10 transition-[color,background-color,border-color,box-shadow,transform,opacity] font-normal`}
                     >
                       <item.icon
                         className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useOutletContext } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { ChannelSidebar } from "@/components/ChannelSidebar";
@@ -10,45 +10,52 @@ import { SidebarPortal } from "@/components/SidebarPortal";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { Hash, Volume2, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { AppOutletContext } from "@/lib/appOutletContext";
 
 export function ServerChannel() {
   const params = useParams();
   const navigate = useNavigate();
+  const { onOpenContextMenu, onOpenProfile } =
+    useOutletContext<AppOutletContext>();
   const serverId = Number(params.serverId);
   const channelIdParam = params.channelId ?? "first";
   const me = trpc.auth.me.useQuery().data;
-  const membersOpen = useAppStore((s) => s.membersOpen);
-  const setMembersOpen = useAppStore((s) => s.setMembersOpen);
+  const membersOpen = useAppStore(s => s.membersOpen);
+  const setMembersOpen = useAppStore(s => s.setMembersOpen);
   const [desktopMembers, setDesktopMembers] = useState(true);
 
   const details = trpc.server.get.useQuery(
     { serverId },
-    { enabled: Number.isFinite(serverId) && serverId > 0, retry: false },
+    { enabled: Number.isFinite(serverId) && serverId > 0, retry: false }
   );
 
-  // "/channels/:id/first" redirects to the first text channel
   useEffect(() => {
     if (channelIdParam === "first" && details.data) {
       const firstText = [...details.data.channels]
-        .filter((c) => c.type === "TEXT")
+        .filter(c => c.type === "TEXT")
         .sort((a, b) => a.position - b.position)[0];
-      const firstAny = [...details.data.channels].sort((a, b) => a.position - b.position)[0];
+      const firstAny = [...details.data.channels].sort(
+        (a, b) => a.position - b.position
+      )[0];
       const target = firstText ?? firstAny;
-      if (target) navigate(`/channels/${serverId}/${target.id}`, { replace: true });
+      if (target)
+        navigate(`/channels/${serverId}/${target.id}`, { replace: true });
     }
   }, [channelIdParam, details.data, navigate, serverId]);
 
   if (details.error) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="text-center">
-          <p className="text-lg font-semibold">Servidor não encontrado</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Você não é membro deste servidor ou ele foi excluído.
+      <div className="flex flex-1 items-center justify-center bg-[#313338] text-white">
+        <div className="text-center p-6 rounded-xl bg-[#2B2D31] border border-black/20 shadow-xl max-w-sm">
+          <p className="text-lg font-bold text-white">
+            Comunidade não encontrada
+          </p>
+          <p className="mt-1 text-xs text-[#B5BAC1]">
+            Você não é membro desta comunidade na Nexora ou ela foi movida.
           </p>
           <button
             onClick={() => navigate("/channels/@me")}
-            className="mt-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            className="mt-4 rounded-md bg-[#4654D8] hover:bg-[#3D49BF] px-4 py-2.5 text-sm font-semibold text-white"
           >
             Voltar ao início
           </button>
@@ -59,103 +66,133 @@ export function ServerChannel() {
 
   if (!details.data || !me) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="pulsar-mark h-10 w-10 animate-pulse rounded-xl" />
+      <div className="flex flex-1 items-center justify-center bg-[#313338]">
+        <div className="h-10 w-10 rounded-xl bg-[#4654D8] flex items-center justify-center font-bold text-white animate-pulse">
+          N
+        </div>
       </div>
     );
   }
 
-  const channel = details.data.channels.find((c) => c.id === Number(channelIdParam));
-  const canManageMessages = details.data.myPermissions.includes("MANAGE_MESSAGES");
+  const channel = details.data.channels.find(
+    c => c.id === Number(channelIdParam)
+  );
+  const canManageMessages =
+    details.data.myPermissions.includes("MANAGE_MESSAGES");
   const canRead = details.data.myPermissions.includes("READ_MESSAGES");
 
   const header = channel ? (
-    <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-      {channel.type === "VOICE" ? (
-        <Volume2 className="h-5 w-5 text-muted-foreground shrink-0" />
-      ) : (
-        <Hash className="h-5 w-5 text-muted-foreground shrink-0" />
-      )}
-      <span className="font-semibold truncate">{channel.name}</span>
-      <div className="ml-auto flex items-center gap-1">
+    <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/20 px-4 bg-[#313338] text-white select-none shadow-sm">
+      <div className="flex items-center gap-2 min-w-0">
+        {channel.type === "VOICE" ? (
+          <Volume2 className="h-5 w-5 text-emerald-400 shrink-0" />
+        ) : (
+          <Hash className="h-5 w-5 text-[#80848E] shrink-0" />
+        )}
+        <span className="font-bold text-sm truncate">{channel.name}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
         <div className="hidden md:block">
-          <NotificationsBell />
+          <NotificationsBell onOpenProfile={onOpenProfile} />
         </div>
         {channel.type === "TEXT" && (
           <button
             onClick={() => setDesktopMembers(!desktopMembers)}
             className={cn(
-              "hidden md:flex rounded-md p-1.5 text-muted-foreground hover:bg-[var(--hover-bg)]",
-              desktopMembers && "text-foreground",
+              "hidden md:flex rounded-lg p-1.5 text-[#B5BAC1] hover:bg-white/10 hover:text-white transition-colors",
+              desktopMembers && "bg-white/10 text-white"
             )}
             title="Lista de membros"
           >
-            <Users className="h-5 w-5" />
+            <Users className="h-4 w-4" />
           </button>
         )}
       </div>
-    </div>
+    </header>
   ) : null;
 
   return (
     <div className="flex flex-1 min-h-0">
       <SidebarPortal>
-        <ChannelSidebar details={details.data} />
+        <ChannelSidebar
+          details={details.data}
+          onOpenContextMenu={onOpenContextMenu}
+          onOpenProfile={onOpenProfile}
+        />
       </SidebarPortal>
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!channel ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Selecione um canal
+          <div className="flex flex-1 items-center justify-center text-sm text-[#B5BAC1] bg-[#313338]">
+            Selecione um canal para começar a conversar na Nexora.
           </div>
         ) : channel.type === "VOICE" ? (
           <>
             {header}
-            <VoiceView channelId={channel.id} serverId={serverId} title={channel.name} />
+            <VoiceView
+              channelId={channel.id}
+              serverId={serverId}
+              title={channel.name}
+              onOpenProfile={onOpenProfile}
+            />
           </>
         ) : canRead ? (
           <ChatArea
             channelId={channel.id}
-            placeholder={`Conversar em #${channel.name}`}
-            members={details.data.members.map((m) => ({
+            placeholder={`Mensagem em #${channel.name}`}
+            members={details.data.members.map(m => ({
               id: m.user.id,
               username: m.user.username,
               name: m.user.name,
             }))}
             myId={me.id}
             canManageMessages={canManageMessages}
+            onOpenProfile={onOpenProfile}
             header={header}
           />
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Você não tem permissão para ler este canal.
+          <div className="flex flex-1 items-center justify-center text-sm text-[#B5BAC1] bg-[#313338]">
+            Você não possui permissão para ver este canal.
           </div>
         )}
       </div>
 
-      {/* Member list: desktop side panel */}
+      {/* Member list side panel */}
       {channel?.type === "TEXT" && desktopMembers && (
         <div className="hidden md:flex h-full shrink-0">
-          <MemberList details={details.data} />
+          <MemberList
+            details={details.data}
+            onOpenProfile={onOpenProfile}
+            onOpenContextMenu={onOpenContextMenu}
+          />
         </div>
       )}
 
-      {/* Member list: mobile overlay */}
+      {/* Mobile Member Overlay */}
       {channel?.type === "TEXT" && membersOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setMembersOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setMembersOpen(false)}
+          />
           <div className="absolute right-0 top-0 h-full shadow-2xl">
-            <div className="flex h-full flex-col bg-[var(--sidebar-bg)]">
-              <div className="flex h-12 items-center justify-between border-b border-border px-4">
-                <span className="text-sm font-semibold">Membros</span>
+            <div className="flex h-full flex-col bg-[#2B2D31] text-white">
+              <div className="flex h-12 items-center justify-between border-b border-white/5 px-4">
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  Membros
+                </span>
                 <button
                   onClick={() => setMembersOpen(false)}
-                  className="rounded-md p-1 text-muted-foreground hover:bg-[var(--hover-bg)]"
+                  className="rounded-lg p-1 text-[#B5BAC1] hover:bg-white/10 hover:text-white"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <MemberList details={details.data} />
+              <MemberList
+                details={details.data}
+                onOpenProfile={onOpenProfile}
+                onOpenContextMenu={onOpenContextMenu}
+              />
             </div>
           </div>
         </div>

@@ -4,8 +4,13 @@ import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
+import { publicFileUrl } from "./lib/urls";
 import { RateLimits } from "@contracts/constants";
-import type { MessageDTO, NotificationDTO, ReactionDTO } from "@contracts/types";
+import type {
+  MessageDTO,
+  NotificationDTO,
+  ReactionDTO,
+} from "@contracts/types";
 import { rateLimit } from "./utils/rateLimit";
 import {
   requireChannelAccess,
@@ -20,7 +25,7 @@ import {
 
 // ── DTO assembly ──────────────────────────────────────────────
 async function buildMessageDTO(
-  msg: typeof schema.messages.$inferSelect,
+  msg: typeof schema.messages.$inferSelect
 ): Promise<MessageDTO> {
   const db = getDb();
   const author = await db.query.users.findFirst({
@@ -38,7 +43,11 @@ async function buildMessageDTO(
     .where(eq(schema.messageReactions.messageId, msg.id));
   const reactionMap = new Map<string, ReactionDTO>();
   for (const r of reactionRows) {
-    const entry = reactionMap.get(r.emoji) ?? { emoji: r.emoji, count: 0, userIds: [] };
+    const entry = reactionMap.get(r.emoji) ?? {
+      emoji: r.emoji,
+      count: 0,
+      userIds: [],
+    };
     entry.count += 1;
     entry.userIds.push(r.userId);
     reactionMap.set(r.emoji, entry);
@@ -58,7 +67,15 @@ async function buildMessageDTO(
         content: original.content.slice(0, 200),
         author: originalAuthor
           ? toPublicUser(originalAuthor)
-          : { id: 0, username: null, name: "Usuário removido", avatar: null, bio: null, status: "offline" },
+          : {
+              id: 0,
+              username: null,
+              name: "Usuário removido",
+              avatar: null,
+              banner: null,
+              bio: null,
+              status: "offline",
+            },
       };
     }
   }
@@ -74,14 +91,22 @@ async function buildMessageDTO(
     editedAt: msg.editedAt,
     author: author
       ? toPublicUser(author)
-      : { id: 0, username: null, name: "Usuário removido", avatar: null, bio: null, status: "offline" },
-    attachments: attachmentRows.map((a) => ({
+      : {
+          id: 0,
+          username: null,
+          name: "Usuário removido",
+          avatar: null,
+          banner: null,
+          bio: null,
+          status: "offline",
+        },
+    attachments: attachmentRows.map(a => ({
       id: a.id,
       fileId: a.fileId,
       filename: a.filename,
       mimeType: a.mimeType,
       size: a.size,
-      url: `/api/files/${a.fileId}`,
+      url: publicFileUrl(a.fileId),
     })),
     reactions: [...reactionMap.values()],
     replyTo,
@@ -98,7 +123,7 @@ async function notifyUsers(
     conversationId?: number | null;
     messageId?: number | null;
     content?: string | null;
-  },
+  }
 ) {
   const db = getDb();
   for (const userId of userIds) {
@@ -143,7 +168,7 @@ async function notifyUsers(
 async function processMentions(
   content: string,
   authorId: number,
-  msg: typeof schema.messages.$inferSelect,
+  msg: typeof schema.messages.$inferSelect
 ) {
   const db = getDb();
   const mentionedIds = new Set<number>();
@@ -161,15 +186,18 @@ async function processMentions(
     if (content.includes("@everyone")) {
       for (const m of members) mentionedIds.add(m.userId);
     } else {
-      const usernames = [...content.matchAll(/@([a-zA-Z0-9_.-]+)/g)].map((m) =>
-        m[1].toLowerCase(),
+      const usernames = [...content.matchAll(/@([a-zA-Z0-9_.-]+)/g)].map(m =>
+        m[1].toLowerCase()
       );
       if (usernames.length > 0) {
         for (const m of members) {
           const user = await db.query.users.findFirst({
             where: eq(schema.users.id, m.userId),
           });
-          if (user?.username && usernames.includes(user.username.toLowerCase())) {
+          if (
+            user?.username &&
+            usernames.includes(user.username.toLowerCase())
+          ) {
             mentionedIds.add(m.userId);
           }
         }
@@ -192,14 +220,14 @@ async function processMentions(
       .from(schema.conversationMembers)
       .where(eq(schema.conversationMembers.conversationId, msg.conversationId));
     await notifyUsers(
-      members.map((m) => m.userId).filter((id) => id !== authorId),
+      members.map(m => m.userId).filter(id => id !== authorId),
       {
         type: "dm",
         actorId: authorId,
         conversationId: msg.conversationId,
         messageId: msg.id,
         content: content.slice(0, 140),
-      },
+      }
     );
   }
 }
@@ -209,7 +237,7 @@ const targetSchema = z
     channelId: z.number().optional(),
     conversationId: z.number().optional(),
   })
-  .refine((v) => (v.channelId != null) !== (v.conversationId != null), {
+  .refine(v => (v.channelId != null) !== (v.conversationId != null), {
     message: "Informe um canal ou uma conversa.",
   });
 
@@ -219,7 +247,7 @@ export const messageRouter = createRouter({
       targetSchema.extend({
         before: z.number().optional(),
         limit: z.number().min(1).max(100).default(50),
-      }),
+      })
     )
     .query(async ({ ctx, input }) => {
       const db = getDb();
@@ -229,9 +257,12 @@ export const messageRouter = createRouter({
         conditions.push(eq(schema.messages.channelId, input.channelId));
       } else {
         await requireConversationAccess(ctx.user.id, input.conversationId!);
-        conditions.push(eq(schema.messages.conversationId, input.conversationId!));
+        conditions.push(
+          eq(schema.messages.conversationId, input.conversationId!)
+        );
       }
-      if (input.before) conditions.push(sql`${schema.messages.id} < ${input.before}`);
+      if (input.before)
+        conditions.push(sql`${schema.messages.id} < ${input.before}`);
 
       const rows = await db
         .select()
@@ -256,21 +287,37 @@ export const messageRouter = createRouter({
         content: z.string().max(4000),
         replyToId: z.number().optional(),
         attachmentIds: z.array(z.number()).max(10).optional(),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
-      rateLimit(`message:${ctx.user.id}`, RateLimits.message.limit, RateLimits.message.windowMs);
+      rateLimit(
+        `message:${ctx.user.id}`,
+        RateLimits.message.limit,
+        RateLimits.message.windowMs
+      );
       const db = getDb();
 
       const content = input.content.trim();
-      if (!content && (!input.attachmentIds || input.attachmentIds.length === 0)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "A mensagem está vazia." });
+      if (
+        !content &&
+        (!input.attachmentIds || input.attachmentIds.length === 0)
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A mensagem está vazia.",
+        });
       }
 
       if (input.channelId) {
-        const { perms } = await requireChannelAccess(ctx.user.id, input.channelId);
+        const { perms } = await requireChannelAccess(
+          ctx.user.id,
+          input.channelId
+        );
         if (!perms.has("SEND_MESSAGES")) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode enviar mensagens neste canal." });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Você não pode enviar mensagens neste canal.",
+          });
         }
       } else {
         await requireConversationAccess(ctx.user.id, input.conversationId!);
@@ -313,8 +360,8 @@ export const messageRouter = createRouter({
             eq(schema.channelReads.userId, ctx.user.id),
             input.channelId
               ? eq(schema.channelReads.channelId, input.channelId)
-              : eq(schema.channelReads.conversationId, input.conversationId!),
-          ),
+              : eq(schema.channelReads.conversationId, input.conversationId!)
+          )
         );
       await db.insert(schema.channelReads).values({
         userId: ctx.user.id,
@@ -329,7 +376,10 @@ export const messageRouter = createRouter({
       const dto = await buildMessageDTO(msg!);
 
       if (input.channelId) {
-        await broadcastToChannel(input.channelId, { t: "message:new", message: dto });
+        await broadcastToChannel(input.channelId, {
+          t: "message:new",
+          message: dto,
+        });
       } else {
         await broadcastToConversation(input.conversationId!, {
           t: "message:new",
@@ -339,14 +389,16 @@ export const messageRouter = createRouter({
         const members = await db
           .select({ userId: schema.conversationMembers.userId })
           .from(schema.conversationMembers)
-          .where(eq(schema.conversationMembers.conversationId, input.conversationId!));
+          .where(
+            eq(schema.conversationMembers.conversationId, input.conversationId!)
+          );
         sendToUsers(
-          members.map((m) => m.userId),
-          { t: "dm:refresh" },
+          members.map(m => m.userId),
+          { t: "dm:refresh" }
         );
       }
 
-      // Notifications (mentions / dm / reply) — fire and forget
+      // Notifications (mentions / dm / reply) - fire and forget
       processMentions(content, ctx.user.id, msg!).catch(() => {});
       if (input.replyToId) {
         const original = await db.query.messages.findFirst({
@@ -372,16 +424,23 @@ export const messageRouter = createRouter({
       z.object({
         messageId: z.number(),
         content: z.string().min(1).max(4000),
-      }),
+      })
     )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
       const msg = await db.query.messages.findFirst({
         where: eq(schema.messages.id, input.messageId),
       });
-      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Mensagem não encontrada." });
+      if (!msg)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Mensagem não encontrada.",
+        });
       if (msg.authorId !== ctx.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Você só pode editar suas próprias mensagens." });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Você só pode editar suas próprias mensagens.",
+        });
       }
       await db
         .update(schema.messages)
@@ -392,9 +451,15 @@ export const messageRouter = createRouter({
       });
       const dto = await buildMessageDTO(updated!);
       if (msg.channelId) {
-        await broadcastToChannel(msg.channelId, { t: "message:update", message: dto });
+        await broadcastToChannel(msg.channelId, {
+          t: "message:update",
+          message: dto,
+        });
       } else if (msg.conversationId) {
-        await broadcastToConversation(msg.conversationId, { t: "message:update", message: dto });
+        await broadcastToConversation(msg.conversationId, {
+          t: "message:update",
+          message: dto,
+        });
       }
       return { message: dto };
     }),
@@ -406,19 +471,33 @@ export const messageRouter = createRouter({
       const msg = await db.query.messages.findFirst({
         where: eq(schema.messages.id, input.messageId),
       });
-      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Mensagem não encontrada." });
+      if (!msg)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Mensagem não encontrada.",
+        });
 
       let allowed = msg.authorId === ctx.user.id;
       if (!allowed && msg.channelId) {
-        const { perms } = await requireChannelAccess(ctx.user.id, msg.channelId);
+        const { perms } = await requireChannelAccess(
+          ctx.user.id,
+          msg.channelId
+        );
         allowed = perms.has("MANAGE_MESSAGES");
       }
       if (!allowed) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode excluir esta mensagem." });
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Você não pode excluir esta mensagem.",
+        });
       }
 
-      await db.delete(schema.attachments).where(eq(schema.attachments.messageId, msg.id));
-      await db.delete(schema.messageReactions).where(eq(schema.messageReactions.messageId, msg.id));
+      await db
+        .delete(schema.attachments)
+        .where(eq(schema.attachments.messageId, msg.id));
+      await db
+        .delete(schema.messageReactions)
+        .where(eq(schema.messageReactions.messageId, msg.id));
       await db.delete(schema.messages).where(eq(schema.messages.id, msg.id));
 
       const event = {
@@ -428,21 +507,33 @@ export const messageRouter = createRouter({
         conversationId: msg.conversationId,
       };
       if (msg.channelId) await broadcastToChannel(msg.channelId, event);
-      else if (msg.conversationId) await broadcastToConversation(msg.conversationId, event);
+      else if (msg.conversationId)
+        await broadcastToConversation(msg.conversationId, event);
       return { ok: true };
     }),
 
   addReaction: authedQuery
-    .input(z.object({ messageId: z.number(), emoji: z.string().min(1).max(32) }))
+    .input(
+      z.object({ messageId: z.number(), emoji: z.string().min(1).max(32) })
+    )
     .mutation(async ({ ctx, input }) => {
-      rateLimit(`reaction:${ctx.user.id}`, RateLimits.reaction.limit, RateLimits.reaction.windowMs);
+      rateLimit(
+        `reaction:${ctx.user.id}`,
+        RateLimits.reaction.limit,
+        RateLimits.reaction.windowMs
+      );
       const db = getDb();
       const msg = await db.query.messages.findFirst({
         where: eq(schema.messages.id, input.messageId),
       });
-      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Mensagem não encontrada." });
+      if (!msg)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Mensagem não encontrada.",
+        });
       if (msg.channelId) await requireChannelAccess(ctx.user.id, msg.channelId);
-      else if (msg.conversationId) await requireConversationAccess(ctx.user.id, msg.conversationId);
+      else if (msg.conversationId)
+        await requireConversationAccess(ctx.user.id, msg.conversationId);
 
       await db
         .insert(schema.messageReactions)
@@ -458,26 +549,33 @@ export const messageRouter = createRouter({
         reactions,
       };
       if (msg.channelId) await broadcastToChannel(msg.channelId, event);
-      else if (msg.conversationId) await broadcastToConversation(msg.conversationId, event);
+      else if (msg.conversationId)
+        await broadcastToConversation(msg.conversationId, event);
       return { reactions };
     }),
 
   removeReaction: authedQuery
-    .input(z.object({ messageId: z.number(), emoji: z.string().min(1).max(32) }))
+    .input(
+      z.object({ messageId: z.number(), emoji: z.string().min(1).max(32) })
+    )
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
       const msg = await db.query.messages.findFirst({
         where: eq(schema.messages.id, input.messageId),
       });
-      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Mensagem não encontrada." });
+      if (!msg)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Mensagem não encontrada.",
+        });
       await db
         .delete(schema.messageReactions)
         .where(
           and(
             eq(schema.messageReactions.messageId, msg.id),
             eq(schema.messageReactions.userId, ctx.user.id),
-            eq(schema.messageReactions.emoji, input.emoji),
-          ),
+            eq(schema.messageReactions.emoji, input.emoji)
+          )
         );
       const reactions = await getReactions(msg.id);
       const event = {
@@ -488,7 +586,8 @@ export const messageRouter = createRouter({
         reactions,
       };
       if (msg.channelId) await broadcastToChannel(msg.channelId, event);
-      else if (msg.conversationId) await broadcastToConversation(msg.conversationId, event);
+      else if (msg.conversationId)
+        await broadcastToConversation(msg.conversationId, event);
       return { reactions };
     }),
 
@@ -504,8 +603,8 @@ export const messageRouter = createRouter({
             eq(schema.channelReads.userId, ctx.user.id),
             input.channelId
               ? eq(schema.channelReads.channelId, input.channelId)
-              : eq(schema.channelReads.conversationId, input.conversationId!),
-          ),
+              : eq(schema.channelReads.conversationId, input.conversationId!)
+          )
         );
       await db.insert(schema.channelReads).values({
         userId: ctx.user.id,
@@ -521,8 +620,8 @@ export const messageRouter = createRouter({
           .where(
             and(
               eq(schema.notifications.userId, ctx.user.id),
-              eq(schema.notifications.channelId, input.channelId),
-            ),
+              eq(schema.notifications.channelId, input.channelId)
+            )
           );
       } else {
         await db
@@ -531,8 +630,8 @@ export const messageRouter = createRouter({
           .where(
             and(
               eq(schema.notifications.userId, ctx.user.id),
-              eq(schema.notifications.conversationId, input.conversationId!),
-            ),
+              eq(schema.notifications.conversationId, input.conversationId!)
+            )
           );
       }
       return { ok: true };
@@ -548,7 +647,8 @@ export const messageRouter = createRouter({
     const readByConversation = new Map<number, number>();
     for (const r of readRows) {
       if (r.channelId) readByChannel.set(r.channelId, r.lastReadMessageId);
-      if (r.conversationId) readByConversation.set(r.conversationId, r.lastReadMessageId);
+      if (r.conversationId)
+        readByConversation.set(r.conversationId, r.lastReadMessageId);
     }
 
     const channels: Record<number, number> = {};
@@ -566,8 +666,8 @@ export const messageRouter = createRouter({
         .where(
           and(
             eq(schema.channels.serverId, m.serverId),
-            eq(schema.channels.type, "TEXT"),
-          ),
+            eq(schema.channels.type, "TEXT")
+          )
         );
       for (const ch of channelRows) {
         const lastRead = readByChannel.get(ch.id) ?? 0;
@@ -578,8 +678,8 @@ export const messageRouter = createRouter({
             and(
               eq(schema.messages.channelId, ch.id),
               gt(schema.messages.id, lastRead),
-              ne(schema.messages.authorId, ctx.user.id),
-            ),
+              ne(schema.messages.authorId, ctx.user.id)
+            )
           );
         if (Number(count) > 0) channels[ch.id] = Number(count);
       }
@@ -599,8 +699,8 @@ export const messageRouter = createRouter({
           and(
             eq(schema.messages.conversationId, c.conversationId),
             gt(schema.messages.id, lastRead),
-            ne(schema.messages.authorId, ctx.user.id),
-          ),
+            ne(schema.messages.authorId, ctx.user.id)
+          )
         );
       if (Number(count) > 0) conversations[c.conversationId] = Number(count);
     }

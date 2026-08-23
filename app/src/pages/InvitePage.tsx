@@ -12,19 +12,22 @@ export function InvitePage() {
   const code = params.code ?? "";
   const { user, isLoading: authLoading } = useAuth();
 
-  const info = trpc.server.getInviteInfo.useQuery({ code }, { enabled: !!code && !!user, retry: false });
+  const info = trpc.server.getInviteInfo.useQuery(
+    { code },
+    { enabled: !!code && !!user, retry: false }
+  );
 
   const join = trpc.server.joinByCode.useMutation({
     onSuccess: ({ serverId }) => {
       toast.success("Você entrou no servidor!");
       navigate(`/channels/${serverId}/first`);
     },
-    onError: (e) => toast.error(e.message),
+    onError: e => toast.error(e.message),
   });
 
   if (authLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[var(--chat-bg)]">
+      <div className="flex h-[100dvh] items-center justify-center bg-[var(--chat-bg)]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -36,10 +39,10 @@ export function InvitePage() {
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-[var(--chat-bg)] p-4">
-      <Card className="w-full max-w-sm text-center">
+    <main className="flex h-[100dvh] items-center justify-center bg-[#313338] p-4 text-white">
+      <Card className="w-full max-w-sm border-black/20 bg-[#2B2D31] text-center text-white shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
         <CardHeader>
-          <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 text-2xl font-bold text-primary">
+          <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#4654D8] text-2xl font-bold text-white">
             {info.data?.server.name?.slice(0, 2).toUpperCase() ?? "?"}
           </div>
           <CardTitle>
@@ -58,7 +61,11 @@ export function InvitePage() {
               <p className="text-sm text-muted-foreground">
                 {info.error.message ?? "Este convite expirou ou não existe."}
               </p>
-              <Button variant="secondary" className="w-full" onClick={() => navigate("/channels/@me")}>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={() => navigate("/channels/@me")}
+              >
                 Voltar ao início
               </Button>
             </>
@@ -66,20 +73,29 @@ export function InvitePage() {
             <>
               <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
                 <Users className="h-4 w-4" />
-                {info.data.memberCount} {info.data.memberCount === 1 ? "membro" : "membros"}
+                {info.data.memberCount}{" "}
+                {info.data.memberCount === 1 ? "membro" : "membros"}
               </p>
               {info.data.server.description && (
-                <p className="text-sm text-muted-foreground">{info.data.server.description}</p>
+                <p className="text-sm text-muted-foreground">
+                  {info.data.server.description}
+                </p>
               )}
               {info.data.alreadyMember ? (
                 <Button
                   className="w-full"
-                  onClick={() => navigate(`/channels/${info.data!.server.id}/first`)}
+                  onClick={() =>
+                    navigate(`/channels/${info.data!.server.id}/first`)
+                  }
                 >
-                  Você já é membro — abrir servidor
+                  Você já é membro - abrir servidor
                 </Button>
               ) : (
-                <Button className="w-full" onClick={() => join.mutate({ code })} disabled={join.isPending}>
+                <Button
+                  className="w-full"
+                  onClick={() => join.mutate({ code })}
+                  disabled={join.isPending}
+                >
                   {join.isPending ? "Entrando..." : "Aceitar convite"}
                 </Button>
               )}
@@ -87,6 +103,6 @@ export function InvitePage() {
           ) : null}
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }

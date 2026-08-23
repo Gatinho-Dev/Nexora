@@ -4,12 +4,13 @@ import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiUrl } from "@/lib/endpoints";
+import { NexoraAppIcon } from "@/components/NexoraBrand";
 
-// Kimi OAuth (alternative sign-in) — URL construction per platform template
 function getOAuthUrl() {
   const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
   const appID = import.meta.env.VITE_APP_ID;
-  const redirectUri = `${window.location.origin}/api/oauth/callback`;
+  const redirectUri = apiUrl("/api/oauth/callback");
   const state = btoa(redirectUri);
 
   const url = new URL(`${kimiAuthUrl}/api/oauth/authorize`);
@@ -34,88 +35,101 @@ export default function Login() {
       await utils.invalidate();
       navigate("/channels/@me");
     },
-    onError: (err) => setError(err.message),
+    onError: err => setError(err.message),
   });
 
   const hasOAuth = !!import.meta.env.VITE_KIMI_AUTH_URL;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-rail p-4">
-      <div className="w-full max-w-md rounded-2xl bg-card border border-border p-8 shadow-xl">
-        <div className="flex flex-col items-center mb-8">
-          <div className="pulsar-mark h-14 w-14 rounded-2xl flex items-center justify-center mb-4">
-            <svg viewBox="0 0 64 64" className="h-8 w-8">
-              <circle cx="32" cy="32" r="17" fill="none" stroke="#0d1117" strokeWidth="5" />
-              <circle cx="32" cy="32" r="7" fill="#0d1117" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold">Bem-vindo de volta!</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Entre na sua conta Pulsar
+    <main className="min-h-[100dvh] flex items-center justify-center bg-[#313338] p-4 sm:p-6 select-none text-white">
+      <div className="w-full max-w-[480px] rounded-xl bg-[#2B2D31] border border-black/20 p-6 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
+        <div className="flex flex-col items-center mb-8 text-center">
+          <NexoraAppIcon className="mb-5 h-12 w-12" />
+          <h1 className="text-2xl font-bold tracking-[-0.02em] text-white">
+            Bem-vindo de volta!
+          </h1>
+          <p className="text-[#B5BAC1] text-sm mt-2">
+            Estamos muito felizes em ver você novamente.
           </p>
         </div>
 
         <form
           className="space-y-4"
-          onSubmit={(e) => {
+          onSubmit={e => {
             e.preventDefault();
             setError(null);
             login.mutate({ username: username.trim(), password });
           }}
         >
-          <div className="space-y-2">
-            <Label htmlFor="username">Nome de usuário</Label>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="username"
+              className="text-xs font-bold uppercase text-[#B5BAC1]"
+            >
+              Nome de usuário
+            </Label>
             <Input
               id="username"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#4654D8]"
               autoComplete="username"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={e => setUsername(e.target.value)}
               required
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Senha</Label>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="password"
+              className="text-xs font-bold uppercase text-[#B5BAC1]"
+            >
+              Senha
+            </Label>
             <Input
               id="password"
               type="password"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#4654D8]"
               autoComplete="current-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={e => setPassword(e.target.value)}
               required
             />
-            <p className="text-xs text-muted-foreground">
-              Esqueceu a senha? <span className="opacity-70">Recuperação por e-mail — em breve.</span>
-            </p>
           </div>
 
           {error && (
-            <div className="rounded-md bg-destructive/15 text-destructive text-sm px-3 py-2">
+            <div className="rounded-lg bg-red-500/15 border border-red-500/30 text-red-400 text-xs px-3.5 py-2.5 font-medium">
               {error}
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={login.isPending}>
-            {login.isPending ? "Entrando..." : "Entrar"}
+          <Button
+            type="submit"
+            className="w-full bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold h-11 rounded-md"
+            disabled={login.isPending}
+          >
+            {login.isPending ? "Entrando..." : "Entrar na Nexora"}
           </Button>
         </form>
 
-        <p className="text-sm text-muted-foreground mt-4">
+        <p className="text-sm text-[#B5BAC1] mt-5">
           Precisa de uma conta?{" "}
-          <Link to="/register" className="chat-link font-medium">
-            Registrar
+          <Link
+            to="/register"
+            className="text-[#00A8FC] hover:underline font-medium"
+          >
+            Registrar-se
           </Link>
         </p>
 
         {hasOAuth && (
           <>
             <div className="flex items-center gap-3 my-5">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground">OU</span>
-              <div className="h-px flex-1 bg-border" />
+              <div className="h-px flex-1 bg-[#3F4147]" />
+              <span className="text-[10px] font-bold text-[#B5BAC1]">OU</span>
+              <div className="h-px flex-1 bg-[#3F4147]" />
             </div>
             <Button
               variant="outline"
-              className="w-full"
+              className="w-full h-11 bg-[#35373C] border-white/10 text-white hover:bg-[#3F4147]"
               onClick={() => {
                 window.location.href = getOAuthUrl();
               }}
@@ -125,6 +139,6 @@ export default function Login() {
           </>
         )}
       </div>
-    </div>
+    </main>
   );
 }

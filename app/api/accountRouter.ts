@@ -133,6 +133,7 @@ export const accountRouter = createRouter({
         displayName: z.string().min(1).max(64).optional(),
         bio: z.string().max(500).optional(),
         avatar: z.string().max(500).optional(),
+        banner: z.string().max(500).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -140,6 +141,7 @@ export const accountRouter = createRouter({
       if (input.displayName !== undefined) patch.name = input.displayName;
       if (input.bio !== undefined) patch.bio = input.bio;
       if (input.avatar !== undefined) patch.avatar = input.avatar;
+      if (input.banner !== undefined) patch.banner = input.banner;
       if (Object.keys(patch).length === 0) return { user: toPublicUser(ctx.user) };
 
       await getDb()

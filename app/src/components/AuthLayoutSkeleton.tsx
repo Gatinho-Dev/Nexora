@@ -2,7 +2,7 @@ import { Skeleton } from "./ui/skeleton";
 
 export function AuthLayoutSkeleton() {
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-[100dvh] bg-background">
       {/* Sidebar skeleton */}
       <div className="w-70 border-r border-border bg-background p-4 space-y-6">
         {/* Logo area */}
