@@ -56,7 +56,7 @@ export default function Register() {
             </Label>
             <Input
               id="username"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#4654D8]"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
               autoComplete="username"
               placeholder="ex.: ana.silva"
               value={username}
@@ -76,7 +76,7 @@ export default function Register() {
             </Label>
             <Input
               id="displayName"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#4654D8]"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
               placeholder="ex.: Ana Silva"
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
@@ -93,7 +93,7 @@ export default function Register() {
             <Input
               id="password"
               type="password"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#4654D8]"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
               autoComplete="new-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -111,7 +111,7 @@ export default function Register() {
 
           <Button
             type="submit"
-            className="w-full bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold h-11 rounded-md"
+            className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold h-11 rounded-md"
             disabled={register.isPending}
           >
             {register.isPending ? "Criando conta..." : "Continuar"}

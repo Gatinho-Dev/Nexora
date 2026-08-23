@@ -136,7 +136,7 @@ export function UserSettingsModal({
                       className={cn(
                         "flex w-auto items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors sm:w-full sm:py-1.5",
                         tab === t.id
-                          ? "bg-[#4654D8]/20 text-[#4654D8]"
+                          ? "bg-[#5865F2]/20 text-[#5865F2]"
                           : "text-[#B5BAC1] hover:bg-white/5 hover:text-white"
                       )}
                     >
@@ -281,7 +281,7 @@ function AccountTab() {
             />
           </div>
           <Button
-            className="bg-[#4654D8] hover:bg-[#3D49BF] text-white font-medium"
+            className="bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium"
             disabled={
               !currentPassword ||
               newPassword.length < 6 ||
@@ -395,7 +395,7 @@ function ProfileTab() {
                 decorative
                 className="absolute -right-7 -top-12 h-48 w-48 rotate-6 opacity-[0.13]"
               />
-              <div className="absolute bottom-0 left-0 h-1 w-2/3 bg-[#4654D8]" />
+              <div className="absolute bottom-0 left-0 h-1 w-2/3 bg-[#5865F2]" />
               <div className="absolute bottom-0 right-0 h-1 w-1/3 bg-[#7383FF]" />
             </>
           )}
@@ -447,7 +447,7 @@ function ProfileTab() {
               type="button"
               onClick={() => avatarFileRef.current?.click()}
               disabled={uploadingTarget !== null}
-              className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-[#4654D8] text-white shadow-lg hover:bg-[#3D49BF] disabled:opacity-60"
+              className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-[#5865F2] text-white shadow-lg hover:bg-[#4752C4] disabled:opacity-60"
               aria-label="Alterar avatar"
               title="Alterar avatar"
             >
@@ -519,7 +519,7 @@ function ProfileTab() {
       <Button
         onClick={save}
         disabled={updateProfile.isPending || uploadingTarget !== null}
-        className="bg-[#4654D8] hover:bg-[#3D49BF]"
+        className="bg-[#5865F2] hover:bg-[#4752C4]"
       >
         {updateProfile.isPending ? "Salvando..." : "Salvar alterações"}
       </Button>
@@ -602,7 +602,7 @@ function NotificationsTab() {
         <div className="space-y-2 pt-2 border-t border-white/5">
           <div className="flex justify-between items-center text-xs">
             <span className="font-semibold text-white">Volume dos sons</span>
-            <span className="font-mono text-[#4654D8]">
+            <span className="font-mono text-[#5865F2]">
               {prefs.masterVolume}%
             </span>
           </div>
@@ -808,11 +808,11 @@ function VoiceTab() {
       </div>
 
       <section
-        className="rounded-xl border border-[#7383FF]/40 bg-[#4654D8]/10 p-5 space-y-3"
+        className="rounded-xl border border-[#7383FF]/40 bg-[#5865F2]/10 p-5 space-y-3"
         aria-labelledby="noise-suppression-heading"
       >
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#4654D8] text-white">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#5865F2] text-white">
             <Sparkles className="h-4 w-4" aria-hidden="true" />
           </span>
           <div>
@@ -850,7 +850,7 @@ function VoiceTab() {
               className={cn(
                 "min-h-16 rounded-lg border px-3 py-2 text-left transition-colors",
                 prefs.audioProcessing === value
-                  ? "border-[#7383FF] bg-[#4654D8]/25 text-white"
+                  ? "border-[#7383FF] bg-[#5865F2]/25 text-white"
                   : "border-white/[0.08] bg-[#24252b] text-[#aeb1bd] hover:border-white/20 hover:text-white"
               )}
             >
@@ -953,7 +953,7 @@ function VoiceTab() {
           <div
             className={cn(
               "h-full rounded-full transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-75",
-              level > 12 ? "bg-[#55d98b]" : "bg-[#4654D8]"
+              level > 12 ? "bg-[#55d98b]" : "bg-[#5865F2]"
             )}
             style={{ width: `${level}%` }}
           />
@@ -1085,17 +1085,17 @@ function AppearanceTab() {
             className={cn(
               "rounded-xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity] relative overflow-hidden select-none",
               theme === opt.id
-                ? "border-[#4654D8] bg-[#4654D8]/10 text-white shadow-lg shadow-[#4654D8]/10"
+                ? "border-[#5865F2] bg-[#5865F2]/10 text-white shadow-lg shadow-[#5865F2]/10"
                 : "border-white/10 bg-[#2B2D31] text-[#B5BAC1] hover:border-white/20 hover:text-white"
             )}
           >
-            <opt.icon className="h-5 w-5 mb-2 text-[#4654D8]" />
+            <opt.icon className="h-5 w-5 mb-2 text-[#5865F2]" />
             <p className="text-sm font-bold text-white">{opt.label}</p>
             <p className="text-[11px] text-[#B5BAC1] mt-1 leading-snug">
               {opt.description}
             </p>
             {theme === opt.id && (
-              <div className="absolute top-2 right-2 text-[#4654D8]">
+              <div className="absolute top-2 right-2 text-[#5865F2]">
                 <Check className="h-4 w-4" />
               </div>
             )}

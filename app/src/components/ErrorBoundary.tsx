@@ -44,7 +44,7 @@ export class ErrorBoundary extends Component<
             )}
             <button
               onClick={() => window.location.reload()}
-              className="mt-5 min-h-11 px-5 py-2.5 bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold text-sm rounded-md transition-colors"
+              className="mt-5 min-h-11 px-5 py-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-sm rounded-md transition-colors"
             >
               Recarregar aplicação
             </button>

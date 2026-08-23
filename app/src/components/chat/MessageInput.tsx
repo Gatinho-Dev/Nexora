@@ -450,8 +450,8 @@ export function MessageInput({
     <div className="px-4 pb-4 pt-1 relative bg-[#313338]">
       {/* Dropzone overlay */}
       {isDraggingOver && (
-        <div className="fixed inset-0 z-50 bg-[#1E1F22]/90 border-4 border-dashed border-[#4654D8] backdrop-blur-xs flex flex-col items-center justify-center gap-3 text-white pointer-events-none animate-in fade-in duration-150">
-          <UploadCloud className="h-16 w-16 text-[#4654D8]" />
+        <div className="fixed inset-0 z-50 bg-[#1E1F22]/90 border-4 border-dashed border-[#5865F2] backdrop-blur-xs flex flex-col items-center justify-center gap-3 text-white pointer-events-none animate-in fade-in duration-150">
+          <UploadCloud className="h-16 w-16 text-[#5865F2]" />
           <h2 className="text-2xl font-bold tracking-tight">
             Solte para enviar
           </h2>
@@ -464,10 +464,10 @@ export function MessageInput({
       {/* Reply header banner */}
       {replyingTo && (
         <div className="flex items-center gap-2 rounded-t-xl bg-[#2B2D31] border border-white/10 px-3.5 py-2 text-xs text-white select-none">
-          <CornerUpLeft className="h-3.5 w-3.5 text-[#4654D8]" />
+          <CornerUpLeft className="h-3.5 w-3.5 text-[#5865F2]" />
           <span>
             Respondendo a{" "}
-            <span className="font-bold text-[#4654D8]">
+            <span className="font-bold text-[#5865F2]">
               @{replyingTo.author.name ?? replyingTo.author.username}
             </span>
           </span>
@@ -598,7 +598,7 @@ export function MessageInput({
                   <Trash2 className="h-3.5 w-3.5" /> Cancelar
                 </button>
                 <button
-                  className="flex items-center gap-1.5 rounded-lg bg-[#4654D8] text-white hover:bg-[#3D49BF] px-3 py-1.5 text-xs font-bold transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg bg-[#5865F2] text-white hover:bg-[#4752C4] px-3 py-1.5 text-xs font-bold transition-colors"
                   onClick={stopRecording}
                 >
                   <Square className="h-3.5 w-3.5" /> Parar
@@ -621,7 +621,7 @@ export function MessageInput({
                   audio.play();
                 }}
               >
-                <Play className="h-3.5 w-3.5 text-[#4654D8]" /> Ouvir
+                <Play className="h-3.5 w-3.5 text-[#5865F2]" /> Ouvir
               </button>
               <span className="text-xs font-mono text-[#B5BAC1]">
                 {fmtSecs(recordSeconds)}
@@ -634,7 +634,7 @@ export function MessageInput({
                   <Trash2 className="h-3.5 w-3.5" /> Descartar
                 </button>
                 <button
-                  className="flex items-center gap-1.5 rounded-lg bg-[#4654D8] hover:bg-[#3D49BF] text-white px-3.5 py-1.5 text-xs font-bold transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white px-3.5 py-1.5 text-xs font-bold transition-colors disabled:opacity-50"
                   onClick={sendRecording}
                   disabled={uploading || send.isPending}
                 >
@@ -647,7 +647,7 @@ export function MessageInput({
       ) : (
         <div
           className={cn(
-            "relative flex min-h-11 items-end gap-1.5 rounded-lg bg-[#383A40] border border-transparent px-3.5 py-2 transition-colors focus-within:border-[#4654D8]",
+            "relative flex min-h-11 items-end gap-1.5 rounded-lg bg-[#383A40] border border-transparent px-3.5 py-2 transition-colors focus-within:border-[#5865F2]",
             (replyingTo || files.length > 0 || toolbarVisible) &&
               "rounded-t-none border-t-0"
           )}
@@ -661,7 +661,7 @@ export function MessageInput({
                   className={cn(
                     "w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors",
                     i === mentionIndex
-                      ? "bg-[#4654D8]/20 text-white font-bold"
+                      ? "bg-[#5865F2]/20 text-white font-bold"
                       : "text-[#B5BAC1] hover:bg-white/5 hover:text-white"
                   )}
                   onMouseDown={e => {
@@ -747,7 +747,7 @@ export function MessageInput({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="p-1.5 text-[#4654D8] hover:text-[#4654D8] transition-colors disabled:opacity-40"
+                    className="p-1.5 text-[#5865F2] hover:text-[#5865F2] transition-colors disabled:opacity-40"
                     disabled={disabled || send.isPending || uploading}
                     onClick={doSend}
                   >

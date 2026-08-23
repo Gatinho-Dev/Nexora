@@ -88,7 +88,7 @@ export function EventsModal({
       <DialogContent className="sm:max-w-lg bg-[#313338] border-white/10 text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <CalendarClock className="h-5 w-5 text-[#4654D8]" />
+            <CalendarClock className="h-5 w-5 text-[#5865F2]" />
             Eventos de {details.server.name}
           </DialogTitle>
         </DialogHeader>
@@ -97,7 +97,7 @@ export function EventsModal({
           <Button
             size="sm"
             onClick={() => setCreating(true)}
-            className="w-fit bg-[#4654D8] hover:bg-[#3D49BF] font-semibold"
+            className="w-fit bg-[#5865F2] hover:bg-[#4752C4] font-semibold"
           >
             <Plus className="mr-1 h-4 w-4" /> Criar evento
           </Button>
@@ -181,7 +181,7 @@ export function EventsModal({
                 type="submit"
                 size="sm"
                 disabled={!name.trim() || !startsAt || createEvent.isPending}
-                className="bg-[#4654D8] hover:bg-[#3D49BF] font-semibold"
+                className="bg-[#5865F2] hover:bg-[#4752C4] font-semibold"
               >
                 {createEvent.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

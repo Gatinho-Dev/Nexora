@@ -12,6 +12,11 @@ type Props = {
   showStatus?: boolean;
   statusOverride?: string;
   className?: string;
+  /**
+   * Discord-style status dots carry a solid border that must match the
+   * surrounding surface color (creates the "notch" illusion).
+   */
+  statusBorderColor?: string;
 };
 
 const sizes = {
@@ -23,13 +28,15 @@ const sizes = {
   "2xl": "h-24 w-24 text-3xl sm:h-28 sm:w-28",
 };
 
+// Spec: base dot is 10x10px with a 3px surface-colored border; scale up for
+// larger avatars.
 const dotSizes = {
-  xs: "h-2 w-2 border",
-  sm: "h-2.5 w-2.5 border-2",
-  md: "h-3 w-3 border-2",
-  lg: "h-3.5 w-3.5 border-2",
-  xl: "h-5 w-5 border-4",
-  "2xl": "h-6 w-6 border-4",
+  xs: "h-2 w-2 border-2",
+  sm: "h-[10px] w-[10px] border-[3px]",
+  md: "h-[10px] w-[10px] border-[3px]",
+  lg: "h-3 w-3 border-[3px]",
+  xl: "h-4 w-4 border-[3px]",
+  "2xl": "h-5 w-5 border-4",
 };
 
 export function Avatar({
@@ -41,6 +48,7 @@ export function Avatar({
   showStatus = false,
   statusOverride,
   className,
+  statusBorderColor,
 }: Props) {
   const userId = user?.id ?? userIdProp;
   const name = user ? user.name : nameProp;
@@ -76,7 +84,7 @@ export function Avatar({
             dotSizes[size],
             statusColor(status)
           )}
-          style={{ borderColor: "hsl(var(--card))" }}
+          style={{ borderColor: statusBorderColor ?? "hsl(var(--card))" }}
         />
       )}
     </div>

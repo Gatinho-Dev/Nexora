@@ -20,7 +20,7 @@ export function MemberList({
 
   // Group members by top role, or by online/offline status
   const topRoleOf = (m: MemberDTO) => {
-    if (m.isOwner) return { name: "ADMIN", position: 999, color: "#4654D8" };
+    if (m.isOwner) return { name: "ADMIN", position: 999, color: "#5865F2" };
     if (m.roles.length > 0) {
       const sorted = [...m.roles].sort((a, b) => b.position - a.position);
       return sorted[0];
@@ -126,7 +126,7 @@ function MemberRow({
       }}
       className={cn(
         "flex min-h-11 w-full items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-[#35373C] cursor-pointer transition-colors group text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]",
-        dimmed && "opacity-60 hover:opacity-100"
+        dimmed && "opacity-40 saturate-[0.4] hover:opacity-100 hover:saturate-100"
       )}
       aria-label={`Ver perfil de ${member.nickname ?? member.user.name ?? member.user.username ?? "usuário"}`}
       title="Ver perfil"

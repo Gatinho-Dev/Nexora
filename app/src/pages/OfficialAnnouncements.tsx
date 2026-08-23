@@ -29,7 +29,7 @@ const kindPresentation: Record<
   GENERAL: {
     label: "Comunicado",
     icon: Megaphone,
-    className: "border-[#4654D8]/35 bg-[#4654D8]/10 text-[#aab3ff]",
+    className: "border-[#5865F2]/35 bg-[#5865F2]/10 text-[#aab3ff]",
   },
   UPDATE: {
     label: "Novidade",
@@ -65,7 +65,7 @@ function AnnouncementItem({ announcement }: { announcement: OfficialAnnouncement
     <article
       className={cn(
         "group relative grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-5 py-4 transition-colors hover:bg-white/[0.025] sm:grid-cols-[44px_minmax(0,1fr)] sm:px-7",
-        !announcement.isRead && "bg-[#4654D8]/[0.045]",
+        !announcement.isRead && "bg-[#5865F2]/[0.045]",
       )}
     >
       {!announcement.isRead && (
@@ -157,7 +157,7 @@ export function OfficialAnnouncements() {
               size="sm"
               variant="ghost"
               onClick={() => navigate("/nexora-admin")}
-              className="ml-auto h-8 border border-[#4654D8]/30 bg-[#4654D8]/10 px-2.5 text-[11px] font-semibold text-[#bac1ff] hover:bg-[#4654D8]/20 hover:text-white"
+              className="ml-auto h-8 border border-[#5865F2]/30 bg-[#5865F2]/10 px-2.5 text-[11px] font-semibold text-[#bac1ff] hover:bg-[#5865F2]/20 hover:text-white"
             >
               <ShieldAlert className="h-3.5 w-3.5" />
               Painel administrativo
@@ -166,7 +166,7 @@ export function OfficialAnnouncements() {
         </header>
 
         <div className="border-b border-white/[0.06] bg-[#1f2127] px-4 py-3 sm:px-7">
-          <div className="mx-auto flex max-w-4xl items-start gap-3 rounded-lg border border-[#4654D8]/25 bg-[#4654D8]/[0.07] px-3.5 py-3">
+          <div className="mx-auto flex max-w-4xl items-start gap-3 rounded-lg border border-[#5865F2]/25 bg-[#5865F2]/[0.07] px-3.5 py-3">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#8e9aff]" />
             <div className="min-w-0">
               <p className="text-xs font-semibold text-[#e8eaff]">Canal oficial e somente leitura</p>

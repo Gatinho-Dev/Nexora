@@ -80,7 +80,7 @@ export function GifPicker({
                 <button
                   key={g.id}
                   type="button"
-                  className="overflow-hidden rounded-md hover:ring-2 ring-[#4654D8] transition-all"
+                  className="overflow-hidden rounded-md hover:ring-2 ring-[#5865F2] transition-all"
                   title={g.desc}
                   onClick={() => {
                     if (!g.url) {

@@ -29,7 +29,7 @@ export function DMSidebar({
   return (
     <aside
       aria-label="Mensagens diretas"
-      className="flex h-full w-[272px] flex-col border-r border-black/20 bg-[#2B2D31] select-none"
+      className="flex h-full w-60 flex-col border-r border-black/20 bg-[#2B2D31] select-none"
     >
       <div className="flex h-12 items-center border-b border-white/5 px-3">
         <button
@@ -61,7 +61,7 @@ export function DMSidebar({
         >
           <div className="relative shrink-0">
             <NexoraAppIcon className="h-8 w-8" />
-            <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[#2B2D31] bg-[#4654D8] text-white">
+            <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[#2B2D31] bg-[#5865F2] text-white">
               <BadgeCheck className="h-2.5 w-2.5" strokeWidth={3} />
             </span>
           </div>
@@ -69,7 +69,7 @@ export function DMSidebar({
             <div className="flex items-center gap-1.5">
               <p className="truncate text-xs font-bold text-white">Nexora</p>
               <span
-                className="rounded-[3px] bg-[#4654D8] px-1 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-white"
+                className="rounded-[3px] bg-[#5865F2] px-1 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-white"
                 title="Conta oficial e verificada da Nexora"
               >
                 Oficial
@@ -93,11 +93,11 @@ export function DMSidebar({
             className={cn(
               "mb-2 flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors",
               location.pathname === "/nexora-admin"
-                ? "border-[#4654D8]/40 bg-[#4654D8]/15 text-white"
+                ? "border-[#5865F2]/40 bg-[#5865F2]/15 text-white"
                 : "border-transparent text-[#B5BAC1] hover:border-white/[0.06] hover:bg-[#35373C] hover:text-white"
             )}
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#4654D8]/15 text-[#9aa5ff]">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#5865F2]/15 text-[#9aa5ff]">
               <ShieldCheck className="h-4 w-4" />
             </span>
             <span className="min-w-0">
