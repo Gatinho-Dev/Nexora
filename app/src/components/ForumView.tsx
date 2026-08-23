@@ -131,7 +131,7 @@ export function ForumView({ channelId }: { channelId: number }) {
           <Button
             size="sm"
             onClick={() => setComposerOpen(o => !o)}
-            className="bg-[#4654D8] hover:bg-[#3D49BF] text-xs font-semibold"
+            className="bg-[#5865F2] hover:bg-[#4752C4] text-xs font-semibold"
           >
             <Plus className="mr-1 h-3.5 w-3.5" /> Novo post
           </Button>
@@ -178,7 +178,7 @@ export function ForumView({ channelId }: { channelId: number }) {
                   size="sm"
                   disabled={!title.trim() || send.isPending}
                   onClick={createPost}
-                  className="bg-[#4654D8] hover:bg-[#3D49BF] font-semibold"
+                  className="bg-[#5865F2] hover:bg-[#4752C4] font-semibold"
                 >
                   {send.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -210,7 +210,7 @@ export function ForumView({ channelId }: { channelId: number }) {
                   <button
                     key={post.id}
                     onClick={() => setOpenPostId(post.id)}
-                    className="group flex h-fit flex-col rounded-xl border border-white/[0.06] bg-[#2B2D31] p-3.5 text-left transition-all hover:border-[#4654D8]/50 hover:bg-[#2f3136]"
+                    className="group flex h-fit flex-col rounded-xl border border-white/[0.06] bg-[#2B2D31] p-3.5 text-left transition-all hover:border-[#5865F2]/50 hover:bg-[#2f3136]"
                   >
                     <div className="mb-2 flex items-center gap-2">
                       <button
@@ -349,7 +349,7 @@ export function ForumView({ channelId }: { channelId: number }) {
               <button
                 onClick={sendReply}
                 disabled={!canSend || !replyText.trim()}
-                className="text-[#4654D8] transition-colors hover:text-[#5b68ff] disabled:opacity-40"
+                className="text-[#5865F2] transition-colors hover:text-[#8ea1ff] disabled:opacity-40"
                 title="Enviar resposta"
               >
                 <SendHorizonal className="h-4 w-4" />

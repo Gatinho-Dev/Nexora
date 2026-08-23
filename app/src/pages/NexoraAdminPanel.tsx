@@ -99,7 +99,7 @@ function AdminNavButton({
       className={cn(
         "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
         active
-          ? "border-[#4654D8]/35 bg-[#4654D8]/15 text-white"
+          ? "border-[#5865F2]/35 bg-[#5865F2]/15 text-white"
           : "border-transparent text-[#aeb4be] hover:border-white/[0.06] hover:bg-white/[0.035] hover:text-white",
       )}
       aria-current={active ? "page" : undefined}
@@ -107,7 +107,7 @@ function AdminNavButton({
       <span
         className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-          active ? "bg-[#4654D8] text-white" : "bg-white/[0.045] text-[#9299a4]",
+          active ? "bg-[#5865F2] text-white" : "bg-white/[0.045] text-[#9299a4]",
         )}
       >
         <Icon className="h-4 w-4" />
@@ -180,7 +180,7 @@ function BroadcastsSection() {
               <h2 className="text-sm font-bold text-white">Novo comunicado global</h2>
               <p className="mt-0.5 text-[11px] text-[#8e959f]">Será entregue na conversa oficial de todas as contas.</p>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-[#4654D8]/30 bg-[#4654D8]/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#b7beff]">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-[#5865F2]/30 bg-[#5865F2]/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#b7beff]">
               <ShieldCheck className="h-3 w-3" />
               Remetente verificado
             </span>
@@ -262,7 +262,7 @@ function BroadcastsSection() {
               <Button
                 onClick={publish}
                 disabled={!canPublish || createAnnouncement.isPending}
-                className="bg-[#4654D8] px-4 text-white hover:bg-[#5664e6]"
+                className="bg-[#5865F2] px-4 text-white hover:bg-[#5664e6]"
               >
                 {createAnnouncement.isPending ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -280,7 +280,7 @@ function BroadcastsSection() {
           <div className="mt-4 rounded-xl border border-white/[0.07] bg-[#24262c] p-4 shadow-xl">
             <OfficialIdentity />
             <div className="ml-[52px] mt-2">
-              <span className="inline-flex items-center gap-1 rounded-md border border-[#4654D8]/30 bg-[#4654D8]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#b8c0ff]">
+              <span className="inline-flex items-center gap-1 rounded-md border border-[#5865F2]/30 bg-[#5865F2]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#b8c0ff]">
                 <KindIcon className="h-3 w-3" />
                 {selectedKind.label}
               </span>
@@ -387,7 +387,7 @@ function UserSearchResult({ user, selected, onSelect }: { user: PublicUser; sele
       className={cn(
         "flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors",
         selected
-          ? "border-[#4654D8]/40 bg-[#4654D8]/15"
+          ? "border-[#5865F2]/40 bg-[#5865F2]/15"
           : "border-transparent hover:border-white/[0.06] hover:bg-white/[0.035]",
       )}
     >
@@ -565,7 +565,7 @@ function BadgesSection({ canManageStaffBadges }: { canManageStaffBadges: boolean
                 checked={isStaff}
                 onChange={event => setIsStaff(event.target.checked)}
                 disabled={!canManageStaffBadges}
-                className="mt-0.5 h-4 w-4 accent-[#4654D8]"
+                className="mt-0.5 h-4 w-4 accent-[#5865F2]"
               />
               <span>
                 <span className="block text-[11px] font-semibold text-white">Emblema de equipe oficial</span>
@@ -582,7 +582,7 @@ function BadgesSection({ canManageStaffBadges }: { canManageStaffBadges: boolean
                 size="sm"
                 onClick={submitBadge}
                 disabled={!slug.trim() || !label.trim() || createBadge.isPending}
-                className="bg-[#4654D8] text-white hover:bg-[#5664e6]"
+                className="bg-[#5865F2] text-white hover:bg-[#5664e6]"
               >
                 {createBadge.isPending ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                 Criar
@@ -670,7 +670,7 @@ function BadgesSection({ canManageStaffBadges }: { canManageStaffBadges: boolean
                             className={cn(
                               "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                               isAssigned
-                                ? "border-[#4654D8]/35 bg-[#4654D8]/10"
+                                ? "border-[#5865F2]/35 bg-[#5865F2]/10"
                                 : "border-white/[0.06] bg-[#191b20] hover:border-white/[0.12] hover:bg-white/[0.035]",
                             )}
                           >
@@ -684,7 +684,7 @@ function BadgesSection({ canManageStaffBadges }: { canManageStaffBadges: boolean
                               </span>
                               <span className="block truncate text-[10px] text-[#7f8792]">{badge.description || badge.slug}</span>
                             </span>
-                            <span className={cn("flex h-5 w-5 items-center justify-center rounded-md border", isAssigned ? "border-[#7383FF] bg-[#4654D8] text-white" : "border-white/[0.15] text-transparent")}>
+                            <span className={cn("flex h-5 w-5 items-center justify-center rounded-md border", isAssigned ? "border-[#7383FF] bg-[#5865F2] text-white" : "border-white/[0.15] text-transparent")}>
                               <Check className="h-3 w-3" />
                             </span>
                           </button>
@@ -737,7 +737,7 @@ export function NexoraAdminPanel() {
           <p className="mt-2 text-xs leading-5 text-[#969da7]">
             Esta área exige uma conta autorizada pela configuração segura do servidor Nexora.
           </p>
-          <Button onClick={() => navigate("/channels/@me")} className="mt-5 bg-[#4654D8] text-white hover:bg-[#5664e6]">
+          <Button onClick={() => navigate("/channels/@me")} className="mt-5 bg-[#5865F2] text-white hover:bg-[#5664e6]">
             <ChevronLeft className="h-4 w-4" />
             Voltar ao aplicativo
           </Button>
@@ -784,17 +784,17 @@ export function NexoraAdminPanel() {
               {authority.data.authority === "owner" ? "Proprietário da plataforma" : "Administrador da plataforma"}
             </p>
           </div>
-          <div className="ml-auto flex items-center gap-1 rounded-lg border border-[#4654D8]/25 bg-[#4654D8]/10 px-2.5 py-1.5 text-[10px] font-semibold text-[#b7beff]">
+          <div className="ml-auto flex items-center gap-1 rounded-lg border border-[#5865F2]/25 bg-[#5865F2]/10 px-2.5 py-1.5 text-[10px] font-semibold text-[#b7beff]">
             <ShieldCheck className="h-3.5 w-3.5" />
             Acesso verificado
           </div>
         </header>
 
         <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-white/[0.055] bg-[#1f2126] px-3 py-2 lg:hidden" aria-label="Seções administrativas">
-          <Button size="sm" variant="ghost" onClick={() => setSection("broadcasts")} className={cn("text-xs", section === "broadcasts" ? "bg-[#4654D8]/15 text-white" : "text-[#9da4ae]")}>
+          <Button size="sm" variant="ghost" onClick={() => setSection("broadcasts")} className={cn("text-xs", section === "broadcasts" ? "bg-[#5865F2]/15 text-white" : "text-[#9da4ae]")}>
             <Megaphone className="h-3.5 w-3.5" />Comunicados
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setSection("badges")} className={cn("text-xs", section === "badges" ? "bg-[#4654D8]/15 text-white" : "text-[#9da4ae]")}>
+          <Button size="sm" variant="ghost" onClick={() => setSection("badges")} className={cn("text-xs", section === "badges" ? "bg-[#5865F2]/15 text-white" : "text-[#9da4ae]")}>
             <BadgeCheck className="h-3.5 w-3.5" />Emblemas
           </Button>
           <Button size="sm" variant="ghost" onClick={() => navigate("/channels/@me/official")} className="ml-auto text-xs text-[#9da4ae]">

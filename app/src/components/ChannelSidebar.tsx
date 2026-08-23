@@ -135,7 +135,7 @@ export function ChannelSidebar({
             onClick={() => setInviteOpen(true)}
             className="hover:bg-white/10 cursor-pointer"
           >
-            <UserPlus className="h-4 w-4 mr-2 text-[#4654D8]" /> Convidar
+            <UserPlus className="h-4 w-4 mr-2 text-[#5865F2]" /> Convidar
             pessoas
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -281,7 +281,7 @@ export function ChannelSidebar({
                                 className={cn(
                                   "h-4 w-4 shrink-0",
                                   isConnectedHere
-                                    ? "text-[#4654D8]"
+                                    ? "text-[#5865F2]"
                                     : "text-[#B5BAC1]"
                                 )}
                               />
@@ -290,7 +290,7 @@ export function ChannelSidebar({
                                 className={cn(
                                   "h-4 w-4 shrink-0",
                                   isConnectedHere
-                                    ? "text-[#4654D8]"
+                                    ? "text-[#5865F2]"
                                     : "text-[#B5BAC1]"
                                 )}
                               />
@@ -349,7 +349,7 @@ export function ChannelSidebar({
                                     <MicOff className="h-3 w-3 text-red-400" />
                                   )}
                                   {p.camera && (
-                                    <Video className="h-3 w-3 text-[#4654D8]" />
+                                    <Video className="h-3 w-3 text-[#5865F2]" />
                                   )}
                                   {p.screen && (
                                     <MonitorUp className="h-3 w-3 text-green-400" />
@@ -575,7 +575,7 @@ function CategoryActions({
           onKeyDown={e => {
             if (e.key === "Escape") setRenaming(false);
           }}
-          className="w-28 rounded bg-[#1E1F22] px-1.5 py-0.5 text-[11px] font-semibold uppercase text-white outline-none ring-1 ring-[#4654D8]"
+          className="w-28 rounded bg-[#1E1F22] px-1.5 py-0.5 text-[11px] font-semibold uppercase text-white outline-none ring-1 ring-[#5865F2]"
         />
       </form>
     );

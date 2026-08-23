@@ -135,7 +135,7 @@ export function MessageItem({
           onClick={() => onJumpTo(message.replyTo!.id)}
           aria-label="Ir para a mensagem respondida"
         >
-          <CornerUpLeft className="h-3.5 w-3.5 shrink-0 text-[#4654D8]" />
+          <CornerUpLeft className="h-3.5 w-3.5 shrink-0 text-[#5865F2]" />
           <span className="font-semibold text-white/90">
             @{message.replyTo.author.name ?? message.replyTo.author.username}
           </span>
@@ -195,7 +195,7 @@ export function MessageItem({
           {isEditing ? (
             <div className="mt-1">
               <textarea
-                className="w-full rounded-lg bg-[#2B2D31] border border-[#4654D8] px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-[#4654D8] resize-none"
+                className="w-full rounded-lg bg-[#2B2D31] border border-[#5865F2] px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-[#5865F2] resize-none"
                 rows={Math.min(6, editText.split("\n").length + 1)}
                 value={editText}
                 autoFocus
@@ -219,7 +219,7 @@ export function MessageItem({
                     <X className="h-3.5 w-3.5" /> Cancelar
                   </button>
                   <button
-                    className="flex items-center gap-1 text-[#4654D8] font-bold hover:underline"
+                    className="flex items-center gap-1 text-[#5865F2] font-bold hover:underline"
                     onClick={() =>
                       editText.trim() &&
                       edit.mutate({ messageId: message.id, content: editText })
@@ -267,7 +267,7 @@ export function MessageItem({
                         className={cn(
                           "flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs border transition-[color,background-color,border-color,box-shadow,transform,opacity] active:scale-95",
                           mine
-                            ? "bg-[#4654D8]/20 border-[#4654D8]/60 text-white font-bold"
+                            ? "bg-[#5865F2]/20 border-[#5865F2]/60 text-white font-bold"
                             : "bg-[#2B2D31] border-white/10 text-[#B5BAC1] hover:border-white/20 hover:text-white"
                         )}
                         title={r.userIds.length + " reação(ões)"}
@@ -365,7 +365,7 @@ export function MessageItem({
                     }}
                     className="hover:bg-white/10 cursor-pointer"
                   >
-                    <Pencil className="h-3.5 w-3.5 mr-2 text-[#4654D8]" />{" "}
+                    <Pencil className="h-3.5 w-3.5 mr-2 text-[#5865F2]" />{" "}
                     Editar
                   </DropdownMenuItem>
                 )}
@@ -397,7 +397,7 @@ export function MessageItem({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="rounded-lg bg-[#232428] border border-white/5 p-3 text-xs text-[#F2F3F5]">
-            <span className="font-bold text-[#4654D8]">
+            <span className="font-bold text-[#5865F2]">
               {message.author.name ?? message.author.username}:{" "}
             </span>
             {message.content.slice(0, 200)}
@@ -451,7 +451,7 @@ function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
     >
       <span className="text-xl">📄</span>
       <div className="min-w-0">
-        <div className="truncate font-semibold text-[#4654D8] hover:underline">
+        <div className="truncate font-semibold text-[#5865F2] hover:underline">
           {att.filename}
         </div>
         <div className="text-[11px] text-[#B5BAC1]">{formatSize(att.size)}</div>

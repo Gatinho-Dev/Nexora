@@ -20,7 +20,7 @@ export function DMRequests() {
     <div className="flex flex-1 flex-col items-center bg-[#313338] p-8 text-white select-none">
       <div className="w-full max-w-xl">
         <div className="mb-4 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#4654D8]/20 text-[#9aa5ff]">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#5865F2]/20 text-[#9aa5ff]">
             <Inbox className="h-5 w-5" />
           </span>
           <div>
@@ -74,7 +74,7 @@ export function DMRequests() {
                   <Button
                     size="sm"
                     onClick={() => navigate(`/channels/@me/${conv.id}`)}
-                    className="bg-[#4654D8] hover:bg-[#3D49BF] text-xs font-bold"
+                    className="bg-[#5865F2] hover:bg-[#4752C4] text-xs font-bold"
                   >
                     Aceitar
                   </Button>

@@ -301,7 +301,7 @@ export function VoiceView({
             <Button
               onClick={join}
               disabled={joining}
-              className="bg-[#4654D8] hover:bg-[#3D49BF] text-white"
+              className="bg-[#5865F2] hover:bg-[#4752C4] text-white"
             >
               {joining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Mudar para esta chamada
@@ -312,7 +312,7 @@ export function VoiceView({
             onClick={join}
             disabled={joining || !me}
             size="lg"
-            className="bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold px-6"
+            className="bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold px-6"
           >
             {joining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isStage ? "Entrar como audiência" : "Entrar na chamada de voz"}
@@ -388,7 +388,7 @@ export function VoiceView({
               size="sm"
               disabled={setSpeaker.isPending}
               onClick={joinAsSpeaker}
-              className="h-7 bg-[#4654D8] px-3 text-xs font-bold hover:bg-[#3D49BF]"
+              className="h-7 bg-[#5865F2] px-3 text-xs font-bold hover:bg-[#4752C4]"
             >
               <Mic className="mr-1 h-3.5 w-3.5" /> Subir ao palco
             </Button>
@@ -559,7 +559,7 @@ export function VoiceView({
                 size="icon"
                 className={cn(
                   "h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95",
-                  store.cameraOn && "bg-[#4654D8] text-white hover:bg-[#3D49BF]"
+                  store.cameraOn && "bg-[#5865F2] text-white hover:bg-[#4752C4]"
                 )}
                 onClick={() =>
                   voiceManager.toggleCamera().catch(e => toast.error(e.message))

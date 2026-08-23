@@ -70,7 +70,7 @@ export default function Login() {
             </Label>
             <Input
               id="username"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#4654D8]"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
               autoComplete="username"
               value={username}
               onChange={e => setUsername(e.target.value)}
@@ -87,7 +87,7 @@ export default function Login() {
             <Input
               id="password"
               type="password"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#4654D8]"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
               autoComplete="current-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -103,7 +103,7 @@ export default function Login() {
 
           <Button
             type="submit"
-            className="w-full bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold h-11 rounded-md"
+            className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold h-11 rounded-md"
             disabled={login.isPending}
           >
             {login.isPending ? "Entrando..." : "Entrar na Nexora"}

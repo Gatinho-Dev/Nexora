@@ -134,7 +134,7 @@ export function DMConversation() {
 
   const requestBanner = isRequest ? (
     <div className="flex flex-wrap items-center gap-2 border-b border-white/5 bg-[#2B2D31] px-4 py-2.5 text-xs select-none">
-      <UserPlus className="h-4 w-4 shrink-0 text-[#4654D8]" />
+      <UserPlus className="h-4 w-4 shrink-0 text-[#5865F2]" />
       <p className="min-w-0 flex-1 text-[#DBDEE1]">
         <span className="font-bold">
           {other?.name ?? other?.username ?? "Alguém"}

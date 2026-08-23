@@ -56,7 +56,7 @@ export function ServerChannel() {
           </p>
           <button
             onClick={() => navigate("/channels/@me")}
-            className="mt-4 rounded-md bg-[#4654D8] hover:bg-[#3D49BF] px-4 py-2.5 text-sm font-semibold text-white"
+            className="mt-4 rounded-md bg-[#5865F2] hover:bg-[#4752C4] px-4 py-2.5 text-sm font-semibold text-white"
           >
             Voltar ao início
           </button>
@@ -68,7 +68,7 @@ export function ServerChannel() {
   if (!details.data || !me) {
     return (
       <div className="flex flex-1 items-center justify-center bg-[#313338]">
-        <div className="h-10 w-10 rounded-xl bg-[#4654D8] flex items-center justify-center font-bold text-white animate-pulse">
+        <div className="h-10 w-10 rounded-xl bg-[#5865F2] flex items-center justify-center font-bold text-white animate-pulse">
           N
         </div>
       </div>

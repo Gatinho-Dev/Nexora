@@ -36,7 +36,7 @@ function notificationText(n: NotificationDTO): string {
 }
 
 function NotificationIcon({ type }: { type: string }) {
-  const cls = "h-4 w-4 shrink-0 text-[#4654D8]";
+  const cls = "h-4 w-4 shrink-0 text-[#5865F2]";
   switch (type) {
     case "mention":
       return <AtSign className={cls} />;
@@ -124,7 +124,7 @@ export function NotificationsBell({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs text-[#4654D8] hover:bg-white/5"
+              className="h-7 text-xs text-[#5865F2] hover:bg-white/5"
               onClick={() => markAllRead.mutate()}
               disabled={markAllRead.isPending}
             >
@@ -181,7 +181,7 @@ export function NotificationsBell({
                     <p className="text-xs font-semibold text-white">
                       {notificationText(n)}
                       {!n.isRead && (
-                        <span className="ml-2 inline-block h-2 w-2 rounded-full bg-[#4654D8] align-middle" />
+                        <span className="ml-2 inline-block h-2 w-2 rounded-full bg-[#5865F2] align-middle" />
                       )}
                     </p>
                     {n.content && (

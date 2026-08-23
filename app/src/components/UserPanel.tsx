@@ -123,12 +123,12 @@ export function UserPanel() {
         </div>
       )}
 
-      {/* User profile row */}
-      <div className="p-2 flex items-center justify-between gap-1.5">
+      {/* User profile row — fixed 52px height per design spec */}
+      <div className="h-[52px] px-2 py-1 flex items-center justify-between gap-1.5">
         <Popover open={profileOpen} onOpenChange={setProfileOpen}>
           <PopoverTrigger asChild>
             <button
-              className="flex min-h-11 items-center gap-2.5 flex-1 min-w-0 rounded-md hover:bg-[#35373C] p-1.5 transition-colors text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+              className="flex h-full min-h-0 items-center gap-2.5 flex-1 min-w-0 rounded-md hover:bg-[#35373C] p-1 transition-colors text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
               aria-label="Abrir meu perfil"
               aria-expanded={profileOpen}
               title="Meu perfil"
@@ -140,6 +140,7 @@ export function UserPanel() {
                 size="sm"
                 showStatus
                 statusOverride={currentStatus}
+                statusBorderColor="#232428"
               />
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-semibold text-white truncate">
@@ -171,7 +172,7 @@ export function UserPanel() {
                     decorative
                     className="absolute -right-5 -top-9 h-36 w-36 rotate-6 opacity-[0.13]"
                   />
-                  <div className="absolute bottom-0 left-0 h-1 w-2/3 bg-[#4654D8]" />
+                  <div className="absolute bottom-0 left-0 h-1 w-2/3 bg-[#5865F2]" />
                   <div className="absolute bottom-0 right-0 h-1 w-1/3 bg-[#7383FF]" />
                 </>
               )}
@@ -192,7 +193,7 @@ export function UserPanel() {
                 <button
                   type="button"
                   onClick={() => openSettings("profile")}
-                  className="mb-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#4654D8] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#3D49BF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                  className="mb-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#5865F2] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#4752C4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   Editar perfil
