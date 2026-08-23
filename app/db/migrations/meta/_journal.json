@@ -36,6 +36,20 @@
       "when": 1787507830815,
       "tag": "0004_account_safety_moderation",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1787516298489,
+      "tag": "0005_server_architecture",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1787516575139,
+      "tag": "0006_forced_tags_webhooks",
+      "breakpoints": true
     }
   ]
 }

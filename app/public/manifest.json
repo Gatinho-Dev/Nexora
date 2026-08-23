@@ -3,8 +3,10 @@
   "short_name": "Nexora",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
+  "categories": ["social", "communication"],
   "background_color": "#11131A",
-  "theme_color": "#4654D8",
+  "theme_color": "#1E1F22",
   "icons": [
     {
       "src": "/icon.svg",

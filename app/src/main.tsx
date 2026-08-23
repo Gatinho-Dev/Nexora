@@ -7,6 +7,13 @@ import { TRPCProvider } from "@/providers/trpc";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import App from "./App.tsx";
 
+// PWA: registra o service worker apenas em build de produção.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
+
 try {
   initTheme();
 } catch (e) {
@@ -39,3 +46,4 @@ try {
     </div>
   `;
 }
+

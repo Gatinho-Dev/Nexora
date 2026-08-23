@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Routes, Route } from "react-router";
+import { Routes, Route, useParams } from "react-router";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 
 const Home = lazy(() => import("./pages/Home"));
@@ -38,6 +38,11 @@ const NexoraAdminPanel = lazy(() =>
 const InvitePage = lazy(() =>
   import("./pages/InvitePage").then(module => ({ default: module.InvitePage }))
 );
+const ThreadViewPage = lazy(() =>
+  import("./components/ThreadView").then(module => ({
+    default: module.ThreadView,
+  }))
+);
 const LegalPage = lazy(() =>
   import("./pages/LegalPage").then(module => ({ default: module.LegalPage }))
 );
@@ -53,6 +58,15 @@ function PageLoader() {
         Carregando...
       </span>
     </main>
+  );
+}
+
+function ThreadViewWrapper() {
+  const params = useParams();
+  return (
+    <ThreadViewPage
+      serverId={Number(params.serverId)}
+    />
   );
 }
 
@@ -155,6 +169,14 @@ export default function App() {
           element={
             <Deferred>
               <NexoraAdminPanel />
+            </Deferred>
+          }
+        />
+        <Route
+          path="/channels/:serverId/:channelId/t/:threadId"
+          element={
+            <Deferred>
+              <ThreadViewWrapper />
             </Deferred>
           }
         />

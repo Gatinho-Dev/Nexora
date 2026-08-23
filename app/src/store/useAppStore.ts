@@ -25,6 +25,10 @@ type AppState = {
   // rail unread aggregation per server
   serverUnread: Record<number, number>;
   setServerUnread: (serverId: number, count: number) => void;
+  stageHandsByRoom: Record<string, number[]>;
+  setStageHands: (roomKey: string, userIds: number[]) => void;
+  quickSwitcherOpen: boolean;
+  setQuickSwitcherOpen: (v: boolean) => void;
   // presence & unread
   presence: Record<number, string>;
   unreadChannels: Record<number, number>;
@@ -111,6 +115,8 @@ export const useAppStore = create<AppState>(set => ({
   presence: {},
   sensitiveMediaPref: "warn",
   serverUnread: {},
+  stageHandsByRoom: {},
+  quickSwitcherOpen: false,
   unreadChannels: {},
   unreadConversations: {},
   voiceParticipants: {},
@@ -213,6 +219,13 @@ export const useAppStore = create<AppState>(set => ({
   setSensitiveMediaPref: pref => {
     set({ sensitiveMediaPref: pref });
   },
+  setQuickSwitcherOpen: v => set({ quickSwitcherOpen: v }),
+  setStageHands: (roomKey, userIds) =>
+    set(state =>
+      JSON.stringify(state.stageHandsByRoom[roomKey]) === JSON.stringify(userIds)
+        ? state
+        : { stageHandsByRoom: { ...state.stageHandsByRoom, [roomKey]: userIds } }
+    ),
   setServerUnread: (serverId, count) =>
     set(state =>
       state.serverUnread[serverId] === count

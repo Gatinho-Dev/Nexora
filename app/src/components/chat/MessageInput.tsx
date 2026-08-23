@@ -82,6 +82,7 @@ const TOOLBAR_ACTIONS: {
 type Props = {
   channelId?: number;
   conversationId?: number;
+  threadId?: number;
   placeholder: string;
   members?: { id: number; username: string | null; name: string | null }[];
   disabled?: boolean;
@@ -90,6 +91,7 @@ type Props = {
 export function MessageInput({
   channelId,
   conversationId,
+  threadId,
   placeholder,
   members = [],
   disabled,
@@ -280,6 +282,7 @@ export function MessageInput({
         conversationId,
         content,
         replyToId: replyingTo?.id,
+        threadId,
         attachmentIds: files.map(f => f.id),
         spoilerIds: spoilerIds.filter(id => files.some(f => f.id === id)),
       },

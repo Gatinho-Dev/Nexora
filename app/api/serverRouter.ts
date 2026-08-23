@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { createRouter, authedQuery } from "./middleware";
@@ -14,6 +14,7 @@ import {
 import type { MemberDTO, RoleDTO, ServerDetailsDTO } from "@contracts/types";
 import { rateLimit } from "./utils/rateLimit";
 import {
+  getEffectiveChannelPermissions,
   getMemberPermissions,
   requirePermission,
   toPublicUser,
@@ -200,14 +201,170 @@ export const serverRouter = createRouter({
         });
       }
 
+      // Hide channels the viewer cannot VIEW — no metadata leaks.
+      const visibleChannels = [];
+      for (const c of channelRows.sort((a, b) => a.position - b.position)) {
+        const eff =
+          myPermissions.has("ADMINISTRATOR") ||
+          myPermissions.has("MANAGE_CHANNELS")
+            ? new Set(["VIEW_CHANNEL"])
+            : await getEffectiveChannelPermissions(ctx.user.id, c);
+        if (eff?.has("VIEW_CHANNEL")) visibleChannels.push(c);
+      }
+
       return {
         server,
-        channels: channelRows.sort((a, b) => a.position - b.position),
+        channels: visibleChannels,
         categories: categoryRows.sort((a, b) => a.position - b.position),
         members,
         roles,
         myPermissions: [...myPermissions],
       };
+    }),
+
+  // ── Permission overrides ─────────────────────────────────────
+  listOverrides: authedQuery
+    .input(
+      z.object({
+        targetType: z.enum(["category", "channel"]),
+        targetId: z.number(),
+      })
+    )
+    .query(async ({ input }) =>
+      getDb()
+        .select()
+        .from(schema.permissionOverrides)
+        .where(
+          and(
+            eq(schema.permissionOverrides.targetType, input.targetType),
+            eq(schema.permissionOverrides.targetId, input.targetId),
+          ),
+        ),
+    ),
+
+  upsertOverride: authedQuery
+    .input(
+      z.object({
+        targetType: z.enum(["category", "channel"]),
+        targetId: z.number(),
+        roleId: z.number().nullable(),
+        allow: z.array(permissionEnum).max(20),
+        deny: z.array(permissionEnum).max(20),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      let serverId: number;
+      if (input.targetType === "channel") {
+        const ch = await getDb().query.channels.findFirst({
+          where: eq(schema.channels.id, input.targetId),
+        });
+        if (!ch) throw new TRPCError({ code: "NOT_FOUND", message: "Canal não encontrado." });
+        serverId = ch.serverId;
+        // Editing a channel's own overrides desynchronizes it from the category.
+        await getDb()
+          .update(schema.channels)
+          .set({ syncedWithCategory: false })
+          .where(eq(schema.channels.id, input.targetId));
+      } else {
+        const cat = await getDb().query.categories.findFirst({
+          where: eq(schema.categories.id, input.targetId),
+        });
+        if (!cat) throw new TRPCError({ code: "NOT_FOUND", message: "Categoria não encontrada." });
+        serverId = cat.serverId;
+      }
+      await requirePermission(ctx.user.id, serverId, "MANAGE_CHANNELS");
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(schema.permissionOverrides)
+        .where(
+          and(
+            eq(schema.permissionOverrides.targetType, input.targetType),
+            eq(schema.permissionOverrides.targetId, input.targetId),
+            input.roleId === null
+              ? sql`${schema.permissionOverrides.roleId} IS NULL`
+              : eq(schema.permissionOverrides.roleId, input.roleId),
+          ),
+        );
+      if (existing) {
+        await db
+          .update(schema.permissionOverrides)
+          .set({ allow: input.allow, deny: input.deny })
+          .where(eq(schema.permissionOverrides.id, existing.id));
+      } else {
+        await db.insert(schema.permissionOverrides).values({
+          targetType: input.targetType,
+          targetId: input.targetId,
+          roleId: input.roleId,
+          allow: input.allow,
+          deny: input.deny,
+        });
+      }
+      // Synced channels inherit instantly.
+      if (input.targetType === "category") {
+        await db
+          .update(schema.channels)
+          .set({})
+          .where(eq(schema.channels.categoryId, input.targetId));
+      }
+      await refreshServer(serverId);
+      return { ok: true };
+    }),
+
+  deleteOverride: authedQuery
+    .input(z.object({ overrideId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const [ov] = await db
+        .select()
+        .from(schema.permissionOverrides)
+        .where(eq(schema.permissionOverrides.id, input.overrideId));
+      if (!ov) return { ok: true };
+      let serverId: number | null = null;
+      if (ov.targetType === "channel") {
+        const ch = await db.query.channels.findFirst({
+          where: eq(schema.channels.id, ov.targetId),
+        });
+        serverId = ch?.serverId ?? null;
+      } else {
+        const cat = await db.query.categories.findFirst({
+          where: eq(schema.categories.id, ov.targetId),
+        });
+        serverId = cat?.serverId ?? null;
+      }
+      if (serverId === null) return { ok: true };
+      await requirePermission(ctx.user.id, serverId, "MANAGE_CHANNELS");
+      await db.delete(schema.permissionOverrides).where(eq(schema.permissionOverrides.id, ov.id));
+      await refreshServer(serverId);
+      return { ok: true };
+    }),
+
+  setChannelSynced: authedQuery
+    .input(z.object({ channelId: z.number(), synced: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const ch = await db.query.channels.findFirst({
+        where: eq(schema.channels.id, input.channelId),
+      });
+      if (!ch) throw new TRPCError({ code: "NOT_FOUND", message: "Canal não encontrado." });
+      await requirePermission(ctx.user.id, ch.serverId, "MANAGE_CHANNELS");
+      await db
+        .update(schema.channels)
+        .set({ syncedWithCategory: input.synced })
+        .where(eq(schema.channels.id, input.channelId));
+      if (input.synced) {
+        // Re-syncing wipes the channel's own overrides.
+        await db
+          .delete(schema.permissionOverrides)
+          .where(
+            and(
+              eq(schema.permissionOverrides.targetType, "channel"),
+              eq(schema.permissionOverrides.targetId, input.channelId),
+            ),
+          );
+      }
+      await refreshServer(ch.serverId);
+      return { ok: true };
     }),
 
   update: authedQuery
@@ -216,15 +373,39 @@ export const serverRouter = createRouter({
         serverId: z.number(),
         name: z.string().min(1).max(100).optional(),
         iconUrl: z.string().max(500).nullable().optional(),
+        bannerUrl: z.string().max(500).nullable().optional(),
+        vanitySlug: z.string().regex(/^[a-z0-9-]{3,32}$/).nullable().optional(),
         description: z.string().max(500).nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await requirePermission(ctx.user.id, input.serverId, "MANAGE_SERVER");
+      const db = getDb();
       const patch: Partial<typeof schema.servers.$inferInsert> = {};
       if (input.name !== undefined) patch.name = input.name;
       if (input.iconUrl !== undefined) patch.iconUrl = input.iconUrl;
+      if (input.bannerUrl !== undefined) patch.bannerUrl = input.bannerUrl;
       if (input.description !== undefined) patch.description = input.description;
+      if (input.vanitySlug !== undefined) {
+        if (input.vanitySlug === null) {
+          patch.vanitySlug = null;
+        } else {
+          // Vanity URLs are unique across the platform.
+          const taken = await db.query.servers.findFirst({
+            where: and(
+              eq(schema.servers.vanitySlug, input.vanitySlug),
+              sql`${schema.servers.id} <> ${input.serverId}`,
+            ),
+          });
+          if (taken) {
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Esse link personalizado já está em uso.",
+            });
+          }
+          patch.vanitySlug = input.vanitySlug;
+        }
+      }
       await getDb()
         .update(schema.servers)
         .set(patch)

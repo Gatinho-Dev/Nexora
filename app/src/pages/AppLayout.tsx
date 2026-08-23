@@ -14,6 +14,11 @@ import { Menu, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VoiceMediaRenderer } from "@/components/voice/VoiceMediaRenderer";
 import { PermanentBanScreen } from "@/components/safety/PermanentBanScreen";
+import { BottomNav, type MobileTab } from "@/components/mobile/BottomNav";
+import { YouSheet } from "@/components/mobile/YouSheet";
+import { NotificationsSheet } from "@/components/mobile/NotificationsSheet";
+import { ServersSheet } from "@/components/mobile/ServersSheet";
+import { useKeyboardOffset } from "@/hooks/useKeyboardOffset";
 import { TriangleAlert } from "lucide-react";
 import { NexoraAppIcon, NexoraLogo } from "@/components/NexoraBrand";
 
@@ -32,8 +37,17 @@ export function AppLayout() {
   const [activeProfileUserId, setActiveProfileUserId] = useState<number | null>(
     null
   );
-  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<MobileTab | null>(null);
+  useEffect(() => {
+    const open = () => setMobileTab("servers");
+    window.addEventListener("nexora:open-servers", open);
+    return () => window.removeEventListener("nexora:open-servers", open);
+  }, []);
+  const keyboardOffset = useKeyboardOffset(true);
+  const voiceChannelIdGlobal = useAppStore(st => st.voiceChannelId);
+  const voiceConversationIdGlobal = useAppStore(st => st.voiceConversationId);
+  const quickSwitcherOpen = useAppStore(st => st.quickSwitcherOpen);
 
   // Sync unread counters
   const unread = trpc.message.unread.useQuery(undefined, { enabled: !!user });
@@ -73,6 +87,8 @@ export function AppLayout() {
     );
   }
 
+  const inVoiceCall = voiceChannelIdGlobal !== null || voiceConversationIdGlobal !== null;
+
   // Server-side enforced ban — presentation only.
   if (safety.data?.safety.accountStatus === "permanently_banned") {
     return <PermanentBanScreen severeStrikes={safety.data.safety.severeStrikes} />;
@@ -81,6 +97,22 @@ export function AppLayout() {
   const inServer =
     location.pathname.startsWith("/channels/") &&
     !location.pathname.startsWith("/channels/@me");
+
+  function inferTab(pathname: string): MobileTab {
+    if (pathname.startsWith("/channels/@me")) return "home";
+    if (pathname.startsWith("/channels/")) return "servers";
+    return "home";
+  }
+
+  function handleMobileTab(tab: MobileTab) {
+    if (tab === "home") {
+      navigate("/channels/@me");
+      setMobileTab("home");
+      return;
+    }
+    // sheets toggle; navigating away closes overlays
+    setMobileTab(prev => (prev === tab ? null : tab));
+  }
 
   const handleOpenContextMenu = (
     e: React.MouseEvent,
@@ -112,7 +144,17 @@ export function AppLayout() {
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col",
+          !inVoiceCall && "pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0"
+        )}
+        style={
+          keyboardOffset > 0
+            ? ({ "--kb": `${keyboardOffset}px`, marginBottom: "var(--kb)" } as React.CSSProperties)
+            : undefined
+        }
+      >
         {safety.data?.safety.accountStatus === "suspended" && (
           <button
             onClick={() => navigate("/channels/@me")}
@@ -173,6 +215,17 @@ export function AppLayout() {
         />
       </div>
 
+      {/* Mobile navigation layer */}
+      {!inVoiceCall && (
+        <BottomNav
+          activeTab={mobileTab ?? inferTab(location.pathname)}
+          onTabChange={handleMobileTab}
+        />
+      )}
+      <YouSheet open={mobileTab === "you"} onClose={() => setMobileTab(null)} />
+      <NotificationsSheet open={mobileTab === "notifications"} onClose={() => setMobileTab(null)} />
+      <ServersSheet open={mobileTab === "servers"} onClose={() => setMobileTab(null)} />
+
       {/* Global Modals & Context Menus */}
       <ContextMenu
         menuState={contextMenu}
@@ -185,7 +238,7 @@ export function AppLayout() {
       />
       <QuickSwitcherModal
         open={quickSwitcherOpen}
-        onOpenChange={setQuickSwitcherOpen}
+        onOpenChange={v => useAppStore.getState().setQuickSwitcherOpen(v)}
       />
       <ShortcutsModal open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <VoiceMediaRenderer myUserId={user.id} />

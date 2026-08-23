@@ -36,6 +36,16 @@ const voiceRooms = new Map<string, Map<number, VoiceParticipant>>();
 const userVoiceRoom = new Map<number, string>();
 const voiceClientByUser = new Map<number, Client>();
 const voiceSessionByUser = new Map<number, string>();
+/** Raised hands per stage room: roomKey → Set<userId>. */
+const stageHands = new Map<string, Set<number>>();
+/** Max simultaneous video transmitters on a stage (camera or screen). */
+export const STAGE_MAX_TRANSMITTERS = 5;
+
+function userHandsKey(userId: number): string | undefined {
+  for (const key of stageHands.keys())
+    if (stageHands.get(key)?.has(userId)) return key;
+  return undefined;
+}
 
 function channelRoomKey(channelId: number) {
   return `c:${channelId}`;
@@ -242,6 +252,27 @@ async function broadcastVoiceParticipants(roomKey: string) {
   }
 }
 
+function broadcastStageHands(roomKey: string) {
+  const hands = [...(stageHands.get(roomKey) ?? [])];
+  if (roomKey.startsWith("c:")) {
+    const channelId = Number(roomKey.slice(2));
+    const room = voiceRooms.get(roomKey);
+    if (room) {
+      sendToUsers([...room.keys()], {
+        t: "stage:hands",
+        channelId,
+        userIds: hands,
+      });
+    }
+  }
+}
+
+async function countTransmitters(room: Map<number, VoiceParticipant>): Promise<number> {
+  let n = 0;
+  for (const p of room.values()) if (p.camera || p.screen) n++;
+  return n;
+}
+
 async function voiceJoin(
   client: Client,
   target: { channelId?: number; conversationId?: number }
@@ -354,6 +385,13 @@ async function voiceLeave(client: Client) {
   if (!roomKey) return;
   userVoiceRoom.delete(client.userId);
   voiceClientByUser.delete(client.userId);
+  {
+    const hands = userHandsKey(client.userId);
+    if (hands) {
+      stageHands.get(hands)?.delete(client.userId);
+      if (stageHands.get(hands)?.size === 0) stageHands.delete(hands);
+    }
+  }
   voiceSessionByUser.delete(client.userId);
   const room = voiceRooms.get(roomKey);
   if (room) {
@@ -399,6 +437,23 @@ async function voiceStateUpdate(
     statePatch.camera = false;
     statePatch.screen = false;
     if (statePatch.muted === false) delete statePatch.muted;
+  }
+  // Stage: hard cap of simultaneous transmitters.
+  if (
+    roomKey.startsWith("c:") &&
+    (statePatch.camera === true || statePatch.screen === true)
+  ) {
+    const channelRow = await getDb().query.channels.findFirst({
+      where: eq(schema.channels.id, Number(roomKey.slice(2))),
+    });
+    if (channelRow?.type === "STAGE") {
+      if (!room) return;
+      const transmitters = await countTransmitters(room);
+      if (transmitters >= STAGE_MAX_TRANSMITTERS) {
+        delete statePatch.camera;
+        delete statePatch.screen;
+      }
+    }
   }
   Object.assign(participant, statePatch);
   if (statePatch.deafened) participant.muted = true;
@@ -462,6 +517,27 @@ async function handleEvent(client: Client, event: WSClientEvent) {
     case "voice:state":
       await voiceStateUpdate(client, event);
       break;
+    case "stage:hand": {
+      const myRoom = userVoiceRoom.get(client.userId);
+      if (!myRoom?.startsWith("c:")) return;
+      const expected =
+        event.channelId != null ? channelRoomKey(event.channelId) : null;
+      if (expected !== myRoom) return;
+      // Only audience may raise hands.
+      const room = voiceRooms.get(myRoom);
+      if (!room) return;
+      const me = room.get(client.userId);
+      if (!me || me.speaker !== false) return;
+      let set = stageHands.get(myRoom);
+      if (!set) {
+        set = new Set();
+        stageHands.set(myRoom, set);
+      }
+      if (event.raised) set.add(client.userId);
+      else set.delete(client.userId);
+      broadcastStageHands(myRoom);
+      break;
+    }
     case "signal": {
       const myRoom = userVoiceRoom.get(client.userId);
       if (!myRoom) return;

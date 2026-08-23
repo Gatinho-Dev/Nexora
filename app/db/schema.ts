@@ -46,14 +46,20 @@ export const users = mysqlTable("users", {
 });
 
 // ── Servers ───────────────────────────────────────────────────
-export const servers = mysqlTable("servers", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 100 }).notNull(),
-  iconUrl: text("iconUrl"),
-  description: text("description"),
-  ownerId: bigint("ownerId", { mode: "number", unsigned: true }).notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+export const servers = mysqlTable(
+  "servers",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 100 }).notNull(),
+    iconUrl: text("iconUrl"),
+    bannerUrl: text("bannerUrl"),
+    description: text("description"),
+    vanitySlug: varchar("vanitySlug", { length: 32 }),
+    ownerId: bigint("ownerId", { mode: "number", unsigned: true }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({ vanityIdx: uniqueIndex("srv_vanity_uniq").on(table.vanitySlug) }),
+);
 
 export const serverMembers = mysqlTable(
   "server_members",
@@ -89,13 +95,37 @@ export const channels = mysqlTable(
     serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
     categoryId: bigint("categoryId", { mode: "number", unsigned: true }),
     name: varchar("name", { length: 64 }).notNull(),
-    type: mysqlEnum("type", ["TEXT", "VOICE", "ANNOUNCEMENT", "FORUM", "STAGE"])
+    topic: varchar("topic", { length: 500 }),
+    type: mysqlEnum(
+      "type",
+      ["TEXT", "VOICE", "ANNOUNCEMENT", "FORUM", "STAGE", "MEDIA"]
+    )
       .default("TEXT")
       .notNull(),
     position: int("position").default(0).notNull(),
+    syncedWithCategory: boolean("syncedWithCategory").default(true).notNull(),
+    tags: json("tags").$type<string[]>(),
+    forcedTags: boolean("forcedTags").default(false).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({ serverIdx: index("ch_server_idx").on(table.serverId) }),
+);
+
+// ── Channel/category permission overrides ─────────────────────
+export const permissionOverrides = mysqlTable(
+  "permission_overrides",
+  {
+    id: serial("id").primaryKey(),
+    targetType: mysqlEnum("targetType", ["category", "channel"]).notNull(),
+    targetId: bigint("targetId", { mode: "number", unsigned: true }).notNull(),
+    roleId: bigint("roleId", { mode: "number", unsigned: true }),
+    allow: json("allow").$type<string[]>().notNull(),
+    deny: json("deny").$type<string[]>().notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    targetIdx: index("po_target_idx").on(table.targetType, table.targetId),
+  }),
 );
 
 // ── Messages ──────────────────────────────────────────────────
@@ -108,6 +138,7 @@ export const messages = mysqlTable(
     authorId: bigint("authorId", { mode: "number", unsigned: true }).notNull(),
     content: text("content").notNull(),
     replyToId: bigint("replyToId", { mode: "number", unsigned: true }),
+    threadId: bigint("threadId", { mode: "number", unsigned: true }),
     editedAt: timestamp("editedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
@@ -459,6 +490,55 @@ export const serverEvents = mysqlTable(
   (table) => ({ serverIdx: index("se_server_idx").on(table.serverId) }),
 );
 
+// ── Webhooks (integrações externas) ───────────────────────────
+export const webhooks = mysqlTable(
+  "webhooks",
+  {
+    id: serial("id").primaryKey(),
+    channelId: bigint("channelId", { mode: "number", unsigned: true }).notNull(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    name: varchar("name", { length: 80 }).notNull(),
+    avatarUrl: varchar("avatarUrl", { length: 500 }),
+    /** sha256 of the secret token — raw token is never stored. */
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    createdById: bigint("createdById", { mode: "number", unsigned: true }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({ channelIdx: index("wh_channel_idx").on(table.channelId) }),
+);
+
+// ── Threads (sub-canais de texto) ─────────────────────────────
+export const threads = mysqlTable(
+  "threads",
+  {
+    id: serial("id").primaryKey(),
+    channelId: bigint("channelId", { mode: "number", unsigned: true }).notNull(),
+    name: varchar("name", { length: 100 }).notNull(),
+    createdById: bigint("createdById", { mode: "number", unsigned: true }).notNull(),
+    private: boolean("private").default(false).notNull(),
+    archivedAt: timestamp("archivedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({ channelIdx: index("th_channel_idx").on(table.channelId) }),
+);
+
+// ── Announcement channel follows ──────────────────────────────
+export const channelFollows = mysqlTable(
+  "channel_follows",
+  {
+    id: serial("id").primaryKey(),
+    sourceChannelId: bigint("sourceChannelId", { mode: "number", unsigned: true }).notNull(),
+    followerServerId: bigint("followerServerId", { mode: "number", unsigned: true }).notNull(),
+    targetChannelId: bigint("targetChannelId", { mode: "number", unsigned: true }).notNull(),
+    createdByUserId: bigint("createdByUserId", { mode: "number", unsigned: true }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    sourceIdx: index("cf_source_idx").on(table.sourceChannelId),
+    uniq: uniqueIndex("cf_source_target_uniq").on(table.sourceChannelId, table.targetChannelId),
+  }),
+);
+
 // ── Account safety & moderation ───────────────────────────────
 // Server-side source of truth for account standing. The frontend may display
 // this data but never decides punishments.
@@ -602,6 +682,10 @@ export type OfficialAnnouncementRead = typeof officialAnnouncementReads.$inferSe
 export type PlatformBadge = typeof platformBadges.$inferSelect;
 export type UserBadge = typeof userBadges.$inferSelect;
 export type AdminAuditLog = typeof adminAuditLog.$inferSelect;
+export type PermissionOverride = typeof permissionOverrides.$inferSelect;
+export type Thread = typeof threads.$inferSelect;
+export type ChannelFollow = typeof channelFollows.$inferSelect;
+export type Webhook = typeof webhooks.$inferSelect;
 export type AccountSafety = typeof accountSafety.$inferSelect;
 export type Violation = typeof violations.$inferSelect;
 export type MediaModeration = typeof mediaModeration.$inferSelect;

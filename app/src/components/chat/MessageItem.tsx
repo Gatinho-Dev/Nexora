@@ -1,6 +1,18 @@
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  IconChannelForum as IconThread,
+  IconChannelStage as IconMegaphone,
+} from "../icons/figmaChannelIcons";
+import { Input } from "@/components/ui/input";
 import type { MessageDTO } from "@contracts/types";
 import { Avatar } from "../Avatar";
 import { MessageContent } from "./MessageContent";
@@ -62,6 +74,8 @@ function formatFullDate(date: string | Date) {
 }
 
 type Props = {
+  channelType?: string;
+  canPublish?: boolean;
   message: MessageDTO;
   grouped: boolean;
   myId: number;
@@ -75,6 +89,8 @@ function MessageItemBase({
   grouped,
   myId,
   canManageMessages,
+  channelType,
+  canPublish,
   onJumpTo,
   onOpenProfile,
 }: Props) {
@@ -84,6 +100,34 @@ function MessageItemBase({
   const [editText, setEditText] = useState(message.content);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [emojiBarOpen, setEmojiBarOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onTouchStart = () => {
+    pressTimer.current = setTimeout(() => setSheetOpen(true), 480);
+  };
+  const onTouchEnd = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
+  const [threadDialog, setThreadDialog] = useState(false);
+  const utils = trpc.useUtils();
+  const createThread = trpc.threads.create.useMutation({
+    onSuccess: data => {
+      utils.threads.list.invalidate({ channelId: message.channelId ?? 0 });
+      setThreadDialog(false);
+      if (message.channelId)
+        window.open(
+          `${window.location.origin}/channels/${window.location.pathname.split("/")[2]}/${message.channelId}/t/${data.id}`,
+          "_self"
+        );
+    },
+    onError: e => toast.error(e.message),
+  });
+  const publishMsg = trpc.announce.publish.useMutation({
+    onSuccess: r =>
+      toast.success(`Publicado em ${r.published} servidor(es) seguidor(es).`),
+    onError: e => toast.error(e.message),
+  });
 
   const isMine = message.authorId === myId;
   const isEditing = editing?.id === message.id;
@@ -124,6 +168,16 @@ function MessageItemBase({
   return (
     <div
       id={`msg-${message.id}`}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchEnd}
+      onContextMenu={e => {
+        // Long-press nativo do mobile abre o mesmo menu de ações.
+        if (window.matchMedia("(hover: none)").matches) {
+          e.preventDefault();
+          setSheetOpen(true);
+        }
+      }}
       className={cn(
         "group relative px-4 hover:bg-white/[0.03] transition-colors rounded-lg",
         grouped ? "py-0.5" : "pt-3 pb-0.5 mt-1"
@@ -248,7 +302,16 @@ function MessageItemBase({
                 </div>
               )}
 
-              {/* Attachments */}
+              {!grouped && message.threadId != null && !message.replyToId && (
+            <a
+              href={`/channels/${window.location.pathname.split("/")[2]}/${message.channelId}/t/${message.threadId}`}
+              className="mb-1 ml-12 inline-flex items-center gap-1.5 rounded-lg bg-[#5865F2]/10 px-2 py-1 text-[11px] font-bold text-[#8ea1ff] hover:bg-[#5865F2]/20"
+            >
+              🧵 ver thread #{message.threadId}
+            </a>
+          )}
+
+          {/* Attachments */}
               {message.attachments.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-2">
                   {message.attachments.map(att => (
@@ -288,7 +351,7 @@ function MessageItemBase({
 
       {/* Floating Hover Action Toolbar */}
       {!isEditing && (
-        <div className="absolute -top-3.5 right-4 opacity-0 group-hover:opacity-100 transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-150 flex items-center gap-0.5 bg-sidebar border border-white/10 rounded-lg shadow-xl p-0.5 z-10 select-none">
+        <div className="msg-actions absolute -top-3.5 right-4 opacity-0 group-hover:opacity-100 transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-150 flex items-center gap-0.5 bg-sidebar border border-white/10 rounded-lg shadow-xl p-0.5 z-10 select-none">
           <TooltipProvider delayDuration={150}>
             {/* Quick Emoji Reaction button */}
             <div className="relative">
@@ -334,6 +397,36 @@ function MessageItemBase({
               </TooltipTrigger>
               <TooltipContent side="top">Responder</TooltipContent>
             </Tooltip>
+
+            {/* Create thread (text channels only, top-level msgs) */}
+            {channelType === "TEXT" && !message.threadId && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setThreadDialog(true)}
+                    className="p-1.5 rounded-md text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors"
+                  >
+                    <IconThread className="h-[18px] w-[18px]" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Criar thread</TooltipContent>
+              </Tooltip>
+            )}
+
+            {/* Publish (announcement channels) */}
+            {canPublish && channelType === "ANNOUNCEMENT" && !message.replyToId && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => publishMsg.mutate({ messageId: message.id })}
+                    className="p-1.5 rounded-md text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors"
+                  >
+                    <IconMegaphone className="h-[18px] w-[18px]" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Publicar nos seguidores</TooltipContent>
+              </Tooltip>
+            )}
 
             {/* More options dropdown */}
             <DropdownMenu>
@@ -389,6 +482,97 @@ function MessageItemBase({
       )}
 
       {/* Delete confirmation dialog */}
+      {/* Mobile long-press action sheet */}
+      {sheetOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setSheetOpen(false)}>
+          <div className="absolute inset-0 bg-black/60" />
+          <div
+            className="absolute inset-x-3 bottom-3 space-y-1 rounded-2xl border border-white/10 bg-panel p-2 shadow-2xl pb-[calc(env(safe-area-inset-bottom)+8px)] animate-in slide-in-from-bottom duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            {[
+              {
+                label: "Responder",
+                run: () => setReplyingTo(message),
+              },
+              {
+                label: "Reagir ❤️",
+                run: () => toggleReaction("❤️"),
+              },
+              ...(channelType === "TEXT" && !message.threadId
+                ? [
+                    {
+                      label: "Criar thread",
+                      run: () => setThreadDialog(true),
+                    },
+                  ]
+                : []),
+              ...(canPublish && channelType === "ANNOUNCEMENT"
+                ? [
+                    {
+                      label: "Publicar nos seguidores",
+                      run: () => publishMsg.mutate({ messageId: message.id }),
+                    },
+                  ]
+                : []),
+              {
+                label: "Copiar texto",
+                run: () => {
+                  navigator.clipboard.writeText(message.content).catch(() => {});
+                  toast.success("Texto copiado.");
+                },
+              },
+              ...(isMine
+                ? [
+                    {
+                      label: "Editar",
+                      run: () => setEditing(message),
+                    },
+                  ]
+                : []),
+              ...((isMine || canManageMessages)
+                ? [
+                    {
+                      label: "Excluir",
+                      danger: true,
+                      run: () => setConfirmDelete(true),
+                    },
+                  ]
+                : []),
+            ].map(item => (
+              <button
+                key={item.label}
+                onClick={() => {
+                  item.run();
+                  setSheetOpen(false);
+                }}
+                className={cn(
+                  "min-h-[44px] w-full rounded-lg px-4 text-left text-sm font-semibold transition-colors",
+                  (item as { danger?: boolean }).danger
+                    ? "text-red-400 hover:bg-red-500/10"
+                    : "text-bodyx hover:bg-white/5"
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <ThreadDialog
+        open={threadDialog}
+        onOpenChange={setThreadDialog}
+        pending={createThread.isPending}
+        onCreate={(n, priv) =>
+          createThread.mutate({
+            channelId: message.channelId!,
+            name: n,
+            private: priv,
+            seedMessageId: message.id,
+          })
+        }
+      />
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent className="bg-sidebar border-white/10 text-white">
           <AlertDialogHeader>
@@ -531,3 +715,60 @@ function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
 }
 
 export const MessageItem = memo(MessageItemBase);
+
+function ThreadDialog({
+  open,
+  onOpenChange,
+  onCreate,
+  pending,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onCreate: (name: string, priv: boolean) => void;
+  pending: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [priv, setPriv] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Nova thread</DialogTitle>
+        </DialogHeader>
+        <form
+          className="space-y-3"
+          onSubmit={e => {
+            e.preventDefault();
+            if (!name.trim()) return;
+            onCreate(name.trim(), priv);
+          }}
+        >
+          <Input
+            autoFocus
+            value={name}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+            placeholder="Nome da thread"
+            maxLength={100}
+          />
+          <label className="flex items-center gap-2 text-xs text-muted2">
+            <input
+              type="checkbox"
+              checked={priv}
+              onChange={e => setPriv(e.target.checked)}
+              className="accent-[#5865F2]"
+            />
+            Thread privada
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" size="sm" disabled={!name.trim() || pending}>
+              Criar
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -25,6 +25,7 @@ import {
 } from "./services/mediaModeration";
 import { isPlatformAdmin } from "./utils/platformAuth";
 import { assertCanInteract } from "./services/accountSafety";
+import { createHash } from "node:crypto";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -211,6 +212,63 @@ app.get("/api/rtc-config", c => {
     }
   }
   return c.json({ iceServers });
+});
+
+// ── Webhooks públicos (integrações externas) ──────────────────
+app.post("/api/webhooks/:id/:token", async c => {
+  const id = parseInt(c.req.param("id"));
+  const token = c.req.param("token");
+  if (!Number.isFinite(id) || !/^[a-f0-9]{48}$/.test(token)) {
+    return c.json({ error: "Webhook inválido." }, 400);
+  }
+  // Rate limit por webhook para evitar abuso.
+  try {
+    rateLimit(`webhook:${id}`, 20, 10_000);
+  } catch {
+    return c.json({ error: "Muitas requisições." }, 429);
+  }
+
+  const [wh] = [
+    await getDb().query.webhooks.findFirst({
+      where: eq(schema.webhooks.id, id),
+    }),
+  ];
+  if (!wh || wh.tokenHash !== createHash("sha256").update(token).digest("hex")) {
+    return c.json({ error: "Não autorizado." }, 401);
+  }
+
+  const body = (await c.req.parseBody().catch(() => null)) as unknown;
+  const payload = body as {
+    content?: unknown;
+    username?: unknown;
+    imageUrl?: unknown;
+  };
+  const content =
+    typeof payload?.content === "string" ? payload.content.trim().slice(0, 2000) : "";
+  const imageUrl =
+    typeof payload?.imageUrl === "string" && /^https?:\/\//.test(payload.imageUrl)
+      ? payload.imageUrl
+      : "";
+  if (!content && !imageUrl) {
+    return c.json({ error: "Mensagem vazia." }, 400);
+  }
+  const name =
+    typeof payload?.username === "string" && payload.username.trim()
+      ? payload.username.trim().slice(0, 80)
+      : wh.name;
+  void name;
+  const full = imageUrl ? `${content}${content ? "\n" : ""}${imageUrl}` : content;
+  const [{ id: messageId }] = await getDb()
+    .insert(schema.messages)
+    .values({
+      channelId: wh.channelId,
+      authorId: wh.createdById,
+      content: full,
+    })
+    .$returningId();
+  void messageId;
+
+  return c.json({ ok: true });
 });
 
 // ── KLIPY GIF proxy (server-side API key, never exposed) ──────
