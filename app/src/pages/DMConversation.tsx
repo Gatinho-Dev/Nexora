@@ -1,4 +1,4 @@
-import { useOutletContext, useParams } from "react-router";
+import { useNavigate, useOutletContext, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { DMSidebar } from "@/components/DMSidebar";
@@ -9,7 +9,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { Avatar } from "@/components/Avatar";
 import { voiceManager } from "@/lib/rtc";
 import { toast } from "sonner";
-import { Phone, Video } from "lucide-react";
+import { Phone, Video, UserPlus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { AppOutletContext } from "@/lib/appOutletContext";
 import {
@@ -21,6 +21,7 @@ import {
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 
 export function DMConversation() {
+  const navigate = useNavigate();
   const { onOpenProfile } = useOutletContext<AppOutletContext>();
   const params = useParams();
   const conversationId = Number(params.conversationId);
@@ -37,6 +38,15 @@ export function DMConversation() {
 
   const other = conversation.data?.otherUser;
   const inCall = voiceConversationId === conversationId;
+  const isRequest = conversation.data?.isRequest === true;
+  const utils = trpc.useUtils();
+  const deleteRequest = trpc.dm.delete.useMutation({
+    onSuccess: () => {
+      utils.dm.list.invalidate();
+      navigate("/channels/@me/requests");
+    },
+    onError: e => toast.error(e.message),
+  });
 
   const startCall = async (withCamera: boolean) => {
     if (!me) return;
@@ -122,6 +132,27 @@ export function DMConversation() {
     </div>
   );
 
+  const requestBanner = isRequest ? (
+    <div className="flex flex-wrap items-center gap-2 border-b border-white/5 bg-[#2B2D31] px-4 py-2.5 text-xs select-none">
+      <UserPlus className="h-4 w-4 shrink-0 text-[#4654D8]" />
+      <p className="min-w-0 flex-1 text-[#DBDEE1]">
+        <span className="font-bold">
+          {other?.name ?? other?.username ?? "Alguém"}
+        </span>{" "}
+        está fora da sua lista de amigos. Responda para aceitar a conversa.
+      </p>
+      <button
+        onClick={() =>
+          deleteRequest.mutate({ conversationId })
+        }
+        disabled={deleteRequest.isPending}
+        className="flex items-center gap-1.5 rounded-lg bg-red-500/10 px-3 py-1.5 font-semibold text-red-400 transition-colors hover:bg-red-500/20"
+      >
+        <Trash2 className="h-3.5 w-3.5" /> Excluir
+      </button>
+    </div>
+  ) : null;
+
   return (
     <div className="flex flex-1 min-h-0">
       <SidebarPortal>
@@ -157,7 +188,12 @@ export function DMConversation() {
             }))}
             myId={me.id}
             onOpenProfile={onOpenProfile}
-            header={header}
+            header={
+              <>
+                {header}
+                {requestBanner}
+              </>
+            }
           />
         )}
       </div>

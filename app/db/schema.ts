@@ -136,6 +136,7 @@ export const attachments = mysqlTable(
     filename: varchar("filename", { length: 255 }).notNull(),
     mimeType: varchar("mimeType", { length: 128 }).notNull(),
     size: int("size").notNull(),
+    spoiler: boolean("spoiler").default(false).notNull(),
   },
   (table) => ({ messageIdx: index("att_message_idx").on(table.messageId) }),
 );
@@ -412,6 +413,50 @@ export const adminAuditLog = mysqlTable(
     actorIdx: index("aal_actor_idx").on(table.actorUserId, table.id),
     targetIdx: index("aal_target_idx").on(table.targetUserId, table.id),
   }),
+);
+
+// ── Stage channels ────────────────────────────────────────────
+// Users authorized to speak in a STAGE channel. Everyone else joins as
+// audience and can listen but not transmit.
+export const stageSpeakers = mysqlTable(
+  "stage_speakers",
+  {
+    id: serial("id").primaryKey(),
+    channelId: bigint("channelId", { mode: "number", unsigned: true }).notNull(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    grantedByUserId: bigint("grantedByUserId", {
+      mode: "number",
+      unsigned: true,
+    }),
+    grantedAt: timestamp("grantedAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqIdx: uniqueIndex("ss_channel_user_idx").on(table.channelId, table.userId),
+    userIdx: index("ss_user_idx").on(table.userId),
+  }),
+);
+
+// ── Server events ─────────────────────────────────────────────
+export const serverEvents = mysqlTable(
+  "server_events",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    channelId: bigint("channelId", { mode: "number", unsigned: true }),
+    createdByUserId: bigint("createdByUserId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    description: text("description"),
+    startsAt: timestamp("startsAt").notNull(),
+    endsAt: timestamp("endsAt"),
+    status: mysqlEnum("status", ["SCHEDULED", "ACTIVE", "CANCELLED"])
+      .default("SCHEDULED")
+      .notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({ serverIdx: index("se_server_idx").on(table.serverId) }),
 );
 
 // ── Types ─────────────────────────────────────────────────────

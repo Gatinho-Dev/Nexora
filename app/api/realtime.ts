@@ -198,6 +198,31 @@ export function getVoiceParticipants(roomKey: string): VoiceParticipant[] {
   return [...(voiceRooms.get(roomKey)?.values() ?? [])];
 }
 
+/** Flip a user between stage speaker and audience while they are connected. */
+export async function setLiveStageSpeaker(
+  channelId: number,
+  userId: number,
+  speaker: boolean
+): Promise<boolean> {
+  const roomKey = channelRoomKey(channelId);
+  const room = voiceRooms.get(roomKey);
+  const participant = room?.get(userId);
+  if (!participant || !room) return false;
+  participant.speaker = speaker;
+  if (!speaker) {
+    participant.muted = true;
+    participant.camera = false;
+    participant.screen = false;
+  }
+  await broadcastVoiceParticipants(roomKey);
+  return true;
+}
+
+/** True when the given user currently sits in the voice room of the channel. */
+export function isUserInVoiceRoom(channelId: number, userId: number): boolean {
+  return !!voiceRooms.get(channelRoomKey(channelId))?.has(userId);
+}
+
 async function broadcastVoiceParticipants(roomKey: string) {
   const participants = getVoiceParticipants(roomKey);
   if (roomKey.startsWith("c:")) {
@@ -223,15 +248,20 @@ async function voiceJoin(
 ) {
   const db = getDb();
   let roomKey: string;
+  let channelType: string | null = null;
+  let channelServerId: number | null = null;
 
   if (target.channelId) {
     const channel = await db.query.channels.findFirst({
       where: eq(schema.channels.id, target.channelId),
     });
-    if (!channel || channel.type !== "VOICE") return;
+    if (!channel || (channel.type !== "VOICE" && channel.type !== "STAGE"))
+      return;
     const perms = await getMemberPermissions(client.userId, channel.serverId);
     if (!perms || !perms.has("CONNECT")) return;
     roomKey = channelRoomKey(target.channelId);
+    channelType = channel.type;
+    channelServerId = channel.serverId;
   } else if (target.conversationId) {
     const member = await db.query.conversationMembers.findFirst({
       where: and(
@@ -259,6 +289,28 @@ async function voiceJoin(
   });
   if (!user) return;
 
+  // Stage channels: only authorized speakers may transmit. Everyone else
+  // joins the room as audience.
+  let speaker = true;
+  if (channelType === "STAGE") {
+    const perms = await getMemberPermissions(client.userId, channelServerId!);
+    if (perms?.has("ADMINISTRATOR")) {
+      speaker = true;
+    } else {
+      const granted = await db
+        .select({ userId: schema.stageSpeakers.userId })
+        .from(schema.stageSpeakers)
+        .where(
+          and(
+            eq(schema.stageSpeakers.channelId, target.channelId!),
+            eq(schema.stageSpeakers.userId, client.userId)
+          )
+        )
+        .limit(1);
+      speaker = granted.length > 0;
+    }
+  }
+
   let room = voiceRooms.get(roomKey);
   if (!room) {
     room = new Map();
@@ -268,10 +320,11 @@ async function voiceJoin(
     userId: client.userId,
     name: user.name ?? user.username ?? "Usuário",
     avatar: user.avatar,
-    muted: false,
+    muted: !speaker,
     deafened: false,
     camera: false,
     screen: false,
+    speaker,
   });
   userVoiceRoom.set(client.userId, roomKey);
   voiceClientByUser.set(client.userId, client);
@@ -341,6 +394,12 @@ async function voiceStateUpdate(
   const room = voiceRooms.get(roomKey);
   const participant = room?.get(client.userId);
   if (!participant) return;
+  // Stage audience cannot transmit.
+  if (participant.speaker === false) {
+    statePatch.camera = false;
+    statePatch.screen = false;
+    if (statePatch.muted === false) delete statePatch.muted;
+  }
   Object.assign(participant, statePatch);
   if (statePatch.deafened) participant.muted = true;
   await broadcastVoiceParticipants(roomKey);

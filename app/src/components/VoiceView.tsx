@@ -152,12 +152,16 @@ export function VoiceView({
   conversationId,
   serverId,
   title,
+  isStage,
+  permissions = [],
   onOpenProfile,
 }: {
   channelId?: number;
   conversationId?: number;
   serverId?: number;
   title: string;
+  isStage?: boolean;
+  permissions?: string[];
   onOpenProfile?: (userId: number) => void;
 }) {
   const me = trpc.auth.me.useQuery().data;
@@ -175,6 +179,49 @@ export function VoiceView({
   const [joining, setJoining] = useState(false);
   const [focusUserId, setFocusUserId] = useState<number | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const setSpeaker = trpc.server.stageSetSpeaker.useMutation({
+    onError: e => toast.error(e.message),
+  });
+
+  // ── Stage state ─────────────────────────────────────────────
+  const myParticipant = participants.find(p => p.userId === me?.id);
+  const amAudience = isStage && !!myParticipant && myParticipant.speaker === false;
+  const canSelfPromote =
+    isStage && permissions.includes("SPEAK") || permissions.includes("ADMINISTRATOR");
+  const audience = isStage ? participants.filter(p => !p.speaker) : [];
+
+  const joinAsSpeaker = async () => {
+    if (!me) return;
+    try {
+      await setSpeaker.mutateAsync({
+        channelId: channelId!,
+        userId: me.id,
+        speaker: true,
+      });
+    } catch {
+      /* toast handled by mutation */
+    }
+  };
+
+  const stepDownFromStage = async () => {
+    if (!me) return;
+    try {
+      await voiceManager.toggleMute(); // force local mic off before stepping down
+    } catch {
+      /* ignore */
+    }
+    await voiceManager.leave();
+    try {
+      await setSpeaker.mutateAsync({
+        channelId: channelId!,
+        userId: me.id,
+        speaker: false,
+      });
+    } catch {
+      /* toast handled by mutation */
+    }
+  };
 
   const join = async () => {
     if (!me) return;
@@ -268,7 +315,7 @@ export function VoiceView({
             className="bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold px-6"
           >
             {joining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Entrar na chamada de voz
+            {isStage ? "Entrar como audiência" : "Entrar na chamada de voz"}
           </Button>
         )}
       </div>
@@ -327,6 +374,27 @@ export function VoiceView({
           Clique para liberar o áudio da chamada
         </button>
       )}
+      {/* Stage audience banner */}
+      {isStage && amAudience && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[#2b2c33]/60 px-4 py-2">
+          <p className="text-xs font-medium text-[#aeb1bd]">
+            Você está na <span className="font-bold text-white">audiência</span>
+            {canSelfPromote
+              ? " — você pode subir ao palco para falar."
+              : " — somente palestrantes autorizados podem falar."}
+          </p>
+          {canSelfPromote && (
+            <Button
+              size="sm"
+              disabled={setSpeaker.isPending}
+              onClick={joinAsSpeaker}
+              className="h-7 bg-[#4654D8] px-3 text-xs font-bold hover:bg-[#3D49BF]"
+            >
+              <Mic className="mr-1 h-3.5 w-3.5" /> Subir ao palco
+            </Button>
+          )}
+        </div>
+      )}
       {/* Live Screen Share Banner */}
       {sharingParticipant && (
         <div className="flex items-center justify-between bg-[#23A559]/15 border-b border-[#23A559]/30 px-4 py-2 text-xs font-bold text-[#23A559]">
@@ -354,13 +422,20 @@ export function VoiceView({
 
       {/* Video Grid */}
       <div className="flex-1 overflow-y-auto p-4 min-h-0">
+        {isStage && (
+          <div className="mx-auto mb-4 max-w-3xl">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[#949BA4]">
+              Palestrantes
+            </p>
+          </div>
+        )}
         <div
           className={cn(
-            "grid gap-4 h-full items-center",
+            "grid gap-4 items-center",
             focused
-              ? "grid-cols-1"
+              ? "h-full grid-cols-1"
               : visibleParticipants.length <= 1
-                ? "grid-cols-1 max-w-3xl mx-auto"
+                ? "mx-auto h-full max-w-3xl grid-cols-1"
                 : visibleParticipants.length <= 4
                   ? "grid-cols-1 sm:grid-cols-2"
                   : "grid-cols-2 lg:grid-cols-3"
@@ -369,6 +444,7 @@ export function VoiceView({
           {visibleParticipants.map(p => {
             if (!p) return null;
             const isLocal = p.userId === me?.id;
+            if (isStage && !p.speaker) return null;
             const stream = isLocal
               ? store.localVideo
               : (store.remoteStreams[p.userId] ?? null);
@@ -386,6 +462,35 @@ export function VoiceView({
             );
           })}
         </div>
+
+        {/* Stage audience strip */}
+        {isStage && audience.length > 0 && (
+          <div className="mx-auto mt-6 max-w-3xl">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[#949BA4]">
+              Audiência ({audience.length})
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {audience.map(p => (
+                <button
+                  key={p.userId}
+                  type="button"
+                  onClick={() => onOpenProfile?.(p.userId)}
+                  title={`Ver perfil de ${p.name}`}
+                  className="flex items-center gap-2 rounded-full bg-white/5 py-1 pl-1 pr-3 text-xs text-[#B5BAC1] transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <Avatar
+                    userId={p.userId}
+                    name={p.name}
+                    src={p.avatar}
+                    size="xs"
+                    showStatus={false}
+                  />
+                  <span className="max-w-32 truncate font-medium">{p.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Floating Interactive Call Controls Toolbar */}
@@ -399,6 +504,7 @@ export function VoiceView({
                 size="icon"
                 className="h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95"
                 onClick={() => voiceManager.toggleMute()}
+                disabled={amAudience}
                 aria-label={
                   store.muted ? "Ativar microfone" : "Silenciar microfone"
                 }
@@ -412,7 +518,11 @@ export function VoiceView({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">
-              {store.muted ? "Ativar microfone" : "Silenciar microfone"}
+              {amAudience
+                ? "Audiência não pode falar"
+                : store.muted
+                  ? "Ativar microfone"
+                  : "Silenciar microfone"}
             </TooltipContent>
           </Tooltip>
 
@@ -454,6 +564,7 @@ export function VoiceView({
                 onClick={() =>
                   voiceManager.toggleCamera().catch(e => toast.error(e.message))
                 }
+                disabled={amAudience}
                 aria-label={store.cameraOn ? "Desligar câmera" : "Ligar câmera"}
                 title={store.cameraOn ? "Desligar câmera" : "Ligar câmera"}
               >
@@ -488,6 +599,7 @@ export function VoiceView({
                         .startScreenShare()
                         .catch(e => toast.error(e.message))
                 }
+                disabled={amAudience}
                 aria-label={
                   store.screenOn
                     ? "Parar compartilhamento"
@@ -528,6 +640,27 @@ export function VoiceView({
               Configurações de voz e vídeo
             </TooltipContent>
           </Tooltip>
+
+          {/* Step down from stage (speakers only) */}
+          {isStage && !amAudience && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-12 w-12 rounded-2xl transition-transform active:scale-95"
+                  onClick={() => {
+                    void stepDownFromStage();
+                  }}
+                  aria-label="Descer do palco"
+                  title="Descer do palco"
+                >
+                  <MicOff className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Descer do palco</TooltipContent>
+            </Tooltip>
+          )}
 
           {/* Leave Call */}
           <Tooltip>

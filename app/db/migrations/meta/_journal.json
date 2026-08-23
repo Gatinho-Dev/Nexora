@@ -22,6 +22,13 @@
       "when": 1787445494846,
       "tag": "0002_grant_lobo_2033_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1787500567295,
+      "tag": "0003_stage_events_spoiler",
+      "breakpoints": true
     }
   ]
 }

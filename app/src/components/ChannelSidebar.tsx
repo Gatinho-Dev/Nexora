@@ -15,6 +15,10 @@ import {
   Video,
   MonitorUp,
   LogOut,
+  MessagesSquare,
+  Megaphone,
+  Pencil,
+  CalendarClock,
 } from "lucide-react";
 import type { ServerDetailsDTO } from "@contracts/types";
 import { useAppStore } from "@/store/useAppStore";
@@ -23,6 +27,7 @@ import { UserPanel } from "./UserPanel";
 import { CreateChannelModal } from "./modals/CreateChannelModal";
 import { InviteModal } from "./modals/InviteModal";
 import { ServerSettingsModal } from "./modals/ServerSettingsModal";
+import { EventsModal } from "./modals/EventsModal";
 import { voiceManager } from "@/lib/rtc";
 import { toast } from "sonner";
 import {
@@ -58,6 +63,7 @@ export function ChannelSidebar({
   const [createChannelOpen, setCreateChannelOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<
     Record<number, boolean>
   >({});
@@ -81,13 +87,13 @@ export function ChannelSidebar({
     categoryId: number | null,
     kind: "text" | "voice"
   ) =>
-    channels.filter(c =>
-      kind === "text"
-        ? c.type === "TEXT" &&
-          (categoryId === null || c.categoryId === categoryId)
-        : c.type === "VOICE" &&
-          (categoryId === null || c.categoryId === categoryId)
-    );
+    channels.filter(c => {
+      const isTextKind = c.type === "TEXT" || c.type === "FORUM";
+      const isVoiceKind = c.type === "VOICE" || c.type === "STAGE";
+      return kind === "text"
+        ? isTextKind && (categoryId === null || c.categoryId === categoryId)
+        : isVoiceKind && (categoryId === null || c.categoryId === categoryId);
+    });
 
   const joinVoice = async (channelId: number) => {
     if (!me) return;
@@ -131,6 +137,12 @@ export function ChannelSidebar({
           >
             <UserPlus className="h-4 w-4 mr-2 text-[#4654D8]" /> Convidar
             pessoas
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => setEventsOpen(true)}
+            className="hover:bg-white/10 cursor-pointer"
+          >
+            <CalendarClock className="h-4 w-4 mr-2 text-[#B5BAC1]" /> Eventos
           </DropdownMenuItem>
           {canManageServer && (
             <DropdownMenuItem
@@ -197,25 +209,29 @@ export function ChannelSidebar({
                   <span>{category.name}</span>
                 </button>
                 {canManageChannels && (
-                  <button
-                    className="text-[#B5BAC1] hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => setCreateChannelOpen(true)}
-                    title="Criar canal nesta categoria"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <CategoryActions categoryId={category.id} name={category.name} />
+                    <button
+                      className="text-[#B5BAC1] hover:text-white"
+                      onClick={() => setCreateChannelOpen(true)}
+                      title="Criar canal nesta categoria"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 )}
               </div>
 
               {/* Channels when expanded */}
               {!isCollapsed && (
                 <div className="space-y-0.5">
-                  {/* Text Channels */}
+                  {/* Text & Forum Channels */}
                   {textList.map(channel => (
                     <TextChannelRow
                       key={channel.id}
                       id={channel.id}
                       name={channel.name}
+                      type={channel.type}
                       active={activeChannelId === channel.id}
                       unread={(unreadChannels[channel.id] ?? 0) > 0}
                       unreadCount={unreadChannels[channel.id] ?? 0}
@@ -231,16 +247,23 @@ export function ChannelSidebar({
                     />
                   ))}
 
-                  {/* Voice Channels */}
+                  {/* Voice & Stage Channels */}
                   {voiceList.map(channel => {
                     const participants =
                       voiceParticipants[`c:${channel.id}`] ?? [];
                     const isConnectedHere = myVoiceChannelId === channel.id;
+                    const isStage = channel.type === "STAGE";
 
                     return (
                       <div key={channel.id} className="space-y-0.5">
                         <button
-                          onClick={() => joinVoice(channel.id)}
+                          onClick={() =>
+                            isStage
+                              ? navigate(
+                                  `/channels/${server.id}/${channel.id}`
+                                )
+                              : joinVoice(channel.id)
+                          }
                           onContextMenu={e => {
                             e.preventDefault();
                             onOpenContextMenu?.(e, "channel", channel.id);
@@ -253,14 +276,25 @@ export function ChannelSidebar({
                           )}
                         >
                           <div className="flex items-center gap-2 truncate">
-                            <Volume2
-                              className={cn(
-                                "h-4 w-4 shrink-0",
-                                isConnectedHere
-                                  ? "text-[#4654D8]"
-                                  : "text-[#B5BAC1]"
-                              )}
-                            />
+                            {isStage ? (
+                              <Megaphone
+                                className={cn(
+                                  "h-4 w-4 shrink-0",
+                                  isConnectedHere
+                                    ? "text-[#4654D8]"
+                                    : "text-[#B5BAC1]"
+                                )}
+                              />
+                            ) : (
+                              <Volume2
+                                className={cn(
+                                  "h-4 w-4 shrink-0",
+                                  isConnectedHere
+                                    ? "text-[#4654D8]"
+                                    : "text-[#B5BAC1]"
+                                )}
+                              />
+                            )}
                             <span className="truncate">{channel.name}</span>
                           </div>
                           <UserPlus
@@ -342,6 +376,7 @@ export function ChannelSidebar({
                 key={channel.id}
                 id={channel.id}
                 name={channel.name}
+                type={channel.type}
                 active={activeChannelId === channel.id}
                 unread={(unreadChannels[channel.id] ?? 0) > 0}
                 unreadCount={unreadChannels[channel.id] ?? 0}
@@ -376,6 +411,11 @@ export function ChannelSidebar({
         onOpenChange={setSettingsOpen}
         details={details}
       />
+      <EventsModal
+        open={eventsOpen}
+        onOpenChange={setEventsOpen}
+        details={details}
+      />
     </aside>
   );
 }
@@ -383,6 +423,7 @@ export function ChannelSidebar({
 function TextChannelRow({
   id,
   name,
+  type,
   active,
   unread,
   unreadCount,
@@ -393,6 +434,7 @@ function TextChannelRow({
 }: {
   id: number;
   name: string;
+  type: "TEXT" | "VOICE" | "ANNOUNCEMENT" | "FORUM" | "STAGE";
   active: boolean;
   unread: boolean;
   unreadCount: number;
@@ -421,12 +463,21 @@ function TextChannelRow({
       )}
     >
       <div className="flex items-center gap-2 truncate">
-        <Hash
-          className={cn(
-            "h-4 w-4 shrink-0",
-            active ? "text-[#DBDEE1]" : unread ? "text-white" : "text-[#80848E]"
-          )}
-        />
+        {type === "FORUM" ? (
+          <MessagesSquare
+            className={cn(
+              "h-4 w-4 shrink-0",
+              active ? "text-[#DBDEE1]" : unread ? "text-white" : "text-[#80848E]"
+            )}
+          />
+        ) : (
+          <Hash
+            className={cn(
+              "h-4 w-4 shrink-0",
+              active ? "text-[#DBDEE1]" : unread ? "text-white" : "text-[#80848E]"
+            )}
+          />
+        )}
         <span className="truncate">{name}</span>
       </div>
 
@@ -479,5 +530,84 @@ function TextChannelRow({
         )}
       </div>
     </div>
+  );
+}
+
+function CategoryActions({
+  categoryId,
+  name,
+}: {
+  categoryId: number;
+  name: string;
+}) {
+  const utils = trpc.useUtils();
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(name);
+
+  const updateCategory = trpc.server.updateCategory.useMutation({
+    onSuccess: () => {
+      utils.server.get.invalidate();
+      setRenaming(false);
+    },
+    onError: e => toast.error(e.message),
+  });
+  const deleteCategory = trpc.server.deleteCategory.useMutation({
+    onSuccess: () => utils.server.get.invalidate(),
+    onError: e => toast.error(e.message),
+  });
+
+  if (renaming) {
+    return (
+      <form
+        className="flex items-center gap-1"
+        onSubmit={e => {
+          e.preventDefault();
+          const trimmed = newName.trim();
+          if (!trimmed) return;
+          updateCategory.mutate({ categoryId, name: trimmed });
+        }}
+      >
+        <input
+          autoFocus
+          value={newName}
+          onChange={e => setNewName(e.target.value)}
+          onBlur={() => setRenaming(false)}
+          onKeyDown={e => {
+            if (e.key === "Escape") setRenaming(false);
+          }}
+          className="w-28 rounded bg-[#1E1F22] px-1.5 py-0.5 text-[11px] font-semibold uppercase text-white outline-none ring-1 ring-[#4654D8]"
+        />
+      </form>
+    );
+  }
+
+  return (
+    <>
+      <button
+        className="text-[#B5BAC1] hover:text-white"
+        title="Renomear categoria"
+        onClick={() => {
+          setNewName(name);
+          setRenaming(true);
+        }}
+      >
+        <Pencil className="h-3 w-3" />
+      </button>
+      <button
+        className="text-[#B5BAC1] hover:text-red-400"
+        title="Excluir categoria"
+        onClick={() => {
+          if (
+            confirm(
+              `Excluir a categoria "${name}"? Os canais dela ficarão sem categoria.`
+            )
+          ) {
+            deleteCategory.mutate({ categoryId });
+          }
+        }}
+      >
+        <Trash2 className="h-3 w-3" />
+      </button>
+    </>
   );
 }

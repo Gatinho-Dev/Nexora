@@ -6,9 +6,10 @@ import { ChannelSidebar } from "@/components/ChannelSidebar";
 import { MemberList } from "@/components/MemberList";
 import { ChatArea } from "@/components/chat/ChatArea";
 import { VoiceView } from "@/components/VoiceView";
+import { ForumView } from "@/components/ForumView";
 import { SidebarPortal } from "@/components/SidebarPortal";
 import { NotificationsBell } from "@/components/NotificationsBell";
-import { Hash, Volume2, Users, X } from "lucide-react";
+import { Hash, Volume2, Users, X, MessagesSquare, Megaphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AppOutletContext } from "@/lib/appOutletContext";
 
@@ -86,6 +87,10 @@ export function ServerChannel() {
       <div className="flex items-center gap-2 min-w-0">
         {channel.type === "VOICE" ? (
           <Volume2 className="h-5 w-5 text-emerald-400 shrink-0" />
+        ) : channel.type === "STAGE" ? (
+          <Megaphone className="h-5 w-5 text-emerald-400 shrink-0" />
+        ) : channel.type === "FORUM" ? (
+          <MessagesSquare className="h-5 w-5 text-[#80848E] shrink-0" />
         ) : (
           <Hash className="h-5 w-5 text-[#80848E] shrink-0" />
         )}
@@ -126,15 +131,22 @@ export function ServerChannel() {
           <div className="flex flex-1 items-center justify-center text-sm text-[#B5BAC1] bg-[#313338]">
             Selecione um canal para começar a conversar na Nexora.
           </div>
-        ) : channel.type === "VOICE" ? (
+        ) : channel.type === "VOICE" || channel.type === "STAGE" ? (
           <>
             {header}
             <VoiceView
               channelId={channel.id}
               serverId={serverId}
               title={channel.name}
+              isStage={channel.type === "STAGE"}
+              permissions={details.data.myPermissions}
               onOpenProfile={onOpenProfile}
             />
+          </>
+        ) : channel.type === "FORUM" ? (
+          <>
+            {header}
+            <ForumView channelId={channel.id} />
           </>
         ) : canRead ? (
           <ChatArea

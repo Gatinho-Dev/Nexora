@@ -21,6 +21,7 @@ export type AttachmentDTO = {
   mimeType: string;
   size: number;
   url: string;
+  spoiler: boolean;
 };
 
 export type ReactionDTO = {
@@ -120,6 +121,21 @@ export type ConversationDTO = {
     authorId: number;
   } | null;
   unreadCount: number;
+  /** True when the other person is not a friend and I never replied. */
+  isRequest?: boolean;
+};
+
+export type ServerEventDTO = {
+  id: number;
+  serverId: number;
+  channelId: number | null;
+  name: string;
+  description: string | null;
+  startsAt: string | Date;
+  endsAt: string | Date | null;
+  status: "SCHEDULED" | "ACTIVE" | "CANCELLED";
+  createdByUserId: number;
+  interestedUserIds?: number[];
 };
 
 export type NotificationDTO = {
@@ -194,6 +210,8 @@ export type VoiceParticipant = {
   deafened: boolean;
   camera: boolean;
   screen: boolean;
+  /** Stage channels only: false = audience (listen-only). */
+  speaker?: boolean;
 };
 
 // ── WebSocket protocol ────────────────────────────────────────
@@ -269,5 +287,6 @@ export type WSServerEvent =
   | { t: "notification"; notification: NotificationDTO }
   | { t: "official:announcement"; announcement: OfficialAnnouncementDTO }
   | { t: "server:refresh"; serverId: number }
+  | { t: "events:refresh"; serverId: number }
   | { t: "dm:refresh" }
   | { t: "friends:refresh" };

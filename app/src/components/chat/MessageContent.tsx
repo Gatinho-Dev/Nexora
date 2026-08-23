@@ -42,6 +42,12 @@ function splitCodeBlocks(content: string): Block[] {
 const TOKEN_RE =
   /(\*\*[^*]+\*\*|\*[^*\n]+\*|__[^_]+__|~~[^~]+~~|`[^`\n]+`|https?:\/\/[^\s<]+|@[a-zA-Z0-9_.-]+|@everyone)/g;
 
+const IMAGE_URL_RE = /^https?:\/\/[^\s<]+\.(gif|png|jpe?g|webp|avif)(\?[^\s<]*)?$/i;
+
+function isImageUrl(url: string): boolean {
+  return IMAGE_URL_RE.test(url);
+}
+
 function renderInline(text: string): ReactNode[] {
   const segments = text.split(TOKEN_RE);
   return segments.map((seg, i) => {
@@ -66,6 +72,17 @@ function renderInline(text: string): ReactNode[] {
       );
     }
     if (/^https?:\/\//.test(seg)) {
+      if (isImageUrl(seg)) {
+        return (
+          <img
+            key={i}
+            src={seg}
+            alt="Imagem anexada"
+            loading="lazy"
+            className="mt-1 max-w-md max-h-80 rounded-lg border border-white/10 object-contain"
+          />
+        );
+      }
       return (
         <a key={i} href={seg} target="_blank" rel="noopener noreferrer" className="chat-link">
           {seg}
