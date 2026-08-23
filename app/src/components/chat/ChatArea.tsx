@@ -3,9 +3,10 @@ import { trpc } from "@/providers/trpc";
 import { useAppStore, channelKey, dmKey } from "@/store/useAppStore";
 import { setCurrentView } from "@/lib/currentView";
 import { MessageItem } from "./MessageItem";
+import { IconHash } from "../icons/channelIcons";
 import { MessageInput } from "./MessageInput";
 import { useChatUIStore } from "@/store/useChatUIStore";
-import { Hash, Loader2, ArrowDown } from "lucide-react";
+import { Loader2, ArrowDown } from "lucide-react";
 
 type Props = {
   channelId?: number;
@@ -173,7 +174,7 @@ export function ChatArea({
           <div className="h-full flex flex-col items-center justify-center text-muted2 gap-3 p-8 select-none">
             <div className="h-16 w-16 rounded-full bg-[#41434A] flex items-center justify-center">
               <div className="h-full w-full rounded-full flex items-center justify-center text-bodyx">
-                <Hash className="h-8 w-8" />
+                <IconHash className="h-8 w-8 text-faint" />
               </div>
             </div>
             <div className="text-center">
@@ -195,7 +196,7 @@ export function ChatArea({
             {!hasMore && messages.length > 10 && (
               <div className="px-4 pt-8 pb-3 select-none">
                 <div className="h-12 w-12 rounded-2xl bg-[#5865F2]/20 text-[#5865F2] flex items-center justify-center mb-3">
-                  <Hash className="h-6 w-6" />
+                  <IconHash className="h-7 w-7 text-faint" />
                 </div>
                 <h2 className="font-bold text-xl text-foreground">
                   Bem-vindo ao começo deste canal!

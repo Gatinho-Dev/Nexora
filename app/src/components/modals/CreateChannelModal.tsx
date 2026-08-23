@@ -17,7 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Hash, Volume2, MessagesSquare, Megaphone } from "lucide-react";
+import {
+  IconHash,
+  IconVoice,
+  IconForum,
+  IconMegaphone,
+} from "../icons/channelIcons";
 import { toast } from "sonner";
 import type { CategoryDTO } from "@contracts/types";
 
@@ -80,7 +85,7 @@ export function CreateChannelModal({
             >
               <label className="flex items-center gap-3 rounded-md border border-border p-3 cursor-pointer hover:bg-hover">
                 <RadioGroupItem value="TEXT" id="t-text" />
-                <Hash className="h-5 w-5 text-muted-foreground" />
+                <IconHash className="h-5 w-5 text-muted-foreground" />
                 <div>
                   <div className="font-medium text-sm">Texto</div>
                   <div className="text-xs text-muted-foreground">
@@ -90,7 +95,7 @@ export function CreateChannelModal({
               </label>
               <label className="flex items-center gap-3 rounded-md border border-border p-3 cursor-pointer hover:bg-hover">
                 <RadioGroupItem value="VOICE" id="t-voice" />
-                <Volume2 className="h-5 w-5 text-muted-foreground" />
+                <IconVoice className="h-5 w-5 text-muted-foreground" />
                 <div>
                   <div className="font-medium text-sm">Voz</div>
                   <div className="text-xs text-muted-foreground">
@@ -100,7 +105,7 @@ export function CreateChannelModal({
               </label>
               <label className="flex items-center gap-3 rounded-md border border-border p-3 cursor-pointer hover:bg-hover">
                 <RadioGroupItem value="FORUM" id="t-forum" />
-                <MessagesSquare className="h-5 w-5 text-muted-foreground" />
+                <IconForum className="h-5 w-5 text-muted-foreground" />
                 <div>
                   <div className="font-medium text-sm">Fórum</div>
                   <div className="text-xs text-muted-foreground">
@@ -110,7 +115,7 @@ export function CreateChannelModal({
               </label>
               <label className="flex items-center gap-3 rounded-md border border-border p-3 cursor-pointer hover:bg-hover">
                 <RadioGroupItem value="STAGE" id="t-stage" />
-                <Megaphone className="h-5 w-5 text-muted-foreground" />
+                <IconMegaphone className="h-5 w-5 text-muted-foreground" />
                 <div>
                   <div className="font-medium text-sm">Palco</div>
                   <div className="text-xs text-muted-foreground">

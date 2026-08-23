@@ -5,8 +5,6 @@ import { cn } from "@/lib/utils";
 import {
   ChevronDown,
   ChevronRight,
-  Hash,
-  Volume2,
   Plus,
   UserPlus,
   Settings,
@@ -15,11 +13,15 @@ import {
   Video,
   MonitorUp,
   LogOut,
-  MessagesSquare,
-  Megaphone,
   Pencil,
   CalendarClock,
 } from "lucide-react";
+import {
+  IconHash,
+  IconVoice,
+  IconForum,
+  IconMegaphone,
+} from "./icons/channelIcons";
 import type { ServerDetailsDTO } from "@contracts/types";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar } from "./Avatar";
@@ -277,20 +279,20 @@ export function ChannelSidebar({
                         >
                           <div className="flex items-center gap-2 truncate">
                             {isStage ? (
-                              <Megaphone
+                              <IconMegaphone
                                 className={cn(
-                                  "h-4 w-4 shrink-0",
+                                  "h-[18px] w-[18px] shrink-0",
                                   isConnectedHere
-                                    ? "text-[#5865F2]"
+                                    ? "text-primary"
                                     : "text-muted2"
                                 )}
                               />
                             ) : (
-                              <Volume2
+                              <IconVoice
                                 className={cn(
-                                  "h-4 w-4 shrink-0",
+                                  "h-[18px] w-[18px] shrink-0",
                                   isConnectedHere
-                                    ? "text-[#5865F2]"
+                                    ? "text-primary"
                                     : "text-muted2"
                                 )}
                               />
@@ -464,16 +466,23 @@ function TextChannelRow({
     >
       <div className="flex items-center gap-2 truncate">
         {type === "FORUM" ? (
-          <MessagesSquare
+          <IconForum
             className={cn(
-              "h-4 w-4 shrink-0",
+              "h-[18px] w-[18px] shrink-0",
+              active ? "text-bodyx" : unread ? "text-foreground" : "text-faint"
+            )}
+          />
+        ) : type === "ANNOUNCEMENT" ? (
+          <IconMegaphone
+            className={cn(
+              "h-[18px] w-[18px] shrink-0",
               active ? "text-bodyx" : unread ? "text-foreground" : "text-faint"
             )}
           />
         ) : (
-          <Hash
+          <IconHash
             className={cn(
-              "h-4 w-4 shrink-0",
+              "h-[18px] w-[18px] shrink-0",
               active ? "text-bodyx" : unread ? "text-foreground" : "text-faint"
             )}
           />

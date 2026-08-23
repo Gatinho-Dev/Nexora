@@ -16,14 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  CalendarClock,
-  Loader2,
-  Plus,
-  X,
-  Megaphone,
-  Hash,
-} from "lucide-react";
+import { CalendarClock, Loader2, Plus, X } from "lucide-react";
+import { IconHash, IconMegaphone } from "../icons/channelIcons";
 import { toast } from "sonner";
 import type { ServerDetailsDTO } from "@contracts/types";
 
@@ -230,9 +224,9 @@ export function EventsModal({
                               ?.type === "VOICE" ||
                             details.channels.find(c => c.id === ev.channelId)
                               ?.type === "STAGE" ? (
-                              <Megaphone className="h-3 w-3" />
+                              <IconMegaphone className="h-3.5 w-3.5" />
                             ) : (
-                              <Hash className="h-3 w-3" />
+                              <IconHash className="h-3.5 w-3.5" />
                             )}
                             {chName}
                           </span>

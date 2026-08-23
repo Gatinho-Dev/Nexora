@@ -9,7 +9,13 @@ import { VoiceView } from "@/components/VoiceView";
 import { ForumView } from "@/components/ForumView";
 import { SidebarPortal } from "@/components/SidebarPortal";
 import { NotificationsBell } from "@/components/NotificationsBell";
-import { Hash, Volume2, Users, X, MessagesSquare, Megaphone } from "lucide-react";
+import { Users, X } from "lucide-react";
+import {
+  IconHash,
+  IconVoice,
+  IconForum,
+  IconMegaphone,
+} from "@/components/icons/channelIcons";
 import { cn } from "@/lib/utils";
 import type { AppOutletContext } from "@/lib/appOutletContext";
 
@@ -86,13 +92,15 @@ export function ServerChannel() {
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/20 px-4 bg-chat text-foreground select-none shadow-sm">
       <div className="flex items-center gap-2 min-w-0">
         {channel.type === "VOICE" ? (
-          <Volume2 className="h-5 w-5 text-emerald-400 shrink-0" />
+          <IconVoice className="h-5 w-5 text-emerald-400 shrink-0" />
         ) : channel.type === "STAGE" ? (
-          <Megaphone className="h-5 w-5 text-emerald-400 shrink-0" />
+          <IconMegaphone className="h-5 w-5 text-emerald-400 shrink-0" />
         ) : channel.type === "FORUM" ? (
-          <MessagesSquare className="h-5 w-5 text-faint shrink-0" />
+          <IconForum className="h-[22px] w-[22px] text-faint shrink-0" />
+        ) : channel.type === "ANNOUNCEMENT" ? (
+          <IconMegaphone className="h-[22px] w-[22px] text-faint shrink-0" />
         ) : (
-          <Hash className="h-5 w-5 text-faint shrink-0" />
+          <IconHash className="h-[22px] w-[22px] text-faint shrink-0" />
         )}
         <span className="font-bold text-sm truncate">{channel.name}</span>
       </div>
