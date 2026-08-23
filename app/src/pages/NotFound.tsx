@@ -15,7 +15,7 @@ export default function NotFound() {
           </p>
           <Button
             asChild
-            className="w-full min-h-11 bg-[#5865F2] hover:bg-[#4752C4]"
+            className="w-full min-h-11 bg-[#4654D8] hover:bg-[#3D49BF]"
           >
             <Link to="/">Voltar ao Nexora</Link>
           </Button>

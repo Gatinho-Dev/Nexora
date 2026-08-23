@@ -20,7 +20,7 @@ export function MemberList({
 
   // Group members by top role, or by online/offline status
   const topRoleOf = (m: MemberDTO) => {
-    if (m.isOwner) return { name: "ADMIN", position: 999, color: "#5865F2" };
+    if (m.isOwner) return { name: "ADMIN", position: 999, color: "#4654D8" };
     if (m.roles.length > 0) {
       const sorted = [...m.roles].sort((a, b) => b.position - a.position);
       return sorted[0];
@@ -117,16 +117,19 @@ function MemberRow({
       : undefined;
 
   return (
-    <div
+    <button
+      type="button"
       onClick={() => onOpenProfile?.(member.user.id)}
       onContextMenu={e => {
         e.preventDefault();
         onOpenContextMenu?.(e, "user", member.user.id);
       }}
       className={cn(
-        "flex min-h-11 items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-[#35373C] cursor-pointer transition-colors group",
+        "flex min-h-11 w-full items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-[#35373C] cursor-pointer transition-colors group text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]",
         dimmed && "opacity-60 hover:opacity-100"
       )}
+      aria-label={`Ver perfil de ${member.nickname ?? member.user.name ?? member.user.username ?? "usuário"}`}
+      title="Ver perfil"
     >
       <Avatar
         userId={member.user.id}
@@ -154,6 +157,6 @@ function MemberRow({
           </div>
         )}
       </div>
-    </div>
+    </button>
   );
 }

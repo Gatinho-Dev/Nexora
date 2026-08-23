@@ -43,6 +43,19 @@ function validateDatabaseUrl(value: string): string {
   return value;
 }
 
+function csv(name: string): string[] {
+  return (process.env[name] ?? "")
+    .split(",")
+    .map(value => value.trim())
+    .filter(Boolean);
+}
+
+function numericCsv(name: string): number[] {
+  return csv(name)
+    .map(value => Number(value))
+    .filter(value => Number.isSafeInteger(value) && value > 0);
+}
+
 const databaseUrl = validateDatabaseUrl(required("DATABASE_URL"));
 
 export const env = {
@@ -53,6 +66,11 @@ export const env = {
   kimiAuthUrl: required("KIMI_AUTH_URL"),
   kimiOpenUrl: required("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
+  ownerUnionIds: [process.env.OWNER_UNION_ID ?? "", ...csv("NEXORA_OWNER_UNION_IDS")]
+    .filter(Boolean),
+  ownerUserIds: numericCsv("NEXORA_OWNER_USER_IDS"),
+  adminUnionIds: csv("NEXORA_ADMIN_UNION_IDS"),
+  adminUserIds: numericCsv("NEXORA_ADMIN_USER_IDS"),
   appOrigin: process.env.APP_ORIGIN?.replace(/\/$/, "") ?? "",
   publicApiUrl: process.env.PUBLIC_API_URL?.replace(/\/$/, "") ?? "",
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? process.env.APP_ORIGIN ?? "")

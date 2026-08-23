@@ -42,6 +42,7 @@ import {
 export function ChannelSidebar({
   details,
   onOpenContextMenu,
+  onOpenProfile,
 }: {
   details: ServerDetailsDTO;
   onOpenContextMenu?: (
@@ -49,6 +50,7 @@ export function ChannelSidebar({
     type: "channel" | "server",
     id: number
   ) => void;
+  onOpenProfile?: (userId: number) => void;
 }) {
   const navigate = useNavigate();
   const params = useParams();
@@ -63,6 +65,7 @@ export function ChannelSidebar({
   const unreadChannels = useAppStore(s => s.unreadChannels);
   const voiceParticipants = useAppStore(s => s.voiceParticipants);
   const myVoiceChannelId = useAppStore(s => s.voiceChannelId);
+  const speakingByUser = useAppStore(s => s.speakingByUser);
   const me = trpc.auth.me.useQuery().data;
 
   const { server, channels, categories, myPermissions } = details;
@@ -126,7 +129,7 @@ export function ChannelSidebar({
             onClick={() => setInviteOpen(true)}
             className="hover:bg-white/10 cursor-pointer"
           >
-            <UserPlus className="h-4 w-4 mr-2 text-[#5865F2]" /> Convidar
+            <UserPlus className="h-4 w-4 mr-2 text-[#4654D8]" /> Convidar
             pessoas
           </DropdownMenuItem>
           {canManageServer && (
@@ -254,7 +257,7 @@ export function ChannelSidebar({
                               className={cn(
                                 "h-4 w-4 shrink-0",
                                 isConnectedHere
-                                  ? "text-[#5865F2]"
+                                  ? "text-[#4654D8]"
                                   : "text-[#B5BAC1]"
                               )}
                             />
@@ -273,18 +276,36 @@ export function ChannelSidebar({
                         {participants.length > 0 && (
                           <div className="ml-6 space-y-1 py-1">
                             {participants.map(p => (
-                              <div
+                              <button
+                                type="button"
                                 key={p.userId}
-                                className="flex items-center justify-between text-xs px-2 py-1 rounded hover:bg-white/5"
+                                onClick={() => onOpenProfile?.(p.userId)}
+                                className="flex w-full items-center justify-between text-xs px-2 py-1 rounded hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                                aria-label={`Ver perfil de ${p.name}`}
+                                title="Ver perfil"
                               >
                                 <div className="flex items-center gap-2 truncate">
-                                  <Avatar
-                                    userId={p.userId}
-                                    name={p.name}
-                                    src={p.avatar}
-                                    size="xs"
-                                    showStatus={false}
-                                  />
+                                  <span
+                                    className={cn(
+                                      "rounded-full transition-[box-shadow] duration-150",
+                                      speakingByUser[p.userId] &&
+                                        !p.muted &&
+                                        "voice-avatar-speaking"
+                                    )}
+                                    aria-label={
+                                      speakingByUser[p.userId] && !p.muted
+                                        ? `${p.name} está falando`
+                                        : undefined
+                                    }
+                                  >
+                                    <Avatar
+                                      userId={p.userId}
+                                      name={p.name}
+                                      src={p.avatar}
+                                      size="xs"
+                                      showStatus={false}
+                                    />
+                                  </span>
                                   <span className="truncate text-white/90 font-medium">
                                     {p.name}
                                   </span>
@@ -294,13 +315,13 @@ export function ChannelSidebar({
                                     <MicOff className="h-3 w-3 text-red-400" />
                                   )}
                                   {p.camera && (
-                                    <Video className="h-3 w-3 text-[#5865F2]" />
+                                    <Video className="h-3 w-3 text-[#4654D8]" />
                                   )}
                                   {p.screen && (
                                     <MonitorUp className="h-3 w-3 text-green-400" />
                                   )}
                                 </div>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         )}

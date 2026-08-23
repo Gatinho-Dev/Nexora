@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#313338" />
+    <meta name="theme-color" content="#11131A" />
     <meta
       name="description"
       content="Nexora - plataforma de comunicação moderna em tempo real com servidores, canais de texto, voz e compartilhamento de tela."
@@ -13,7 +13,7 @@
     <title>Nexora - Converse em tempo real</title>
   </head>
   <body
-    class="bg-[#313338] text-[#F2F3F5] antialiased selection:bg-[#5865F2]/30 selection:text-white"
+    class="bg-[#313338] text-[#F2F3F5] antialiased selection:bg-[#4654D8]/30 selection:text-white"
     style="background: #313338; color: #f2f3f5"
   >
     <div id="root" style="height: 100dvh">
@@ -22,22 +22,14 @@
         style="height: 100%"
         aria-busy="true"
       >
-        <div
+        <img
           class="animate-pulse"
-          style="
-            width: 56px;
-            height: 56px;
-            border-radius: 16px;
-            background: #5865f2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 16px;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-          "
-        >
-          <span style="font-size: 20px; font-weight: 900; color: white">N</span>
-        </div>
+          src="/icon.svg"
+          alt="Nexora"
+          width="56"
+          height="56"
+          style="width: 56px; height: 56px; margin-bottom: 16px"
+        />
         <p class="text-[#B5BAC1] text-sm" role="status">Carregando Nexora...</p>
         <style>
           @keyframes pulse {

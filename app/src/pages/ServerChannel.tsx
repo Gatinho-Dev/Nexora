@@ -10,21 +10,13 @@ import { SidebarPortal } from "@/components/SidebarPortal";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { Hash, Volume2, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-type OutletContextType = {
-  onOpenContextMenu: (
-    e: React.MouseEvent,
-    type: "user" | "channel" | "server",
-    id: number
-  ) => void;
-  onOpenProfile: (userId: number) => void;
-};
+import type { AppOutletContext } from "@/lib/appOutletContext";
 
 export function ServerChannel() {
   const params = useParams();
   const navigate = useNavigate();
   const { onOpenContextMenu, onOpenProfile } =
-    useOutletContext<OutletContextType>();
+    useOutletContext<AppOutletContext>();
   const serverId = Number(params.serverId);
   const channelIdParam = params.channelId ?? "first";
   const me = trpc.auth.me.useQuery().data;
@@ -63,7 +55,7 @@ export function ServerChannel() {
           </p>
           <button
             onClick={() => navigate("/channels/@me")}
-            className="mt-4 rounded-md bg-[#5865F2] hover:bg-[#4752C4] px-4 py-2.5 text-sm font-semibold text-white"
+            className="mt-4 rounded-md bg-[#4654D8] hover:bg-[#3D49BF] px-4 py-2.5 text-sm font-semibold text-white"
           >
             Voltar ao início
           </button>
@@ -75,7 +67,7 @@ export function ServerChannel() {
   if (!details.data || !me) {
     return (
       <div className="flex flex-1 items-center justify-center bg-[#313338]">
-        <div className="h-10 w-10 rounded-xl bg-[#5865F2] flex items-center justify-center font-bold text-white animate-pulse">
+        <div className="h-10 w-10 rounded-xl bg-[#4654D8] flex items-center justify-center font-bold text-white animate-pulse">
           N
         </div>
       </div>
@@ -101,7 +93,7 @@ export function ServerChannel() {
       </div>
       <div className="flex items-center gap-1.5">
         <div className="hidden md:block">
-          <NotificationsBell />
+          <NotificationsBell onOpenProfile={onOpenProfile} />
         </div>
         {channel.type === "TEXT" && (
           <button
@@ -125,6 +117,7 @@ export function ServerChannel() {
         <ChannelSidebar
           details={details.data}
           onOpenContextMenu={onOpenContextMenu}
+          onOpenProfile={onOpenProfile}
         />
       </SidebarPortal>
 
@@ -140,6 +133,7 @@ export function ServerChannel() {
               channelId={channel.id}
               serverId={serverId}
               title={channel.name}
+              onOpenProfile={onOpenProfile}
             />
           </>
         ) : canRead ? (
@@ -153,6 +147,7 @@ export function ServerChannel() {
             }))}
             myId={me.id}
             canManageMessages={canManageMessages}
+            onOpenProfile={onOpenProfile}
             header={header}
           />
         ) : (

@@ -12,6 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { NexoraAppIcon } from "./NexoraBrand";
 
 export function ServerRail({
   onOpenContextMenu,
@@ -48,9 +49,7 @@ export function ServerRail({
           onClick={() => navigate("/channels/@me")}
           badge={dmUnread}
         >
-          <div className="h-6 w-6 flex items-center justify-center font-black text-xl tracking-tighter text-white">
-            N
-          </div>
+          <NexoraAppIcon className="h-full w-full" decorative />
         </RailButton>
 
         <div className="w-8 h-[2px] rounded-full bg-white/10 my-1" />
@@ -153,12 +152,12 @@ function RailButton({
             className={cn(
               "relative h-12 w-12 rounded-[24px] flex items-center justify-center transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200 overflow-hidden active:scale-95 shadow-sm",
               active
-                ? "rounded-[16px] bg-[#5865F2] text-white"
+                ? "rounded-[16px] bg-[#4654D8] text-white"
                 : actionType === "add"
                   ? "bg-[#313338] text-[#23A559] hover:bg-[#23A559] hover:text-white hover:rounded-[16px]"
                   : actionType === "explore"
                     ? "bg-[#313338] text-[#23A559] hover:bg-[#23A559] hover:text-white hover:rounded-[16px]"
-                    : "bg-[#313338] text-foreground hover:bg-[#5865F2] hover:text-white hover:rounded-[16px]"
+                    : "bg-[#313338] text-foreground hover:bg-[#4654D8] hover:text-white hover:rounded-[16px]"
             )}
           >
             {children}

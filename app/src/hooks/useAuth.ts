@@ -2,6 +2,8 @@ import { trpc } from "@/providers/trpc";
 import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { LOGIN_PATH } from "@/const";
+import { voiceManager } from "@/lib/rtc";
+import { realtime } from "@/lib/ws";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -34,7 +36,11 @@ export function useAuth(options?: UseAuthOptions) {
     },
   });
 
-  const logout = useCallback(() => logoutMutation.mutate(), [logoutMutation]);
+  const logout = useCallback(() => {
+    void voiceManager.leave();
+    realtime.disconnect();
+    logoutMutation.mutate();
+  }, [logoutMutation]);
 
   useEffect(() => {
     if (redirectOnUnauthenticated && !isLoading && !user) {
@@ -57,6 +63,6 @@ export function useAuth(options?: UseAuthOptions) {
       logout,
       refresh: refetch,
     }),
-    [user, isAuthLoading, logoutMutation.isPending, error, logout, refetch],
+    [user, isAuthLoading, logoutMutation.isPending, error, logout, refetch]
   );
 }

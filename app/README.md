@@ -36,7 +36,7 @@ O build gera:
 - `dist/public`: frontend estático;
 - `dist/boot.js`: servidor Node completo, incluindo API e WebSocket.
 
-O processo lê `PORT` do provedor e escuta em `0.0.0.0`. O endpoint de saúde é `/api/health`.
+O processo executa as migrations versionadas, lê `PORT` do provedor e escuta em `0.0.0.0`. O endpoint de saúde é `/api/health`.
 
 ## Variáveis de ambiente
 
@@ -59,6 +59,10 @@ VITE_WS_URL=wss://api.seu-dominio.example
 
 No backend, `APP_ORIGIN` deve apontar para o frontend, `PUBLIC_API_URL` para o backend e `ALLOWED_ORIGINS` deve listar os frontends permitidos, separados por vírgula.
 
+### WebRTC, STUN e TURN
+
+O Nexora usa STUN público como fallback, mas chamadas em produção precisam de TURN para redes corporativas, CGNAT e firewalls restritivos. A opção recomendada é configurar `ICE_SERVERS` no backend com o JSON fornecido pelo seu serviço TURN. Também são aceitas no build do frontend `VITE_STUN_URL`, `VITE_TURN_URL`, `VITE_TURN_USERNAME` e `VITE_TURN_CREDENTIAL`; não grave credenciais reais no repositório. Para diagnóstico temporário, use `VITE_VOICE_DEBUG=true`.
+
 ## Render
 
 O arquivo `render.yaml` cria o serviço web completo com `rootDir: app`. Como ele está dentro da pasta da aplicação, selecione `app/render.yaml` no campo **Blueprint Path** do Render. Para configuração manual, mantenha `Root Directory = app`:
@@ -71,7 +75,7 @@ Health Check Path: /api/health
 
 Cadastre as variáveis do backend no painel e, após receber a URL pública, preencha `APP_ORIGIN`, `PUBLIC_API_URL` e `ALLOWED_ORIGINS` com essa URL. O `DATABASE_URL` precisa apontar para um MySQL gerenciado acessível pelo Render; `localhost`/`127.0.0.1` apontam para o próprio contêiner e nunca para o computador local. Não envie o seu `.env` de desenvolvimento como Secret File.
 
-O comando `start` aplica as migrations com `NODE_ENV=production` antes de iniciar o servidor. Isso funciona também no plano gratuito do Render, que não oferece **Pre-Deploy Command**. Configure apenas `Start Command = npm run start`.
+As migrations são empacotadas em `dist/migrations` e aplicadas pelo próprio `npm run start` antes de abrir a porta. Isso funciona também na instância gratuita do Render e não depende do recurso pago **Pre-Deploy Command**. Deixe esse campo vazio.
 
 ## Railway, Fly.io e outros hosts Node
 

@@ -20,7 +20,11 @@ import type { FriendDTO } from "@contracts/types";
 
 type Tab = "all" | "online" | "pending" | "blocked" | "add";
 
-export function FriendsPanel() {
+export function FriendsPanel({
+  onOpenProfile,
+}: {
+  onOpenProfile?: (userId: number) => void;
+}) {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("all");
   const friends = trpc.friend.list.useQuery();
@@ -140,13 +144,21 @@ export function FriendsPanel() {
                 key={f.friendshipId}
                 className="flex min-h-14 items-center gap-3 rounded-md border-t border-white/5 px-3 py-2.5 hover:bg-[#35373C] transition-colors"
               >
-                <Avatar
-                  userId={f.user.id}
-                  name={f.user.name ?? f.user.username}
-                  src={f.user.avatar}
-                  size="md"
-                  showStatus
-                />
+                <button
+                  type="button"
+                  onClick={() => onOpenProfile?.(f.user.id)}
+                  className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                  aria-label={`Ver perfil de ${f.user.name ?? f.user.username ?? "usuário"}`}
+                  title="Ver perfil"
+                >
+                  <Avatar
+                    userId={f.user.id}
+                    name={f.user.name ?? f.user.username}
+                    src={f.user.avatar}
+                    size="md"
+                    showStatus
+                  />
+                </button>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-bold text-white">
                     {f.user.name ?? f.user.username}
@@ -168,7 +180,7 @@ export function FriendsPanel() {
                         title="Enviar mensagem"
                         onClick={() => openDm.mutate({ userId: f.user.id })}
                         disabled={openDm.isPending}
-                        className="text-[#5865F2] hover:bg-[#5865F2]/10 hover:text-[#5865F2]"
+                        className="text-[#4654D8] hover:bg-[#4654D8]/10 hover:text-[#4654D8]"
                       >
                         <MessageSquare className="h-4 w-4" />
                       </Button>
@@ -285,7 +297,7 @@ function AddFriend({ onDone }: { onDone: () => void }) {
         />
         <Button
           type="submit"
-          className="h-11 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold"
+          className="h-11 bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold"
           disabled={!username.trim() || sendRequest.isPending}
         >
           {sendRequest.isPending ? "Enviando..." : "Enviar pedido"}

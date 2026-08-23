@@ -22,6 +22,8 @@ services:
         sync: false
       - key: OWNER_UNION_ID
         sync: false
+      - key: NEXORA_OWNER_USER_IDS
+        sync: false
       - key: APP_ORIGIN
         sync: false
       - key: PUBLIC_API_URL

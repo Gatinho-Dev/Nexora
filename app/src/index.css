@@ -11,7 +11,7 @@
     --card-foreground: 222 25% 12%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 25% 12%;
-    --primary: 235 86% 65%;
+    --primary: 234 65% 56%;
     --primary-foreground: 0 0% 100%;
     --secondary: 220 18% 92%;
     --secondary-foreground: 222 25% 15%;
@@ -23,7 +23,7 @@
     --destructive-foreground: 0 0% 100%;
     --border: 220 18% 86%;
     --input: 220 18% 86%;
-    --ring: 235 86% 65%;
+    --ring: 233 100% 73%;
     --radius: 0.5rem;
 
     /* App surfaces */
@@ -39,18 +39,18 @@
     --idle: 38 92% 50%;
     --dnd: 0 84% 60%;
     --offline: 220 9% 60%;
-    --link: 234 100% 65%;
+    --link: 233 100% 73%;
   }
 
   .dark {
-    /* Discord-inspired dark theme */
+    /* Nexora dense social dark theme */
     --background: 228 6% 20%; /* #313338 */
     --foreground: 210 9% 96%; /* #F2F3F5 */
     --card: 223 7% 23%;
     --card-foreground: 220 14% 96%;
     --popover: 220 7% 17%;
     --popover-foreground: 220 14% 96%;
-    --primary: 235 86% 65%; /* #5865F2 */
+    --primary: 234 65% 56%; /* Nexora cobalt #4654D8 */
     --primary-foreground: 0 0% 100%;
     --secondary: 223 7% 24%;
     --secondary-foreground: 220 14% 90%;
@@ -62,7 +62,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 228 6% 29%;
     --input: 225 7% 13%;
-    --ring: 235 86% 65%;
+    --ring: 233 100% 73%; /* Nexora cobalt light #7383FF */
 
     /* App surfaces */
     --rail: 225 7% 13%; /* #1E1F22 */
@@ -72,7 +72,7 @@
     --hover-bg: 228 6% 26%;
     --active-bg: 228 6% 29%;
     --mention-bg: 235 45% 29%;
-    --mention-fg: 235 100% 82%;
+    --mention-fg: 233 100% 82%;
     --online: 139 47% 44%;
     --idle: 38 92% 50%;
     --dnd: 0 84% 60%;
@@ -227,23 +227,43 @@
   object-fit: cover;
 }
 
-/* Nexora brand elements & glow */
-.nexora-mark {
-  background: #5865f2;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14);
-}
-
+/* Nexora surface depth */
 .nexora-glow {
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.22);
 }
 
 /* Dynamic speaking indicator glow */
 .speaking-glow {
-  outline: 2px solid #23a559;
-  box-shadow: 0 0 12px rgba(34, 197, 94, 0.45);
+  box-shadow:
+    0 0 0 2px #3bbd72,
+    0 0 0 5px rgb(59 189 114 / 0.13),
+    0 8px 24px rgb(0 0 0 / 0.2);
   transition:
-    outline 150ms ease,
-    box-shadow 150ms ease;
+    border-color 120ms ease,
+    box-shadow 180ms ease;
+  animation: nexora-voice-pulse 1.8s ease-in-out infinite;
+}
+
+.voice-avatar-speaking {
+  box-shadow:
+    0 0 0 2px #3bbd72,
+    0 0 0 4px rgb(59 189 114 / 0.12);
+}
+
+@keyframes nexora-voice-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px #3bbd72,
+      0 0 0 4px rgb(59 189 114 / 0.1),
+      0 8px 24px rgb(0 0 0 / 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px #55d98b,
+      0 0 0 7px rgb(59 189 114 / 0.16),
+      0 8px 24px rgb(0 0 0 / 0.2);
+  }
 }
 
 /* Micro-animations */

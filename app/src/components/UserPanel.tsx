@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar } from "./Avatar";
 import { statusColor } from "@/lib/statusColor";
@@ -6,14 +7,18 @@ import { useAppStore } from "@/store/useAppStore";
 import { realtime } from "@/lib/ws";
 import { voiceManager } from "@/lib/rtc";
 import { UserSettingsModal } from "./modals/UserSettingsModal";
+import { NexoraMark } from "./NexoraBrand";
 import { cn } from "@/lib/utils";
 import {
+  BadgeCheck,
+  ChevronRight,
   Mic,
   MicOff,
   Headphones,
   VolumeX,
   Settings,
   LogOut,
+  Pencil,
   PhoneOff,
   Wifi,
   WifiOff,
@@ -25,13 +30,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { UserStatus } from "@contracts/constants";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -45,12 +47,18 @@ const STATUS_LABELS: Record<string, string> = {
 export function UserPanel() {
   const { user, logout } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"account" | "profile">(
+    "account"
+  );
+  const [profileOpen, setProfileOpen] = useState(false);
   const wsConnected = useAppStore(s => s.wsConnected);
   const inVoice = useAppStore(
     s => s.voiceChannelId !== null || s.voiceConversationId !== null
   );
   const muted = useAppStore(s => s.muted);
   const deafened = useAppStore(s => s.deafened);
+  const voiceConnectionStatus = useAppStore(s => s.voiceConnectionStatus);
+  const myBadges = trpc.badge.mine.useQuery();
   const myStatus = useAppStore(s => (user ? s.presence[user.id] : undefined));
 
   if (!user) return null;
@@ -61,6 +69,17 @@ export function UserPanel() {
       .getState()
       .setPresence(user.id, status === "invisible" ? "offline" : status);
   };
+
+  const openSettings = (tab: "account" | "profile") => {
+    setProfileOpen(false);
+    setSettingsTab(tab);
+    requestAnimationFrame(() => setSettingsOpen(true));
+  };
+
+  const profile = user as typeof user & {
+    banner?: string | null;
+  };
+  const currentStatus = myStatus ?? user.status ?? "online";
 
   return (
     <div className="bg-[#232428] border-t border-black/20 select-none">
@@ -79,7 +98,11 @@ export function UserPanel() {
               ) : (
                 <WifiOff className="h-3.5 w-3.5" />
               )}
-              {wsConnected ? "Voz conectada" : "Reconectando..."}
+              {voiceConnectionStatus === "connected"
+                ? "Voz conectada"
+                : voiceConnectionStatus === "failed"
+                  ? "Falha na voz"
+                  : "Reconectando..."}
             </span>
           </div>
           <TooltipProvider delayDuration={150}>
@@ -88,6 +111,8 @@ export function UserPanel() {
                 <button
                   onClick={() => voiceManager.leave()}
                   className="p-1 rounded text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-colors"
+                  aria-label="Desconectar da chamada"
+                  title="Desconectar da chamada"
                 >
                   <PhoneOff className="h-3.5 w-3.5" />
                 </button>
@@ -100,16 +125,21 @@ export function UserPanel() {
 
       {/* User profile row */}
       <div className="p-2 flex items-center justify-between gap-1.5">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex min-h-11 items-center gap-2.5 flex-1 min-w-0 rounded-md hover:bg-[#35373C] p-1.5 transition-colors text-left group">
+        <Popover open={profileOpen} onOpenChange={setProfileOpen}>
+          <PopoverTrigger asChild>
+            <button
+              className="flex min-h-11 items-center gap-2.5 flex-1 min-w-0 rounded-md hover:bg-[#35373C] p-1.5 transition-colors text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+              aria-label="Abrir meu perfil"
+              aria-expanded={profileOpen}
+              title="Meu perfil"
+            >
               <Avatar
                 userId={user.id}
                 name={user.name ?? user.username}
                 src={user.avatar}
                 size="sm"
                 showStatus
-                statusOverride={myStatus ?? user.status ?? "online"}
+                statusOverride={currentStatus}
               />
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-semibold text-white truncate">
@@ -120,45 +150,168 @@ export function UserPanel() {
                 </div>
               </div>
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
+          </PopoverTrigger>
+          <PopoverContent
             side="top"
             align="start"
-            className="w-56 bg-[#111214] border-black/30 text-white"
+            sideOffset={8}
+            collisionPadding={8}
+            className="w-[min(320px,calc(100vw-1rem))] overflow-hidden rounded-2xl border-white/10 bg-[#181A21] p-0 text-white shadow-2xl"
           >
-            <DropdownMenuLabel className="text-xs text-[#B5BAC1]">
-              Definir status
-            </DropdownMenuLabel>
-            {(["online", "idle", "dnd", "invisible"] as const).map(s => (
-              <DropdownMenuItem
-                key={s}
-                onClick={() => setStatus(s)}
-                className="hover:bg-white/10 cursor-pointer"
-              >
-                <span
-                  className={cn(
-                    "h-2.5 w-2.5 rounded-full mr-2.5",
-                    statusColor(s)
-                  )}
+            <div className="relative h-20 overflow-hidden bg-[#1B2037]">
+              {profile.banner ? (
+                <img
+                  src={profile.banner}
+                  alt="Meu banner"
+                  className="h-full w-full object-cover"
                 />
-                {STATUS_LABELS[s]}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator className="bg-white/10" />
-            <DropdownMenuItem
-              onClick={() => setSettingsOpen(true)}
-              className="hover:bg-white/10 cursor-pointer"
-            >
-              <Settings className="h-4 w-4 mr-2 text-[#B5BAC1]" /> Configurações
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-red-400 focus:text-red-300 hover:bg-red-500/10 cursor-pointer"
-              onClick={() => logout()}
-            >
-              <LogOut className="h-4 w-4 mr-2" /> Sair
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              ) : (
+                <>
+                  <NexoraMark
+                    decorative
+                    className="absolute -right-5 -top-9 h-36 w-36 rotate-6 opacity-[0.13]"
+                  />
+                  <div className="absolute bottom-0 left-0 h-1 w-2/3 bg-[#4654D8]" />
+                  <div className="absolute bottom-0 right-0 h-1 w-1/3 bg-[#7383FF]" />
+                </>
+              )}
+            </div>
+
+            <div className="px-4 pb-4">
+              <div className="-mt-7 flex items-end justify-between gap-3">
+                <div className="rounded-full border-4 border-[#181A21] bg-[#181A21]">
+                  <Avatar
+                    userId={user.id}
+                    name={user.name ?? user.username}
+                    src={user.avatar}
+                    size="lg"
+                    showStatus
+                    statusOverride={currentStatus}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openSettings("profile")}
+                  className="mb-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#4654D8] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#3D49BF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Editar perfil
+                </button>
+              </div>
+
+              <div className="mt-2 min-w-0">
+                <p className="truncate text-base font-bold text-white">
+                  {user.name ?? user.username}
+                </p>
+                <p className="truncate text-xs text-[#B5BAC1]">
+                  @{user.username ?? "sem-usuario"}
+                </p>
+              </div>
+
+              <div className="mt-3 rounded-xl border border-white/[0.07] bg-[#11131A] p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#949BA4]">
+                  Sobre mim
+                </p>
+                <p
+                  className={cn(
+                    "mt-1.5 whitespace-pre-wrap text-xs leading-5",
+                    user.bio ? "text-[#DBDEE1]" : "text-[#777E8B]"
+                  )}
+                >
+                  {user.bio ||
+                    "Adicione uma biografia para completar seu perfil."}
+                </p>
+              </div>
+
+              <div className="mt-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#949BA4]">
+                    Emblemas
+                  </p>
+                  <span className="text-[10px] text-[#777E8B]">
+                    {myBadges.data?.length ?? 0}
+                  </span>
+                </div>
+                {myBadges.data?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {myBadges.data.slice(0, 6).map((badge, index) => (
+                      <span
+                        key={
+                          badge.id ?? badge.slug ?? `${badge.label}-${index}`
+                        }
+                        className="inline-flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/[0.05] px-2 text-[10px] font-semibold text-[#DBDEE1]"
+                        title={badge.description ?? badge.label}
+                      >
+                        <BadgeCheck
+                          className="h-3 w-3"
+                          style={{ color: badge.color ?? "#7383FF" }}
+                        />
+                        {badge.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-center gap-2 rounded-lg border border-dashed border-white/10 px-2.5 py-2 text-[11px] text-[#777E8B]">
+                    <BadgeCheck className="h-3.5 w-3.5" />
+                    Espaço reservado para seus emblemas
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 border-t border-white/[0.07] pt-3">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#949BA4]">
+                  Status
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(["online", "idle", "dnd", "invisible"] as const).map(
+                    status => (
+                      <button
+                        key={status}
+                        type="button"
+                        onClick={() => setStatus(status)}
+                        className={cn(
+                          "flex min-h-9 items-center gap-2 rounded-lg px-2.5 text-left text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]",
+                          currentStatus ===
+                            (status === "invisible" ? "offline" : status)
+                            ? "bg-white/[0.10] text-white"
+                            : "text-[#B5BAC1] hover:bg-white/[0.06] hover:text-white"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "h-2.5 w-2.5 shrink-0 rounded-full",
+                            statusColor(status)
+                          )}
+                        />
+                        {STATUS_LABELS[status]}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 space-y-1 border-t border-white/[0.07] pt-3">
+                <button
+                  type="button"
+                  onClick={() => openSettings("account")}
+                  className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium text-[#DBDEE1] transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                >
+                  <Settings className="h-4 w-4 text-[#949BA4]" />
+                  Configurações
+                  <ChevronRight className="ml-auto h-4 w-4 text-[#777E8B]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => logout()}
+                  className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sair da Nexora
+                </button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
 
         <TooltipProvider delayDuration={150}>
           <div className="flex items-center gap-0.5">
@@ -173,6 +326,10 @@ export function UserPanel() {
                       ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
                       : "text-[#B5BAC1] hover:bg-white/10 hover:text-white"
                   )}
+                  aria-label={
+                    muted ? "Ativar microfone" : "Silenciar microfone"
+                  }
+                  title={muted ? "Ativar microfone" : "Silenciar microfone"}
                 >
                   {muted ? (
                     <MicOff className="h-4 w-4" />
@@ -197,6 +354,8 @@ export function UserPanel() {
                       ? "text-red-400 bg-red-500/10 hover:bg-red-500/20"
                       : "text-[#B5BAC1] hover:bg-white/10 hover:text-white"
                   )}
+                  aria-label={deafened ? "Ativar áudio" : "Ensurdecer áudio"}
+                  title={deafened ? "Ativar áudio" : "Ensurdecer áudio"}
                 >
                   {deafened ? (
                     <VolumeX className="h-4 w-4" />
@@ -214,8 +373,10 @@ export function UserPanel() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  onClick={() => setSettingsOpen(true)}
+                  onClick={() => openSettings("account")}
                   className="h-9 w-9 inline-flex items-center justify-center rounded-md text-[#B5BAC1] hover:bg-[#35373C] hover:text-white transition-colors"
+                  aria-label="Abrir configurações de usuário"
+                  title="Configurações de usuário"
                 >
                   <Settings className="h-4 w-4" />
                 </button>
@@ -228,7 +389,12 @@ export function UserPanel() {
         </TooltipProvider>
       </div>
 
-      <UserSettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <UserSettingsModal
+        key={settingsTab}
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        initialTab={settingsTab}
+      />
     </div>
   );
 }

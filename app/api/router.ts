@@ -5,6 +5,9 @@ import { messageRouter } from "./messageRouter";
 import { friendRouter } from "./friendRouter";
 import { dmRouter } from "./dmRouter";
 import { notificationRouter } from "./notificationRouter";
+import { officialRouter } from "./officialRouter";
+import { badgeRouter } from "./badgeRouter";
+import { adminRouter } from "./adminRouter";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -16,6 +19,9 @@ export const appRouter = createRouter({
   friend: friendRouter,
   dm: dmRouter,
   notification: notificationRouter,
+  official: officialRouter,
+  badge: badgeRouter,
+  admin: adminRouter,
 });
 
 export type AppRouter = typeof appRouter;

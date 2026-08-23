@@ -36,7 +36,7 @@ function notificationText(n: NotificationDTO): string {
 }
 
 function NotificationIcon({ type }: { type: string }) {
-  const cls = "h-4 w-4 shrink-0 text-[#5865F2]";
+  const cls = "h-4 w-4 shrink-0 text-[#4654D8]";
   switch (type) {
     case "mention":
       return <AtSign className={cls} />;
@@ -51,7 +51,11 @@ function NotificationIcon({ type }: { type: string }) {
   }
 }
 
-export function NotificationsBell() {
+export function NotificationsBell({
+  onOpenProfile,
+}: {
+  onOpenProfile?: (userId: number) => void;
+}) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const [open, setOpen] = useState(false);
@@ -120,7 +124,7 @@ export function NotificationsBell() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs text-[#5865F2] hover:bg-white/5"
+              className="h-7 text-xs text-[#4654D8] hover:bg-white/5"
               onClick={() => markAllRead.mutate()}
               disabled={markAllRead.isPending}
             >
@@ -140,29 +144,44 @@ export function NotificationsBell() {
           ) : (
             <div className="p-1">
               {list.data?.map(n => (
-                <button
+                <div
                   key={n.id}
-                  onClick={() => openNotification(n)}
                   className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
                 >
                   <div className="mt-0.5">
                     {n.actor ? (
-                      <Avatar
-                        userId={n.actor.id}
-                        name={n.actor.name ?? n.actor.username}
-                        src={n.actor.avatar}
-                        size="sm"
-                        showStatus={false}
-                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpen(false);
+                          onOpenProfile?.(n.actor!.id);
+                        }}
+                        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                        aria-label={`Ver perfil de ${n.actor.name ?? n.actor.username ?? "usuário"}`}
+                        title="Ver perfil"
+                      >
+                        <Avatar
+                          userId={n.actor.id}
+                          name={n.actor.name ?? n.actor.username}
+                          src={n.actor.avatar}
+                          size="sm"
+                          showStatus={false}
+                        />
+                      </button>
                     ) : (
                       <NotificationIcon type={n.type} />
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => openNotification(n)}
+                    className="min-w-0 flex-1 text-left focus-visible:outline-none"
+                    aria-label={notificationText(n)}
+                  >
                     <p className="text-xs font-semibold text-white">
                       {notificationText(n)}
                       {!n.isRead && (
-                        <span className="ml-2 inline-block h-2 w-2 rounded-full bg-[#5865F2] align-middle" />
+                        <span className="ml-2 inline-block h-2 w-2 rounded-full bg-[#4654D8] align-middle" />
                       )}
                     </p>
                     {n.content && (
@@ -178,8 +197,8 @@ export function NotificationsBell() {
                         minute: "2-digit",
                       })}
                     </p>
-                  </div>
-                </button>
+                  </button>
+                </div>
               ))}
             </div>
           )}

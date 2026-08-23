@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiUrl } from "@/lib/endpoints";
+import { NexoraAppIcon } from "@/components/NexoraBrand";
 
 function getOAuthUrl() {
   const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
@@ -43,9 +44,7 @@ export default function Login() {
     <main className="min-h-[100dvh] flex items-center justify-center bg-[#313338] p-4 sm:p-6 select-none text-white">
       <div className="w-full max-w-[480px] rounded-xl bg-[#2B2D31] border border-black/20 p-6 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
         <div className="flex flex-col items-center mb-8 text-center">
-          <div className="h-12 w-12 rounded-[14px] bg-[#5865F2] flex items-center justify-center mb-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]">
-            <span className="font-black text-xl text-white">N</span>
-          </div>
+          <NexoraAppIcon className="mb-5 h-12 w-12" />
           <h1 className="text-2xl font-bold tracking-[-0.02em] text-white">
             Bem-vindo de volta!
           </h1>
@@ -71,7 +70,7 @@ export default function Login() {
             </Label>
             <Input
               id="username"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#4654D8]"
               autoComplete="username"
               value={username}
               onChange={e => setUsername(e.target.value)}
@@ -88,7 +87,7 @@ export default function Login() {
             <Input
               id="password"
               type="password"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
+              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#4654D8]"
               autoComplete="current-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -104,7 +103,7 @@ export default function Login() {
 
           <Button
             type="submit"
-            className="w-full bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold h-11 rounded-md"
+            className="w-full bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold h-11 rounded-md"
             disabled={login.isPending}
           >
             {login.isPending ? "Entrando..." : "Entrar na Nexora"}

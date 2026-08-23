@@ -16,6 +16,7 @@ import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
 import { getMemberPermissions, toPublicUser } from "./utils/permissions";
 import { env } from "./lib/env";
+import { randomUUID } from "node:crypto";
 
 // ── Connection registry ───────────────────────────────────────
 type Client = {
@@ -33,6 +34,8 @@ const manualStatus = new Map<number, UserStatus>();
 // Voice rooms: "c:<channelId>" or "dm:<conversationId>" -> participants
 const voiceRooms = new Map<string, Map<number, VoiceParticipant>>();
 const userVoiceRoom = new Map<number, string>();
+const voiceClientByUser = new Map<number, Client>();
+const voiceSessionByUser = new Map<number, string>();
 
 function channelRoomKey(channelId: number) {
   return `c:${channelId}`;
@@ -87,6 +90,11 @@ export function sendToUsers(userIds: Iterable<number>, event: WSServerEvent) {
     const set = byUser.get(userId);
     if (set) for (const c of set) send(c, event);
   }
+}
+
+/** Broadcast a platform-scoped event to every currently authenticated socket. */
+export function broadcastToAll(event: WSServerEvent) {
+  for (const client of clients) send(client, event);
 }
 
 async function serverMemberIds(serverId: number): Promise<number[]> {
@@ -237,6 +245,12 @@ async function voiceJoin(
     return;
   }
 
+  // A user has one active voice socket. This prevents duplicate signaling from
+  // being delivered to every open Nexora tab for the same account.
+  const previousVoiceClient = voiceClientByUser.get(client.userId);
+  if (previousVoiceClient && previousVoiceClient !== client) {
+    await voiceLeave(previousVoiceClient);
+  }
   // Leave any previous voice room first.
   await voiceLeave(client);
 
@@ -260,6 +274,15 @@ async function voiceJoin(
     screen: false,
   });
   userVoiceRoom.set(client.userId, roomKey);
+  voiceClientByUser.set(client.userId, client);
+  const voiceSessionId = randomUUID();
+  voiceSessionByUser.set(client.userId, voiceSessionId);
+  send(client, {
+    t: "voice:ready",
+    channelId: target.channelId,
+    conversationId: target.conversationId,
+    voiceSessionId,
+  });
 
   // Audit row for server voice channels (best-effort).
   if (target.channelId) {
@@ -272,9 +295,13 @@ async function voiceJoin(
 }
 
 async function voiceLeave(client: Client) {
+  const activeVoiceClient = voiceClientByUser.get(client.userId);
+  if (activeVoiceClient && activeVoiceClient !== client) return;
   const roomKey = userVoiceRoom.get(client.userId);
   if (!roomKey) return;
   userVoiceRoom.delete(client.userId);
+  voiceClientByUser.delete(client.userId);
+  voiceSessionByUser.delete(client.userId);
   const room = voiceRooms.get(roomKey);
   if (room) {
     room.delete(client.userId);
@@ -299,15 +326,23 @@ async function voiceStateUpdate(
   client: Client,
   patch: Partial<
     Pick<VoiceParticipant, "muted" | "deafened" | "camera" | "screen">
-  >
+  > & { voiceSessionId?: string }
 ) {
+  if (patch.voiceSessionId !== voiceSessionByUser.get(client.userId)) return;
+  const statePatch: Partial<
+    Pick<VoiceParticipant, "muted" | "deafened" | "camera" | "screen">
+  > = {};
+  if (typeof patch.muted === "boolean") statePatch.muted = patch.muted;
+  if (typeof patch.deafened === "boolean") statePatch.deafened = patch.deafened;
+  if (typeof patch.camera === "boolean") statePatch.camera = patch.camera;
+  if (typeof patch.screen === "boolean") statePatch.screen = patch.screen;
   const roomKey = userVoiceRoom.get(client.userId);
   if (!roomKey) return;
   const room = voiceRooms.get(roomKey);
   const participant = room?.get(client.userId);
   if (!participant) return;
-  Object.assign(participant, patch);
-  if (patch.deafened) participant.muted = true;
+  Object.assign(participant, statePatch);
+  if (statePatch.deafened) participant.muted = true;
   await broadcastVoiceParticipants(roomKey);
 }
 
@@ -361,7 +396,9 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       await voiceJoin(client, event);
       break;
     case "voice:leave":
-      await voiceLeave(client);
+      if (event.voiceSessionId === voiceSessionByUser.get(client.userId)) {
+        await voiceLeave(client);
+      }
       break;
     case "voice:state":
       await voiceStateUpdate(client, event);
@@ -369,6 +406,8 @@ async function handleEvent(client: Client, event: WSClientEvent) {
     case "signal": {
       const myRoom = userVoiceRoom.get(client.userId);
       if (!myRoom) return;
+      if (event.voiceSessionId !== voiceSessionByUser.get(client.userId))
+        return;
       const expected = event.channelId
         ? channelRoomKey(event.channelId)
         : event.conversationId
@@ -377,7 +416,10 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       if (expected !== myRoom) return;
       const room = voiceRooms.get(myRoom);
       if (!room?.has(event.to)) return;
-      sendToUsers([event.to], {
+      if (!isValidSignalData(event.data)) return;
+      const targetClient = voiceClientByUser.get(event.to);
+      if (!targetClient) return;
+      send(targetClient, {
         t: "signal",
         from: client.userId,
         channelId: event.channelId,
@@ -387,6 +429,32 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       break;
     }
   }
+}
+
+export function isValidSignalData(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const signal = value as {
+    description?: { type?: unknown; sdp?: unknown };
+    candidate?: unknown;
+  };
+  if (signal.description) {
+    if (
+      !["offer", "answer", "pranswer", "rollback"].includes(
+        String(signal.description.type)
+      )
+    ) {
+      return false;
+    }
+    if (
+      signal.description.sdp !== undefined &&
+      (typeof signal.description.sdp !== "string" ||
+        signal.description.sdp.length > 1_000_000)
+    ) {
+      return false;
+    }
+    return true;
+  }
+  return "candidate" in signal;
 }
 
 // ── Attach to HTTP server ─────────────────────────────────────

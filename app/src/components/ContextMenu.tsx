@@ -81,7 +81,7 @@ export function ContextMenu({
       {menuState.type === "user" && (
         <>
           <MenuItem
-            icon={<User className="h-4 w-4 text-[#5865F2]" />}
+            icon={<User className="h-4 w-4 text-[#4654D8]" />}
             label="Perfil"
             onClick={() => {
               onOpenProfile?.(menuState.id);
@@ -106,7 +106,7 @@ export function ContextMenu({
             }}
           />
           <MenuItem
-            icon={<UserPlus className="h-4 w-4 text-[#5865F2]" />}
+            icon={<UserPlus className="h-4 w-4 text-[#4654D8]" />}
             label="Adicionar amigo"
             onClick={() => {
               toast.success("Pedido de amizade enviado!");
@@ -180,7 +180,7 @@ export function ContextMenu({
           />
           <MenuDivider />
           <MenuItem
-            icon={<Edit className="h-4 w-4 text-[#5865F2]" />}
+            icon={<Edit className="h-4 w-4 text-[#4654D8]" />}
             label="Editar canal"
             onClick={() => {
               toast.info("Abrindo edição...");
@@ -223,7 +223,7 @@ export function ContextMenu({
             }}
           />
           <MenuItem
-            icon={<UserPlus className="h-4 w-4 text-[#5865F2]" />}
+            icon={<UserPlus className="h-4 w-4 text-[#4654D8]" />}
             label="Convidar pessoas"
             onClick={() => {
               toast.info("Compartilhe o link de convite.");

@@ -11,6 +11,7 @@ export function toPublicUser(u: typeof schema.users.$inferSelect): PublicUser {
     username: u.username,
     name: u.name,
     avatar: u.avatar,
+    banner: u.banner,
     bio: u.bio,
     status: u.status,
   };

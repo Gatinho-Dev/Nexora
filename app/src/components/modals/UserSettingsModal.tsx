@@ -2,7 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { toast } from "sonner";
 import { apiUrl } from "@/lib/endpoints";
-import { Camera, Mic, Moon, Sun, Monitor, X, Check } from "lucide-react";
+import {
+  Camera,
+  Mic,
+  Moon,
+  Sun,
+  Monitor,
+  X,
+  Check,
+  Play,
+  Square,
+  Sparkles,
+} from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +35,13 @@ import { getTheme, setTheme, type Theme } from "@/lib/theme";
 import { getDevicePrefs, setDevicePrefs } from "@/lib/devices";
 import { useAuth } from "@/hooks/useAuth";
 import { soundManager, type SoundEvent } from "@/lib/sound";
+import { voiceManager } from "@/lib/rtc";
+import {
+  createAudioProcessingSession,
+  microphoneConstraints,
+  type AudioProcessingSession,
+} from "@/lib/voice/audioProcessing";
+import { NexoraLogo, NexoraMark } from "@/components/NexoraBrand";
 
 type Tab =
   | "account"
@@ -71,11 +89,13 @@ const MENU_GROUPS: {
 export function UserSettingsModal({
   open,
   onOpenChange,
+  initialTab = "account",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("account");
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -89,36 +109,34 @@ export function UserSettingsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[640px] p-0 gap-0 overflow-hidden bg-[#313338] border-white/10 text-white rounded-2xl select-none">
+      <DialogContent
+        showCloseButton={false}
+        className="h-[min(760px,calc(100dvh-1rem))] w-[min(1120px,calc(100vw-1rem))] max-w-none gap-0 overflow-hidden rounded-xl border-white/10 bg-[#313338] p-0 text-white select-none sm:max-w-none sm:rounded-2xl"
+      >
         <DialogTitle className="sr-only">
           Configurações do Usuário Nexora
         </DialogTitle>
-        <div className="flex h-full relative">
+        <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden sm:flex-row">
           {/* Left Navigation Sidebar */}
-          <aside className="w-56 shrink-0 bg-[#2B2D31] p-4 border-r border-white/5 overflow-y-auto">
-            <div className="flex items-center gap-2 mb-4 px-2">
-              <div className="nexora-mark h-6 w-6 rounded-lg flex items-center justify-center font-bold text-xs">
-                N
-              </div>
-              <span className="font-bold text-sm text-white tracking-wider">
-                NEXORA
-              </span>
+          <aside className="flex w-full min-w-0 max-w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-white/5 bg-[#2B2D31] p-2 sm:block sm:h-full sm:w-56 sm:overflow-x-hidden sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-4">
+            <div className="mb-4 hidden px-2 sm:block">
+              <NexoraLogo className="h-6 w-auto" surface="dark" />
             </div>
 
             {MENU_GROUPS.map(group => (
-              <div key={group.title} className="mb-4">
-                <p className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#B5BAC1]">
+              <div key={group.title} className="shrink-0 sm:mb-4">
+                <p className="hidden px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#B5BAC1] sm:block">
                   {group.title}
                 </p>
-                <nav className="space-y-0.5">
+                <nav className="flex gap-1 sm:block sm:space-y-0.5">
                   {group.items.map(t => (
                     <button
                       key={t.id}
                       onClick={() => setTab(t.id)}
                       className={cn(
-                        "w-full rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-colors flex items-center gap-2",
+                        "flex w-auto items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors sm:w-full sm:py-1.5",
                         tab === t.id
-                          ? "bg-[#5865F2]/20 text-[#5865F2]"
+                          ? "bg-[#4654D8]/20 text-[#4654D8]"
                           : "text-[#B5BAC1] hover:bg-white/5 hover:text-white"
                       )}
                     >
@@ -131,9 +149,9 @@ export function UserSettingsModal({
           </aside>
 
           {/* Right Main Content */}
-          <div className="flex-1 min-w-0 bg-[#313338] relative">
+          <div className="relative min-h-0 min-w-0 flex-1 bg-[#313338]">
             {/* ESC close button */}
-            <div className="absolute top-5 right-6 z-20 flex items-center gap-1.5">
+            <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 sm:top-5 sm:right-6">
               <button
                 onClick={() => onOpenChange(false)}
                 className="flex items-center justify-center h-8 w-8 rounded-full border border-white/20 text-[#B5BAC1] hover:bg-white/10 hover:text-white transition-colors"
@@ -141,13 +159,13 @@ export function UserSettingsModal({
               >
                 <X className="h-4 w-4" />
               </button>
-              <span className="text-[10px] font-bold text-[#B5BAC1] uppercase tracking-wider">
+              <span className="hidden text-[10px] font-bold text-[#B5BAC1] uppercase tracking-wider sm:inline">
                 ESC
               </span>
             </div>
 
             <ScrollArea className="h-full">
-              <div className="p-8 max-w-xl">
+              <div className="mx-auto w-full min-w-0 max-w-3xl p-4 pr-14 sm:p-8 sm:pr-20">
                 {tab === "account" && <AccountTab />}
                 {tab === "profile" && <ProfileTab />}
                 {tab === "privacy" && <PrivacyTab />}
@@ -263,7 +281,7 @@ function AccountTab() {
             />
           </div>
           <Button
-            className="bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium"
+            className="bg-[#4654D8] hover:bg-[#3D49BF] text-white font-medium"
             disabled={
               !currentPassword ||
               newPassword.length < 6 ||
@@ -291,8 +309,12 @@ function ProfileTab() {
   const [username, setUsername] = useState(user?.username ?? "");
   const [bio, setBio] = useState(user?.bio ?? "");
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar ?? "");
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [bannerUrl, setBannerUrl] = useState(user?.banner ?? "");
+  const [uploadingTarget, setUploadingTarget] = useState<
+    "avatar" | "banner" | null
+  >(null);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
+  const bannerFileRef = useRef<HTMLInputElement>(null);
 
   const updateProfile = trpc.account.updateProfile.useMutation({
     onSuccess: async () => {
@@ -316,9 +338,38 @@ function ProfileTab() {
     }
     updateProfile.mutate({
       displayName: displayName.trim() || undefined,
-      bio: bio.trim() || undefined,
-      avatar: avatarUrl || undefined,
+      bio: bio.trim(),
+      avatar: avatarUrl,
+      banner: bannerUrl,
     });
+  };
+
+  const uploadImage = async (file: File, target: "avatar" | "banner") => {
+    setUploadingTarget(target);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch(apiUrl("/api/upload"), {
+        method: "POST",
+        body: form,
+        credentials: "include",
+      });
+      const data = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !data.url) {
+        throw new Error(data.error || "Não foi possível enviar a imagem.");
+      }
+      if (target === "avatar") setAvatarUrl(data.url);
+      else setBannerUrl(data.url);
+      toast.success(
+        `${target === "avatar" ? "Avatar" : "Banner"} enviado. Clique em salvar para aplicar.`
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Falha ao enviar a imagem."
+      );
+    } finally {
+      setUploadingTarget(null);
+    }
   };
 
   return (
@@ -330,50 +381,102 @@ function ProfileTab() {
         </p>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative">
-          <Avatar
-            userId={user?.id}
-            name={user?.name}
-            src={avatarUrl || null}
-            size="xl"
-            showStatus={false}
-          />
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="absolute -bottom-1 -right-1 rounded-full bg-[#5865F2] p-2 text-white shadow-lg hover:bg-[#4752C4]"
-            title="Alterar avatar"
-          >
-            <Camera className="h-3.5 w-3.5" />
-          </button>
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#23252D]">
+        <div className="relative h-32 overflow-hidden bg-[#1B2037]">
+          {bannerUrl ? (
+            <img
+              src={bannerUrl}
+              alt="Prévia do seu banner"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <>
+              <NexoraMark
+                decorative
+                className="absolute -right-7 -top-12 h-48 w-48 rotate-6 opacity-[0.13]"
+              />
+              <div className="absolute bottom-0 left-0 h-1 w-2/3 bg-[#4654D8]" />
+              <div className="absolute bottom-0 right-0 h-1 w-1/3 bg-[#7383FF]" />
+            </>
+          )}
+          <div className="absolute right-3 top-3 flex items-center gap-2">
+            {bannerUrl && (
+              <button
+                type="button"
+                onClick={() => setBannerUrl("")}
+                className="min-h-9 rounded-lg border border-white/10 bg-[#11131A]/85 px-3 text-[11px] font-semibold text-[#DBDEE1] hover:bg-[#11131A] hover:text-white"
+              >
+                Remover banner
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => bannerFileRef.current?.click()}
+              disabled={uploadingTarget !== null}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#11131A]/85 px-3 text-[11px] font-semibold text-white hover:bg-[#11131A] disabled:opacity-60"
+              aria-label="Alterar banner"
+              title="Alterar banner"
+            >
+              <Camera className="h-3.5 w-3.5" />
+              {uploadingTarget === "banner" ? "Enviando..." : "Alterar banner"}
+            </button>
+          </div>
           <input
-            ref={fileRef}
+            ref={bannerFileRef}
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={e => {
-              const file = e.target.files?.[0];
-              if (file) {
-                setUploading(true);
-                const form = new FormData();
-                form.append("file", file);
-                fetch(apiUrl("/api/upload"), {
-                  method: "POST",
-                  body: form,
-                  credentials: "include",
-                })
-                  .then(r => r.json())
-                  .then(d => {
-                    setAvatarUrl(d.url);
-                    toast.success("Imagem enviada! Clique em salvar.");
-                  })
-                  .finally(() => setUploading(false));
-              }
+            onChange={event => {
+              const file = event.target.files?.[0];
+              if (file) void uploadImage(file, "banner");
+              event.target.value = "";
             }}
           />
         </div>
-        <p className="text-xs text-[#B5BAC1]">Suporta PNG, JPG, WEBP ou GIF.</p>
+
+        <div className="flex items-end gap-4 px-4 pb-4">
+          <div className="relative -mt-9 rounded-full border-4 border-[#23252D] bg-[#23252D]">
+            <Avatar
+              userId={user?.id}
+              name={displayName || user?.name}
+              src={avatarUrl || null}
+              size="xl"
+              showStatus={false}
+            />
+            <button
+              type="button"
+              onClick={() => avatarFileRef.current?.click()}
+              disabled={uploadingTarget !== null}
+              className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full bg-[#4654D8] text-white shadow-lg hover:bg-[#3D49BF] disabled:opacity-60"
+              aria-label="Alterar avatar"
+              title="Alterar avatar"
+            >
+              <Camera className="h-3.5 w-3.5" />
+            </button>
+            <input
+              ref={avatarFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={event => {
+                const file = event.target.files?.[0];
+                if (file) void uploadImage(file, "avatar");
+                event.target.value = "";
+              }}
+            />
+          </div>
+          <div className="min-w-0 pb-1">
+            <p className="truncate text-sm font-bold text-white">
+              {displayName || user?.name || "Seu perfil"}
+            </p>
+            <p className="truncate text-[11px] text-[#949BA4]">
+              @{username || user?.username || "sem-usuario"}
+            </p>
+            <p className="mt-1 text-[10px] text-[#777E8B]">
+              PNG, JPG, WEBP ou GIF
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -415,8 +518,8 @@ function ProfileTab() {
 
       <Button
         onClick={save}
-        disabled={updateProfile.isPending || uploading}
-        className="bg-[#5865F2] hover:bg-[#4752C4]"
+        disabled={updateProfile.isPending || uploadingTarget !== null}
+        className="bg-[#4654D8] hover:bg-[#3D49BF]"
       >
         {updateProfile.isPending ? "Salvando..." : "Salvar alterações"}
       </Button>
@@ -499,7 +602,7 @@ function NotificationsTab() {
         <div className="space-y-2 pt-2 border-t border-white/5">
           <div className="flex justify-between items-center text-xs">
             <span className="font-semibold text-white">Volume dos sons</span>
-            <span className="font-mono text-[#5865F2]">
+            <span className="font-mono text-[#4654D8]">
               {prefs.masterVolume}%
             </span>
           </div>
@@ -551,28 +654,44 @@ function NotificationsTab() {
 // ── Voz e vídeo (Dispositivos + Medidor de Mic) ───────────────
 function VoiceTab() {
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
+  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
   const [videoInputs, setVideoInputs] = useState<MediaDeviceInfo[]>([]);
   const [prefs, setPrefs] = useState(getDevicePrefs());
   const [testing, setTesting] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [level, setLevel] = useState(0);
-  const testStreamRef = useRef<MediaStream | null>(null);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const testSessionRef = useRef<AudioProcessingSession | null>(null);
+  const testContextRef = useRef<AudioContext | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
   const rafRef = useRef<number>(0);
+  const supportsOutputSelection =
+    typeof HTMLMediaElement !== "undefined" &&
+    "setSinkId" in HTMLMediaElement.prototype;
 
-  const stopTest = () => {
+  const stopTest = async () => {
     cancelAnimationFrame(rafRef.current);
-    testStreamRef.current?.getTracks().forEach(t => t.stop());
-    testStreamRef.current = null;
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    recorderRef.current = null;
+    await testSessionRef.current?.close();
+    testSessionRef.current = null;
+    if (testContextRef.current?.state !== "closed") {
+      await testContextRef.current?.close().catch(() => {});
+    }
+    testContextRef.current = null;
     setTesting(false);
+    setRecording(false);
     setLevel(0);
   };
 
   const loadDevices = async () => {
     try {
       const probe = await navigator.mediaDevices
-        .getUserMedia({ audio: true, video: true })
+        .getUserMedia({ audio: true, video: false })
         .catch(() => null);
       const devices = await navigator.mediaDevices.enumerateDevices();
       setAudioInputs(devices.filter(d => d.kind === "audioinput"));
+      setAudioOutputs(devices.filter(d => d.kind === "audiooutput"));
       setVideoInputs(devices.filter(d => d.kind === "videoinput"));
       probe?.getTracks().forEach(t => t.stop());
     } catch {
@@ -584,32 +703,43 @@ function VoiceTab() {
     const loadTimer = window.setTimeout(() => {
       void loadDevices();
     }, 0);
+    navigator.mediaDevices?.addEventListener("devicechange", loadDevices);
     return () => {
       window.clearTimeout(loadTimer);
       cancelAnimationFrame(rafRef.current);
-      testStreamRef.current?.getTracks().forEach(track => track.stop());
-      testStreamRef.current = null;
+      navigator.mediaDevices?.removeEventListener("devicechange", loadDevices);
+      void stopTest();
     };
   }, []);
 
+  useEffect(
+    () => () => {
+      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    },
+    [recordingUrl]
+  );
+
   const startTest = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: prefs.audioInputId
-          ? { deviceId: { ideal: prefs.audioInputId } }
-          : true,
+      const rawStream = await navigator.mediaDevices.getUserMedia({
+        audio: microphoneConstraints(prefs),
+        video: false,
       });
-      testStreamRef.current = stream;
-      const ctx = new AudioContext();
-      const source = ctx.createMediaStreamSource(stream);
+      const session = await createAudioProcessingSession(rawStream, prefs);
+      testSessionRef.current = session;
+      const ctx = new AudioContext({ latencyHint: "interactive" });
+      testContextRef.current = ctx;
+      const source = ctx.createMediaStreamSource(session.outputStream);
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
+      analyser.fftSize = 512;
       source.connect(analyser);
-      const data = new Uint8Array(analyser.frequencyBinCount);
+      const data = new Float32Array(analyser.fftSize);
       const tick = () => {
-        analyser.getByteFrequencyData(data);
-        const avg = data.reduce((a, b) => a + b, 0) / data.length;
-        setLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        analyser.getFloatTimeDomainData(data);
+        const energy = data.reduce((sum, sample) => sum + sample * sample, 0);
+        setLevel(
+          Math.min(100, Math.round(Math.sqrt(energy / data.length) * 700))
+        );
         rafRef.current = requestAnimationFrame(tick);
       };
       tick();
@@ -619,10 +749,53 @@ function VoiceTab() {
     }
   };
 
-  const updatePref = (patch: Partial<ReturnType<typeof getDevicePrefs>>) => {
+  const updatePref = async (
+    patch: Partial<ReturnType<typeof getDevicePrefs>>
+  ) => {
     const next = { ...prefs, ...patch };
     setPrefs(next);
     setDevicePrefs(patch);
+    try {
+      if ("audioInputId" in patch) {
+        await voiceManager.switchAudioInput(patch.audioInputId);
+      } else if ("videoInputId" in patch) {
+        await voiceManager.switchVideoInput(patch.videoInputId);
+      } else if ("audioProcessing" in patch) {
+        await voiceManager.reconfigureAudioProcessing();
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível trocar o dispositivo."
+      );
+    }
+  };
+
+  const recordSample = async () => {
+    if (!testSessionRef.current) await startTest();
+    const stream = testSessionRef.current?.outputStream;
+    if (!stream || typeof MediaRecorder === "undefined") {
+      toast.error("A gravação de teste não é suportada neste navegador.");
+      return;
+    }
+    const chunks: Blob[] = [];
+    const recorder = new MediaRecorder(stream);
+    recorderRef.current = recorder;
+    recorder.ondataavailable = event => {
+      if (event.data.size) chunks.push(event.data);
+    };
+    recorder.onstop = () => {
+      setRecordingUrl(
+        URL.createObjectURL(new Blob(chunks, { type: recorder.mimeType }))
+      );
+      setRecording(false);
+    };
+    recorder.start();
+    setRecording(true);
+    window.setTimeout(() => {
+      if (recorder.state === "recording") recorder.stop();
+    }, 4_000);
   };
 
   return (
@@ -634,6 +807,62 @@ function VoiceTab() {
         </p>
       </div>
 
+      <section
+        className="rounded-xl border border-[#7383FF]/40 bg-[#4654D8]/10 p-5 space-y-3"
+        aria-labelledby="noise-suppression-heading"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#4654D8] text-white">
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <p
+              id="noise-suppression-heading"
+              className="text-sm font-bold text-white"
+            >
+              Supressão de ruído
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-[#B5BAC1]">
+              Escolha o áudio nativo do navegador ou o processamento Nexora
+              ClearVoice. A chamada continua com fallback automático se o modo
+              avançado não estiver disponível.
+            </p>
+          </div>
+        </div>
+        <div
+          className="grid grid-cols-1 gap-2 sm:grid-cols-3"
+          role="radiogroup"
+          aria-label="Modo de supressão de ruído"
+        >
+          {(
+            [
+              ["off", "Desligado", "Áudio sem redução"],
+              ["standard", "Padrão", "Processamento do navegador"],
+              ["clearvoice", "ClearVoice", "Pipeline de áudio Nexora"],
+            ] as const
+          ).map(([value, label, description]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={prefs.audioProcessing === value}
+              onClick={() => void updatePref({ audioProcessing: value })}
+              className={cn(
+                "min-h-16 rounded-lg border px-3 py-2 text-left transition-colors",
+                prefs.audioProcessing === value
+                  ? "border-[#7383FF] bg-[#4654D8]/25 text-white"
+                  : "border-white/[0.08] bg-[#24252b] text-[#aeb1bd] hover:border-white/20 hover:text-white"
+              )}
+            >
+              <span className="block text-xs font-bold">{label}</span>
+              <span className="mt-1 block text-[10px] leading-snug opacity-75">
+                {description}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <div className="space-y-2">
         <Label className="text-xs text-[#B5BAC1]">
           Dispositivo de Entrada (Microfone)
@@ -641,7 +870,7 @@ function VoiceTab() {
         <Select
           value={prefs.audioInputId ?? "default"}
           onValueChange={v =>
-            updatePref({ audioInputId: v === "default" ? undefined : v })
+            void updatePref({ audioInputId: v === "default" ? undefined : v })
           }
         >
           <SelectTrigger className="bg-[#2B2D31] border-white/10 text-white">
@@ -649,23 +878,55 @@ function VoiceTab() {
           </SelectTrigger>
           <SelectContent className="bg-[#232428] border-white/10 text-white">
             <SelectItem value="default">Microfone Padrão</SelectItem>
-            {audioInputs.map(d => (
-              <SelectItem key={d.deviceId} value={d.deviceId}>
-                {d.label || `Microfone (${d.deviceId.slice(0, 6)})`}
-              </SelectItem>
-            ))}
+            {audioInputs
+              .filter(d => d.deviceId !== "default")
+              .map(d => (
+                <SelectItem key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Microfone (${d.deviceId.slice(0, 6)})`}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </div>
 
       <div className="space-y-2">
-        <Label className="text-xs text-[#B5BAC1]">
-          Dispositivo de Saída / Câmera
-        </Label>
+        <Label className="text-xs text-[#B5BAC1]">Dispositivo de saída</Label>
+        <Select
+          disabled={!supportsOutputSelection}
+          value={prefs.audioOutputId ?? "default"}
+          onValueChange={value =>
+            void updatePref({
+              audioOutputId: value === "default" ? undefined : value,
+            })
+          }
+        >
+          <SelectTrigger className="bg-[#2B2D31] border-white/10 text-white">
+            <SelectValue placeholder="Saída padrão" />
+          </SelectTrigger>
+          <SelectContent className="bg-[#232428] border-white/10 text-white">
+            <SelectItem value="default">Saída padrão</SelectItem>
+            {audioOutputs
+              .filter(device => device.deviceId !== "default")
+              .map(device => (
+                <SelectItem key={device.deviceId} value={device.deviceId}>
+                  {device.label || `Saída (${device.deviceId.slice(0, 6)})`}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+        {!supportsOutputSelection && (
+          <p className="text-[11px] text-[#8f93a1]">
+            Este navegador usa a saída definida pelo sistema operacional.
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-[#B5BAC1]">Câmera</Label>
         <Select
           value={prefs.videoInputId ?? "default"}
           onValueChange={v =>
-            updatePref({ videoInputId: v === "default" ? undefined : v })
+            void updatePref({ videoInputId: v === "default" ? undefined : v })
           }
         >
           <SelectTrigger className="bg-[#2B2D31] border-white/10 text-white">
@@ -673,17 +934,18 @@ function VoiceTab() {
           </SelectTrigger>
           <SelectContent className="bg-[#232428] border-white/10 text-white">
             <SelectItem value="default">Câmera Padrão</SelectItem>
-            {videoInputs.map(d => (
-              <SelectItem key={d.deviceId} value={d.deviceId}>
-                {d.label || `Câmera (${d.deviceId.slice(0, 6)})`}
-              </SelectItem>
-            ))}
+            {videoInputs
+              .filter(d => d.deviceId !== "default")
+              .map(d => (
+                <SelectItem key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Câmera (${d.deviceId.slice(0, 6)})`}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Mic Test Meter */}
-      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-5 space-y-3">
+      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-5 space-y-4">
         <Label className="text-xs text-white font-bold">
           Teste de Microfone
         </Label>
@@ -691,24 +953,83 @@ function VoiceTab() {
           <div
             className={cn(
               "h-full rounded-full transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-75",
-              level > 60
-                ? "bg-[#23A559]"
-                : level > 25
-                  ? "bg-amber-400"
-                  : "bg-[#5865F2]"
+              level > 12 ? "bg-[#55d98b]" : "bg-[#4654D8]"
             )}
             style={{ width: `${level}%` }}
           />
         </div>
-        <Button
-          variant={testing ? "destructive" : "secondary"}
-          size="sm"
-          onClick={() => (testing ? stopTest() : startTest())}
-          className="text-xs font-bold"
-        >
-          <Mic className="h-3.5 w-3.5 mr-1.5" />
-          {testing ? "Parar teste" : "Testar microfone"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={testing ? "destructive" : "secondary"}
+            size="sm"
+            onClick={() => (testing ? void stopTest() : void startTest())}
+            className="text-xs font-bold"
+          >
+            <Mic className="h-3.5 w-3.5 mr-1.5" />
+            {testing ? "Parar teste" : "Testar microfone"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={recording}
+            onClick={() => void recordSample()}
+            className="text-xs font-bold"
+          >
+            {recording ? (
+              <Square className="mr-1.5 h-3.5 w-3.5" />
+            ) : (
+              <Play className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {recording ? "Gravando 4 s" : "Gravar amostra"}
+          </Button>
+        </div>
+        {recordingUrl && (
+          <audio
+            src={recordingUrl}
+            controls
+            className="h-9 w-full"
+            aria-label="Reproduzir amostra do microfone"
+          />
+        )}
+      </div>
+
+      <div className="rounded-xl bg-[#2B2D31] border border-white/10 p-5 space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold text-white">
+              Sensibilidade automática
+            </p>
+            <p className="mt-1 text-[11px] text-[#8f93a1]">
+              Adapta o indicador ao ruído do ambiente.
+            </p>
+          </div>
+          <Switch
+            checked={prefs.inputSensitivityMode !== "manual"}
+            onCheckedChange={checked =>
+              void updatePref({
+                inputSensitivityMode: checked ? "automatic" : "manual",
+              })
+            }
+          />
+        </div>
+        {prefs.inputSensitivityMode === "manual" && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-[11px] text-[#aeb1bd]">
+              <span>Mais seletivo</span>
+              <span>Mais sensível</span>
+            </div>
+            <Slider
+              min={0}
+              max={100}
+              step={1}
+              value={[prefs.inputSensitivity ?? 28]}
+              onValueChange={([value]) => {
+                setPrefs(current => ({ ...current, inputSensitivity: value }));
+                setDevicePrefs({ inputSensitivity: value });
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -764,17 +1085,17 @@ function AppearanceTab() {
             className={cn(
               "rounded-xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity] relative overflow-hidden select-none",
               theme === opt.id
-                ? "border-[#5865F2] bg-[#5865F2]/10 text-white shadow-lg shadow-[#5865F2]/10"
+                ? "border-[#4654D8] bg-[#4654D8]/10 text-white shadow-lg shadow-[#4654D8]/10"
                 : "border-white/10 bg-[#2B2D31] text-[#B5BAC1] hover:border-white/20 hover:text-white"
             )}
           >
-            <opt.icon className="h-5 w-5 mb-2 text-[#5865F2]" />
+            <opt.icon className="h-5 w-5 mb-2 text-[#4654D8]" />
             <p className="text-sm font-bold text-white">{opt.label}</p>
             <p className="text-[11px] text-[#B5BAC1] mt-1 leading-snug">
               {opt.description}
             </p>
             {theme === opt.id && (
-              <div className="absolute top-2 right-2 text-[#5865F2]">
+              <div className="absolute top-2 right-2 text-[#4654D8]">
                 <Check className="h-4 w-4" />
               </div>
             )}

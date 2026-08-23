@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { NexoraAppIcon } from "./NexoraBrand";
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -24,9 +25,7 @@ export class ErrorBoundary extends Component<
       return (
         <main className="min-h-[100dvh] flex items-center justify-center bg-[#313338] p-4 select-none">
           <section className="w-full max-w-md rounded-xl bg-[#2B2D31] border border-black/20 p-8 shadow-[0_24px_64px_rgba(0,0,0,0.34)] text-center text-white">
-            <div className="nexora-mark h-14 w-14 rounded-[16px] mx-auto mb-5 flex items-center justify-center">
-              <span className="font-black text-xl text-white">N</span>
-            </div>
+            <NexoraAppIcon className="mx-auto mb-5 h-14 w-14" />
             <h1 className="text-2xl font-bold mb-2">
               Algo deu errado na Nexora
             </h1>
@@ -45,7 +44,7 @@ export class ErrorBoundary extends Component<
             )}
             <button
               onClick={() => window.location.reload()}
-              className="mt-5 min-h-11 px-5 py-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-sm rounded-md transition-colors"
+              className="mt-5 min-h-11 px-5 py-2.5 bg-[#4654D8] hover:bg-[#3D49BF] text-white font-semibold text-sm rounded-md transition-colors"
             >
               Recarregar aplicação
             </button>

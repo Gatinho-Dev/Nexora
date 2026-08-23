@@ -45,7 +45,7 @@ export function QuickSwitcherModal({
       <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden bg-[#2B2D31] border border-white/10 text-white rounded-2xl shadow-2xl select-none">
         <DialogTitle className="sr-only">Quick Switcher Nexora</DialogTitle>
         <div className="p-3 border-b border-white/10 flex items-center gap-2 bg-[#313338]">
-          <Search className="h-4 w-4 text-[#5865F2] shrink-0" />
+          <Search className="h-4 w-4 text-[#4654D8] shrink-0" />
           <input
             autoFocus
             className="w-full bg-transparent outline-none text-sm text-white placeholder:text-[#B5BAC1]"
@@ -71,7 +71,7 @@ export function QuickSwitcherModal({
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/10 text-left transition-colors"
                 >
-                  <User className="h-4 w-4 text-[#5865F2]" />
+                  <User className="h-4 w-4 text-[#4654D8]" />
                   <span className="font-bold text-white">
                     {d.otherUser?.name ?? d.otherUser?.username ?? "Usuário"}
                   </span>

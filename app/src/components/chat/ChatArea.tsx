@@ -15,6 +15,7 @@ type Props = {
   myId: number;
   canManageMessages?: boolean;
   sendDisabled?: boolean;
+  onOpenProfile?: (userId: number) => void;
   header: React.ReactNode;
 };
 
@@ -26,6 +27,7 @@ export function ChatArea({
   myId,
   canManageMessages = false,
   sendDisabled = false,
+  onOpenProfile,
   header,
 }: Props) {
   const utils = trpc.useUtils();
@@ -144,8 +146,8 @@ export function ChatArea({
     const el = document.getElementById(`msg-${messageId}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("bg-[#5865F2]/20");
-      setTimeout(() => el.classList.remove("bg-[#5865F2]/20"), 1500);
+      el.classList.add("bg-[#4654D8]/20");
+      setTimeout(() => el.classList.remove("bg-[#4654D8]/20"), 1500);
     }
   }, []);
 
@@ -187,12 +189,12 @@ export function ChatArea({
           <div className="pb-2">
             {loadingOlder && (
               <div className="flex justify-center py-3">
-                <Loader2 className="h-5 w-5 animate-spin text-[#5865F2]" />
+                <Loader2 className="h-5 w-5 animate-spin text-[#4654D8]" />
               </div>
             )}
             {!hasMore && messages.length > 10 && (
               <div className="px-4 pt-8 pb-3 select-none">
-                <div className="h-12 w-12 rounded-2xl bg-[#5865F2]/20 text-[#5865F2] flex items-center justify-center mb-3">
+                <div className="h-12 w-12 rounded-2xl bg-[#4654D8]/20 text-[#4654D8] flex items-center justify-center mb-3">
                   <Hash className="h-6 w-6" />
                 </div>
                 <h2 className="font-bold text-xl text-white">
@@ -203,7 +205,13 @@ export function ChatArea({
                 </p>
               </div>
             )}
-            {renderMessages(messages, myId, canManageMessages, jumpTo)}
+            {renderMessages(
+              messages,
+              myId,
+              canManageMessages,
+              jumpTo,
+              onOpenProfile
+            )}
           </div>
         )}
       </div>
@@ -212,7 +220,7 @@ export function ChatArea({
       {showScrollBottom && (
         <button
           onClick={() => scrollToBottom()}
-          className="absolute bottom-16 right-6 z-20 flex items-center gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white px-3.5 py-2 rounded-full text-xs font-semibold shadow-xl transition-colors"
+          className="absolute bottom-16 right-6 z-20 flex items-center gap-2 bg-[#4654D8] hover:bg-[#3D49BF] text-white px-3.5 py-2 rounded-full text-xs font-semibold shadow-xl transition-colors"
         >
           <ArrowDown className="h-3.5 w-3.5" />
           <span>Novas mensagens</span>
@@ -223,22 +231,22 @@ export function ChatArea({
       <div className="h-5 px-4 text-xs font-medium text-[#B5BAC1] flex items-center select-none">
         {typingUsers.length === 1 && (
           <span className="flex items-center gap-1.5 text-white/80">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#5865F2] animate-ping" />
-            <strong className="text-[#5865F2]">{typingUsers[0]}</strong> está
+            <span className="h-1.5 w-1.5 rounded-full bg-[#4654D8] animate-ping" />
+            <strong className="text-[#4654D8]">{typingUsers[0]}</strong> está
             digitando...
           </span>
         )}
         {typingUsers.length === 2 && (
           <span className="flex items-center gap-1.5 text-white/80">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#5865F2] animate-ping" />
-            <strong className="text-[#5865F2]">{typingUsers[0]}</strong> e{" "}
-            <strong className="text-[#5865F2]">{typingUsers[1]}</strong> estão
+            <span className="h-1.5 w-1.5 rounded-full bg-[#4654D8] animate-ping" />
+            <strong className="text-[#4654D8]">{typingUsers[0]}</strong> e{" "}
+            <strong className="text-[#4654D8]">{typingUsers[1]}</strong> estão
             digitando...
           </span>
         )}
         {typingUsers.length > 2 && (
           <span className="flex items-center gap-1.5 text-white/80">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#5865F2] animate-ping" />
+            <span className="h-1.5 w-1.5 rounded-full bg-[#4654D8] animate-ping" />
             Várias pessoas estão digitando na Nexora...
           </span>
         )}
@@ -261,7 +269,8 @@ function renderMessages(
   >,
   myId: number,
   canManage: boolean,
-  jumpTo: (id: number) => void
+  jumpTo: (id: number) => void,
+  onOpenProfile?: (userId: number) => void
 ) {
   const items: React.ReactNode[] = [];
   let lastDay = "";
@@ -304,6 +313,7 @@ function renderMessages(
         myId={myId}
         canManageMessages={canManage}
         onJumpTo={jumpTo}
+        onOpenProfile={onOpenProfile}
       />
     );
     lastAuthor = msg.authorId;

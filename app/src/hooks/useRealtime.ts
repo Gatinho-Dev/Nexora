@@ -15,8 +15,9 @@ export function useRealtime(myUserId: number | undefined) {
     if (!myUserId) return;
     realtime.connect();
 
-    const offConnect = realtime.onConnect((connected) => {
+    const offConnect = realtime.onConnect(connected => {
       useAppStore.getState().setWsConnected(connected);
+      voiceManager.handleRealtimeConnection(connected);
       if (connected) {
         // Recover anything missed while disconnected
         utils.message.unread.invalidate();
@@ -26,6 +27,8 @@ export function useRealtime(myUserId: number | undefined) {
         utils.friend.list.invalidate();
         utils.notification.unreadCount.invalidate();
         utils.notification.list.invalidate();
+        utils.official.unreadCount.invalidate();
+        utils.official.list.invalidate();
       }
     });
 
@@ -50,7 +53,10 @@ export function useRealtime(myUserId: number | undefined) {
             utils.dm.list.invalidate();
             if (view.conversationId === msg.conversationId) {
               utils.client.message.markRead
-                .mutate({ conversationId: msg.conversationId, lastMessageId: msg.id })
+                .mutate({
+                  conversationId: msg.conversationId,
+                  lastMessageId: msg.id,
+                })
                 .catch(() => {});
             } else if (!isMine) {
               store.bumpUnreadConversation(msg.conversationId);
@@ -64,22 +70,30 @@ export function useRealtime(myUserId: number | undefined) {
           break;
         case "message:delete":
           store.removeMessage(
-            event.channelId ? channelKey(event.channelId) : dmKey(event.conversationId!),
-            event.id,
+            event.channelId
+              ? channelKey(event.channelId)
+              : dmKey(event.conversationId!),
+            event.id
           );
           break;
         case "reaction":
           store.setReactions(
-            event.channelId ? channelKey(event.channelId) : dmKey(event.conversationId!),
+            event.channelId
+              ? channelKey(event.channelId)
+              : dmKey(event.conversationId!),
             event.messageId,
-            event.reactions,
+            event.reactions
           );
           break;
         case "typing": {
           const key = event.channelId
             ? channelKey(event.channelId)
             : dmKey(event.conversationId!);
-          store.setTyping(key, event.user.id, event.user.name ?? event.user.username ?? "Alguém");
+          store.setTyping(
+            key,
+            event.user.id,
+            event.user.name ?? event.user.username ?? "Alguém"
+          );
           break;
         }
         case "presence":
@@ -90,12 +104,23 @@ export function useRealtime(myUserId: number | undefined) {
             ? `c:${event.channelId}`
             : `dm:${event.conversationId}`;
           store.setVoiceParticipants(roomKey, event.participants);
-          voiceManager.syncParticipants(event.participants);
+          voiceManager.syncParticipants(roomKey, event.participants);
           break;
         }
-        case "signal":
-          voiceManager.handleSignal(event.from, event.data as never);
+        case "voice:ready": {
+          const roomKey = event.channelId
+            ? `c:${event.channelId}`
+            : `dm:${event.conversationId}`;
+          voiceManager.handleVoiceReady(roomKey, event.voiceSessionId);
           break;
+        }
+        case "signal": {
+          const roomKey = event.channelId
+            ? `c:${event.channelId}`
+            : `dm:${event.conversationId}`;
+          voiceManager.handleSignal(roomKey, event.from, event.data as never);
+          break;
+        }
         case "notification": {
           utils.notification.unreadCount.invalidate();
           utils.notification.list.invalidate();
@@ -115,7 +140,26 @@ export function useRealtime(myUserId: number | undefined) {
                   : n.type === "reply"
                     ? `${n.actor?.name ?? "Alguém"} respondeu você`
                     : "Nexora";
-            new Notification(title, { body: n.content ?? undefined, icon: "/icon.svg" });
+            new Notification(title, {
+              body: n.content ?? undefined,
+              icon: "/icon.svg",
+            });
+          }
+          break;
+        }
+        case "official:announcement": {
+          utils.official.list.invalidate();
+          utils.official.unreadCount.invalidate();
+          soundManager.play("notification");
+          if (
+            typeof Notification !== "undefined" &&
+            Notification.permission === "granted" &&
+            document.hidden
+          ) {
+            new Notification(`Nexora Oficial: ${event.announcement.title}`, {
+              body: event.announcement.content,
+              icon: "/icon.svg",
+            });
           }
           break;
         }
@@ -135,6 +179,8 @@ export function useRealtime(myUserId: number | undefined) {
     return () => {
       off();
       offConnect();
+      voiceManager.cleanupVoiceSession();
+      realtime.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myUserId]);

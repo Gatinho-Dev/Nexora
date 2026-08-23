@@ -8,6 +8,7 @@ export type PublicUser = {
   username: string | null;
   name: string | null;
   avatar: string | null;
+  banner: string | null;
   bio: string | null;
   status: string;
 };
@@ -134,6 +135,57 @@ export type NotificationDTO = {
   createdAt: string | Date;
 };
 
+export type OfficialAnnouncementKind =
+  | "GENERAL"
+  | "UPDATE"
+  | "SECURITY"
+  | "MAINTENANCE";
+
+export type OfficialAnnouncementDTO = {
+  id: number;
+  title: string;
+  content: string;
+  kind: OfficialAnnouncementKind;
+  publishedAt: string | Date;
+  expiresAt: string | Date | null;
+  isActive: boolean;
+  isRead: boolean;
+  readAt: string | Date | null;
+  sender: {
+    id: "nexora-official";
+    name: "Nexora";
+    verified: true;
+    official: true;
+    avatarUrl: string;
+  };
+};
+
+export type PlatformBadgeDTO = {
+  id: number;
+  slug: string;
+  label: string;
+  description: string | null;
+  icon: string | null;
+  color: string;
+  isStaff: boolean;
+};
+
+export type UserBadgeDTO = PlatformBadgeDTO & {
+  assignedAt: string | Date;
+};
+
+export type AdminAuditLogDTO = {
+  id: number;
+  actorUserId: number;
+  action: string;
+  entityType: string;
+  entityId: number | null;
+  targetUserId: number | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string | Date;
+  actor: PublicUser | null;
+};
+
 export type VoiceParticipant = {
   userId: number;
   name: string;
@@ -151,15 +203,23 @@ export type WSClientEvent =
   | { t: "typing"; channelId?: number; conversationId?: number }
   | { t: "presence"; status: UserStatus }
   | { t: "voice:join"; channelId?: number; conversationId?: number }
-  | { t: "voice:leave" }
+  | { t: "voice:leave"; voiceSessionId?: string }
   | {
       t: "voice:state";
       muted?: boolean;
       deafened?: boolean;
       camera?: boolean;
       screen?: boolean;
+      voiceSessionId?: string;
     }
-  | { t: "signal"; to: number; channelId?: number; conversationId?: number; data: unknown };
+  | {
+      t: "signal";
+      to: number;
+      channelId?: number;
+      conversationId?: number;
+      voiceSessionId?: string;
+      data: unknown;
+    };
 
 // Server → Client
 export type WSServerEvent =
@@ -193,8 +253,21 @@ export type WSServerEvent =
       conversationId?: number;
       participants: VoiceParticipant[];
     }
-  | { t: "signal"; from: number; channelId?: number; conversationId?: number; data: unknown }
+  | {
+      t: "voice:ready";
+      channelId?: number;
+      conversationId?: number;
+      voiceSessionId: string;
+    }
+  | {
+      t: "signal";
+      from: number;
+      channelId?: number;
+      conversationId?: number;
+      data: unknown;
+    }
   | { t: "notification"; notification: NotificationDTO }
+  | { t: "official:announcement"; announcement: OfficialAnnouncementDTO }
   | { t: "server:refresh"; serverId: number }
   | { t: "dm:refresh" }
   | { t: "friends:refresh" };

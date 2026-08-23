@@ -12,6 +12,8 @@ import { QuickSwitcherModal } from "@/components/modals/QuickSwitcherModal";
 import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
 import { Menu, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { VoiceMediaRenderer } from "@/components/voice/VoiceMediaRenderer";
+import { NexoraAppIcon, NexoraLogo } from "@/components/NexoraBrand";
 
 export function AppLayout() {
   const { user, isLoading } = useAuth({ redirectOnUnauthenticated: true });
@@ -50,9 +52,7 @@ export function AppLayout() {
   if (isLoading || !user) {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center bg-[#313338] text-white">
-        <div className="h-14 w-14 rounded-[18px] bg-[#5865F2] animate-pulse flex items-center justify-center font-black text-xl text-white mb-4">
-          N
-        </div>
+        <NexoraAppIcon className="mb-4 h-14 w-14 animate-pulse" />
         <p className="text-sm font-medium text-[#B5BAC1] animate-pulse">
           Carregando Nexora...
         </p>
@@ -112,13 +112,10 @@ export function AppLayout() {
           <button
             onClick={() => navigate("/channels/@me")}
             className="flex items-center gap-2 min-w-0"
+            aria-label="Ir para o início da Nexora"
+            title="Nexora"
           >
-            <div className="h-7 w-7 rounded-[10px] bg-[#5865F2] flex items-center justify-center font-extrabold text-xs text-white">
-              N
-            </div>
-            <span className="text-sm font-bold tracking-wide truncate text-white">
-              Nexora
-            </span>
+            <NexoraLogo className="h-6 w-[112px]" decorative />
           </button>
           <div className="ml-auto flex items-center gap-1">
             {inServer && (
@@ -134,7 +131,7 @@ export function AppLayout() {
                 <Users className="h-5 w-5" />
               </button>
             )}
-            <NotificationsBell />
+            <NotificationsBell onOpenProfile={setActiveProfileUserId} />
           </div>
         </div>
 
@@ -161,6 +158,7 @@ export function AppLayout() {
         onOpenChange={setQuickSwitcherOpen}
       />
       <ShortcutsModal open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <VoiceMediaRenderer myUserId={user.id} />
     </div>
   );
 }

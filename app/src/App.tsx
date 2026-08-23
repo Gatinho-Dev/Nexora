@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route } from "react-router";
+import { NexoraAppIcon } from "@/components/NexoraBrand";
 
 const Home = lazy(() => import("./pages/Home"));
 const Login = lazy(() => import("./pages/Login"));
@@ -21,6 +22,16 @@ const DMConversation = lazy(() =>
     default: module.DMConversation,
   }))
 );
+const OfficialAnnouncements = lazy(() =>
+  import("./pages/OfficialAnnouncements").then(module => ({
+    default: module.OfficialAnnouncements,
+  }))
+);
+const NexoraAdminPanel = lazy(() =>
+  import("./pages/NexoraAdminPanel").then(module => ({
+    default: module.NexoraAdminPanel,
+  }))
+);
 const InvitePage = lazy(() =>
   import("./pages/InvitePage").then(module => ({ default: module.InvitePage }))
 );
@@ -31,9 +42,7 @@ function PageLoader() {
       className="flex min-h-[100dvh] items-center justify-center bg-[#313338]"
       aria-busy="true"
     >
-      <div className="nexora-mark flex h-12 w-12 animate-pulse items-center justify-center rounded-[14px] font-black text-white">
-        N
-      </div>
+      <NexoraAppIcon className="h-12 w-12 animate-pulse" />
       <span className="sr-only" role="status">
         Carregando...
       </span>
@@ -96,10 +105,26 @@ export default function App() {
           }
         />
         <Route
+          path="/channels/@me/official"
+          element={
+            <Deferred>
+              <OfficialAnnouncements />
+            </Deferred>
+          }
+        />
+        <Route
           path="/channels/@me/:conversationId"
           element={
             <Deferred>
               <DMConversation />
+            </Deferred>
+          }
+        />
+        <Route
+          path="/nexora-admin"
+          element={
+            <Deferred>
+              <NexoraAdminPanel />
             </Deferred>
           }
         />

@@ -1,93 +1,132 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { calculateRms, manualVadThreshold } from "@/lib/voice/vadMath";
+
+type AudioAnalyserOptions = {
+  threshold?: number;
+  automatic?: boolean;
+  attackMs?: number;
+  releaseMs?: number;
+  hangoverMs?: number;
+  disabled?: boolean;
+  onSpeakingChange?: (speaking: boolean) => void;
+};
 
 /**
- * Hook to analyze audio levels (Voice Activity Detection - VAD) for a MediaStream using Web Audio API AnalyserNode.
- * Returns boolean indicating if the user is speaking and current numeric audio volume.
+ * Low-churn VAD for local or remote streams. RMS sampling stays outside React;
+ * state changes only on voice transitions and the public meter is throttled.
  */
 export function useAudioAnalyser(
   stream: MediaStream | null,
-  options?: { threshold?: number }
+  options: AudioAnalyserOptions = {}
 ) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [volume, setVolume] = useState(0);
-  const threshold = options?.threshold ?? 15; // sensitivity threshold
+  const callbackRef = useRef(options.onSpeakingChange);
 
   useEffect(() => {
-    if (!stream || stream.getAudioTracks().length === 0) {
+    callbackRef.current = options.onSpeakingChange;
+  }, [options.onSpeakingChange]);
+
+  const {
+    threshold = 28,
+    automatic = true,
+    attackMs = 120,
+    releaseMs = 180,
+    hangoverMs = 360,
+    disabled = false,
+  } = options;
+
+  useEffect(() => {
+    const track = stream?.getAudioTracks()[0];
+    if (!stream || !track || disabled || track.readyState !== "live") {
       const resetFrame = requestAnimationFrame(() => {
         setIsSpeaking(false);
         setVolume(0);
+        callbackRef.current?.(false);
       });
       return () => cancelAnimationFrame(resetFrame);
     }
 
-    const audioTrack = stream.getAudioTracks()[0];
-    if (
-      !audioTrack ||
-      !audioTrack.enabled ||
-      audioTrack.readyState !== "live"
-    ) {
-      const resetFrame = requestAnimationFrame(() => {
-        setIsSpeaking(false);
-        setVolume(0);
-      });
-      return () => cancelAnimationFrame(resetFrame);
-    }
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext })
+        .webkitAudioContext;
+    const context = new AudioContextClass({ latencyHint: "interactive" });
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.35;
+    const source = context.createMediaStreamSource(stream);
+    source.connect(analyser);
 
-    let animationFrameId: number;
-    let audioCtx: AudioContext | null = null;
-    let analyser: AnalyserNode | null = null;
-    let source: MediaStreamAudioSourceNode | null = null;
+    const samples = new Float32Array(analyser.fftSize);
+    let frame = 0;
+    let speaking = false;
+    let aboveSince = 0;
+    let belowSince = 0;
+    let lastVoiceAt = 0;
+    let lastMeterAt = 0;
+    let noiseFloor = 0.008;
 
-    try {
-      const AudioContextClass =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext })
-          .webkitAudioContext;
-      audioCtx = new AudioContextClass();
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.5;
+    const publishSpeaking = (next: boolean) => {
+      if (speaking === next) return;
+      speaking = next;
+      setIsSpeaking(next);
+      callbackRef.current?.(next);
+    };
 
-      source = audioCtx.createMediaStreamSource(stream);
-      source.connect(analyser);
+    const tick = (now: number) => {
+      analyser.getFloatTimeDomainData(samples);
+      const rms = calculateRms(samples);
+      const meter = Math.min(100, Math.round(rms * 700));
 
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
+      if (!speaking && rms < noiseFloor * 2.2) {
+        noiseFloor = noiseFloor * 0.985 + rms * 0.015;
+      }
+      noiseFloor = Math.max(0.0025, Math.min(noiseFloor, 0.035));
 
-      const checkVolume = () => {
-        if (!analyser) return;
-        analyser.getByteFrequencyData(dataArray);
+      const manualOpen = manualVadThreshold(threshold);
+      const openThreshold = automatic
+        ? Math.max(0.012, noiseFloor * 2.8)
+        : manualOpen;
+      const closeThreshold = automatic
+        ? Math.max(0.008, noiseFloor * 1.7)
+        : openThreshold * 0.68;
 
-        let sum = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          sum += dataArray[i];
+      if (rms >= openThreshold && track.enabled && !track.muted) {
+        belowSince = 0;
+        lastVoiceAt = now;
+        if (!aboveSince) aboveSince = now;
+        if (!speaking && now - aboveSince >= attackMs) publishSpeaking(true);
+      } else if (rms <= closeThreshold || !track.enabled || track.muted) {
+        aboveSince = 0;
+        if (!belowSince) belowSince = now;
+        if (
+          speaking &&
+          now - belowSince >= releaseMs &&
+          now - lastVoiceAt >= hangoverMs
+        ) {
+          publishSpeaking(false);
         }
-        const average = sum / bufferLength;
-        const normalizedVol = Math.round(average);
+      }
 
-        setVolume(normalizedVol);
-        setIsSpeaking(normalizedVol > threshold);
+      if (now - lastMeterAt >= 100) {
+        lastMeterAt = now;
+        setVolume(meter);
+      }
+      frame = requestAnimationFrame(tick);
+    };
 
-        animationFrameId = requestAnimationFrame(checkVolume);
-      };
-
-      checkVolume();
-    } catch {
-      animationFrameId = requestAnimationFrame(() => {
-        setIsSpeaking(false);
-        setVolume(0);
-      });
-    }
+    if (context.state === "suspended") context.resume().catch(() => {});
+    frame = requestAnimationFrame(tick);
 
     return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      if (source) source.disconnect();
-      if (audioCtx && audioCtx.state !== "closed") {
-        audioCtx.close().catch(() => {});
-      }
+      cancelAnimationFrame(frame);
+      publishSpeaking(false);
+      source.disconnect();
+      analyser.disconnect();
+      if (context.state !== "closed") context.close().catch(() => {});
     };
-  }, [stream, threshold]);
+  }, [stream, threshold, automatic, attackMs, releaseMs, hangoverMs, disabled]);
 
   return { isSpeaking, volume };
 }
