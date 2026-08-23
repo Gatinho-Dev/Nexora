@@ -157,9 +157,9 @@ export function UserPanel() {
             align="start"
             sideOffset={8}
             collisionPadding={8}
-            className="w-[min(320px,calc(100vw-1rem))] overflow-hidden rounded-2xl border-white/10 bg-[#181A21] p-0 text-white shadow-2xl"
+            className="w-[min(320px,calc(100vw-1rem))] overflow-hidden rounded-2xl border-black/10 dark:border-white/10 bg-popover text-popover-foreground p-0 shadow-2xl"
           >
-            <div className="relative h-20 overflow-hidden bg-[#1B2037]">
+            <div className="relative h-20 overflow-hidden bg-hov">
               {profile.banner ? (
                 <img
                   src={profile.banner}
@@ -180,7 +180,7 @@ export function UserPanel() {
 
             <div className="px-4 pb-4">
               <div className="-mt-7 flex items-end justify-between gap-3">
-                <div className="rounded-full border-4 border-[#181A21] bg-[#181A21]">
+                <div className="rounded-full border-4 border-popover bg-popover">
                   <Avatar
                     userId={user.id}
                     name={user.name ?? user.username}
@@ -209,7 +209,7 @@ export function UserPanel() {
                 </p>
               </div>
 
-              <div className="mt-3 rounded-xl border border-white/[0.07] bg-[#11131A] p-3">
+              <div className="mt-3 rounded-xl border border-black/[0.06] dark:border-white/[0.07] bg-panel p-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-faint">
                   Sobre mim
                 </p>

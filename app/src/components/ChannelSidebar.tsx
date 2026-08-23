@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
@@ -83,6 +83,16 @@ export function ChannelSidebar({
     setCollapsedCategories(prev => ({ ...prev, [catId]: !prev[catId] }));
   };
 
+  // Aggregate this server's channel unreads for the 72px rail indicators.
+  const setServerUnread = useAppStore(st => st.setServerUnread);
+  useEffect(() => {
+    const total = channels.reduce(
+      (sum, c) => sum + (unreadChannels[c.id] ?? 0),
+      0
+    );
+    setServerUnread(server.id, total);
+  }, [channels, unreadChannels, server.id, setServerUnread]);
+
   const channelsInCategory = (
     categoryId: number | null,
     kind: "text" | "voice"
@@ -130,7 +140,7 @@ export function ChannelSidebar({
             <ChevronDown className="h-4 w-4 shrink-0 text-muted2" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-56 bg-[#111214] border-black/30 text-white shadow-xl">
+        <DropdownMenuContent className="w-56 bg-popover text-popover-foreground border-black/20 shadow-xl">
           <DropdownMenuItem
             onClick={() => setInviteOpen(true)}
             className="hover:bg-white/10 cursor-pointer"

@@ -28,6 +28,7 @@ export function ServerRail({
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const unreadConversations = useAppStore(s => s.unreadConversations);
+  const serverUnread = useAppStore(s => s.serverUnread);
 
   const activeServerId = params.serverId ? Number(params.serverId) : null;
   const isDM = location.pathname.startsWith("/channels/@me");
@@ -60,6 +61,8 @@ export function ServerRail({
             key={server.id}
             label={server.name}
             active={activeServerId === server.id}
+            hasUnread={(serverUnread[server.id] ?? 0) > 0}
+            badge={serverUnread[server.id] ?? 0}
             onClick={() => navigate(`/channels/${server.id}/first`)}
             onContextMenu={e => {
               e.preventDefault();
@@ -178,7 +181,7 @@ function RailButton({
         </TooltipTrigger>
         <TooltipContent
           side="right"
-          className="bg-[#111214] text-white border-black/20 font-medium shadow-xl"
+          className="bg-popover text-popover-foreground border-black/20 font-medium shadow-xl"
         >
           {label}
         </TooltipContent>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
 import type { MessageDTO } from "@contracts/types";
@@ -70,7 +70,7 @@ type Props = {
   onOpenProfile?: (userId: number) => void;
 };
 
-export function MessageItem({
+function MessageItemBase({
   message,
   grouped,
   myId,
@@ -529,3 +529,5 @@ function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
     </button>
   );
 }
+
+export const MessageItem = memo(MessageItemBase);

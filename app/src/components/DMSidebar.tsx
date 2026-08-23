@@ -18,7 +18,9 @@ export function DMSidebar({
   const activeConversationId = params.conversationId
     ? Number(params.conversationId)
     : null;
-  const conversations = trpc.dm.list.useQuery();
+  const conversations = trpc.dm.list.useQuery(undefined, {
+    placeholderData: prev => prev,
+  });
   const officialUnread = trpc.official.unreadCount.useQuery(undefined, {
     refetchInterval: 60_000,
   });

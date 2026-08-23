@@ -8,7 +8,20 @@ import { apiUrl } from "@/lib/endpoints";
 
 export const trpc = createTRPCReact<AppRouter>();
 
-const queryClient = new QueryClient();
+// Performance defaults: avoid refetch storms on window focus and duplicate
+// retries; data stays fresh for 20s and is kept cached for instant back-nav.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 20_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+    mutations: { retry: 0 },
+  },
+});
+
 const trpcClient = trpc.createClient({
   links: [
     httpBatchLink({

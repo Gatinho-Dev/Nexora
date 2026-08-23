@@ -71,6 +71,8 @@ export function Avatar({
           <img
             src={src}
             alt={name ?? "avatar"}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover"
           />
         ) : (

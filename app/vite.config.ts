@@ -32,6 +32,19 @@ export default defineConfig({
   },
   envDir: path.resolve(__dirname),
   build: {
+    rollupOptions: {
+      output: {
+        // Stable vendor chunks: better long-term caching between deploys.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (/[\\/]node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/.test(id))
+            return "react-vendor";
+          if (/[\\/]node_modules[\\/](@radix-ui|lucide-react|sonner|cmdk)[\\/]/.test(id))
+            return "ui-vendor";
+          return undefined;
+        },
+      },
+    },
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
   },
