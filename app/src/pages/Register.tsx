@@ -23,14 +23,14 @@ export default function Register() {
   });
 
   return (
-    <main className="min-h-[100dvh] flex items-center justify-center bg-[#313338] p-4 sm:p-6 select-none text-white">
-      <div className="w-full max-w-[480px] rounded-xl bg-[#2B2D31] border border-black/20 p-6 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
+    <main className="min-h-[100dvh] flex items-center justify-center bg-chat p-4 sm:p-6 select-none text-white">
+      <div className="w-full max-w-[480px] rounded-xl bg-sidebar border border-black/20 p-6 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
         <div className="flex flex-col items-center mb-8">
           <NexoraAppIcon className="mb-5 h-12 w-12" />
           <h1 className="text-2xl font-bold tracking-tight text-white">
             Criar uma conta
           </h1>
-          <p className="text-[#B5BAC1] text-sm mt-2">
+          <p className="text-muted2 text-sm mt-2">
             Crie sua conta e encontre sua comunidade.
           </p>
         </div>
@@ -50,33 +50,33 @@ export default function Register() {
           <div className="space-y-1.5">
             <Label
               htmlFor="username"
-              className="text-xs font-bold uppercase text-[#B5BAC1]"
+              className="text-xs font-bold uppercase text-muted2"
             >
               Nome de usuário
             </Label>
             <Input
               id="username"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
+              className="h-11 bg-rail border-black/20 text-white focus-visible:ring-[#5865F2]"
               autoComplete="username"
               placeholder="ex.: ana.silva"
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
             />
-            <p className="text-xs text-[#B5BAC1]">
+            <p className="text-xs text-muted2">
               É assim que seus amigos vão te encontrar no Nexora.
             </p>
           </div>
           <div className="space-y-1.5">
             <Label
               htmlFor="displayName"
-              className="text-xs font-bold uppercase text-[#B5BAC1]"
+              className="text-xs font-bold uppercase text-muted2"
             >
               Nome de exibição
             </Label>
             <Input
               id="displayName"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
+              className="h-11 bg-rail border-black/20 text-white focus-visible:ring-[#5865F2]"
               placeholder="ex.: Ana Silva"
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
@@ -86,21 +86,21 @@ export default function Register() {
           <div className="space-y-1.5">
             <Label
               htmlFor="password"
-              className="text-xs font-bold uppercase text-[#B5BAC1]"
+              className="text-xs font-bold uppercase text-muted2"
             >
               Senha
             </Label>
             <Input
               id="password"
               type="password"
-              className="h-11 bg-[#1E1F22] border-black/20 text-white focus-visible:ring-[#5865F2]"
+              className="h-11 bg-rail border-black/20 text-white focus-visible:ring-[#5865F2]"
               autoComplete="new-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
               minLength={6}
             />
-            <p className="text-xs text-[#B5BAC1]">Mínimo de 6 caracteres.</p>
+            <p className="text-xs text-muted2">Mínimo de 6 caracteres.</p>
           </div>
 
           {error && (
@@ -118,7 +118,7 @@ export default function Register() {
           </Button>
         </form>
 
-        <p className="text-sm text-[#B5BAC1] mt-5">
+        <p className="text-sm text-muted2 mt-5">
           Já tem uma conta?{" "}
           <Link
             to="/login"

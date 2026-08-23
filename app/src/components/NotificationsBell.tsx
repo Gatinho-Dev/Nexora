@@ -101,7 +101,7 @@ export function NotificationsBell({
         <Button
           variant="ghost"
           size="icon"
-          className="relative text-[#B5BAC1] hover:bg-white/10 hover:text-white"
+          className="relative text-muted2 hover:bg-white/10 hover:text-white"
           title="Notificações"
         >
           <Bell className="h-5 w-5" />
@@ -114,7 +114,7 @@ export function NotificationsBell({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-96 p-0 bg-[#2B2D31] border-white/10 text-white shadow-2xl rounded-2xl select-none"
+        className="w-96 p-0 bg-sidebar border-white/10 text-white shadow-2xl rounded-2xl select-none"
       >
         <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
           <p className="text-xs font-bold uppercase tracking-wider text-white">
@@ -134,11 +134,11 @@ export function NotificationsBell({
         </div>
         <ScrollArea className="max-h-96">
           {list.isLoading ? (
-            <p className="p-4 text-xs text-[#B5BAC1]">
+            <p className="p-4 text-xs text-muted2">
               Carregando notificações...
             </p>
           ) : list.data?.length === 0 ? (
-            <p className="p-6 text-center text-xs text-[#B5BAC1]">
+            <p className="p-6 text-center text-xs text-muted2">
               Nenhuma notificação por aqui.
             </p>
           ) : (
@@ -185,11 +185,11 @@ export function NotificationsBell({
                       )}
                     </p>
                     {n.content && (
-                      <p className="mt-0.5 truncate text-[11px] text-[#B5BAC1]">
+                      <p className="mt-0.5 truncate text-[11px] text-muted2">
                         {n.content}
                       </p>
                     )}
-                    <p className="mt-0.5 text-[10px] text-[#B5BAC1]/60">
+                    <p className="mt-0.5 text-[10px] text-muted2/60">
                       {new Date(n.createdAt).toLocaleString("pt-BR", {
                         day: "2-digit",
                         month: "short",

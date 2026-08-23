@@ -41,6 +41,14 @@
     --streaming: 268 48% 40%;
     --offline: 222 6% 53%;
     --link: 199 100% 49%;
+
+    /* Chrome surfaces & text tiers */
+    --panel: #ebedef;
+    --hov: #e0e3e8;
+    --act: #cfd3da;
+    --body-t: #2e3338;
+    --muted2: #5a6069;
+    --faint: #6d7480;
   }
 
   .dark {
@@ -81,6 +89,14 @@
     --streaming: 268 48% 40%; /* #593695 */
     --offline: 222 6% 53%; /* #80848E */
     --link: 199 100% 49%; /* #00A8FC */
+
+    /* Chrome surfaces & text tiers */
+    --panel: #232428;
+    --hov: #35373c;
+    --act: #404249;
+    --body-t: #dbdee1;
+    --muted2: #b5bac1;
+    --faint: #949ba4;
   }
 }
 

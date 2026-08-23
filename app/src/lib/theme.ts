@@ -11,8 +11,9 @@ export function getTheme(): Theme {
 export function applyTheme(theme: Theme) {
   const root = document.documentElement;
   const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const dark =
-    theme === "dark" || theme === "system" || (theme === "light" && systemDark);
+  // "light" must win over the OS preference — this was inverted before and
+  // kept the app permanently dark.
+  const dark = theme === "system" ? systemDark : theme === "dark";
   root.classList.toggle("dark", dark);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", dark ? "#313338" : "#f8fafc");
@@ -30,5 +31,4 @@ export function initTheme() {
     .addEventListener("change", () => {
       if (getTheme() === "system") applyTheme("system");
     });
-  document.documentElement.classList.add("dark");
 }

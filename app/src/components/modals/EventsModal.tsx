@@ -85,7 +85,7 @@ export function EventsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg bg-[#313338] border-white/10 text-white">
+      <DialogContent className="sm:max-w-lg bg-chat border-white/10 text-white">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarClock className="h-5 w-5 text-[#5865F2]" />
@@ -105,7 +105,7 @@ export function EventsModal({
 
         {creating && (
           <form
-            className="space-y-3 rounded-xl border border-white/10 bg-[#2B2D31] p-3"
+            className="space-y-3 rounded-xl border border-white/10 bg-sidebar p-3"
             onSubmit={e => {
               e.preventDefault();
               submit();
@@ -133,7 +133,7 @@ export function EventsModal({
                 placeholder="O que vai acontecer no evento?"
                 rows={2}
                 maxLength={2000}
-                className="w-full resize-none rounded-md bg-[#383A40] px-3 py-2 text-sm outline-none placeholder:text-[#949BA4]"
+                className="w-full resize-none rounded-md bg-[#383A40] px-3 py-2 text-sm outline-none placeholder:text-faint"
               />
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -173,7 +173,7 @@ export function EventsModal({
                 size="sm"
                 variant="ghost"
                 onClick={() => setCreating(false)}
-                className="text-[#B5BAC1] hover:text-white"
+                className="text-muted2 hover:text-white"
               >
                 Cancelar
               </Button>
@@ -197,10 +197,10 @@ export function EventsModal({
         <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
           {eventsQuery.isLoading ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-[#B5BAC1]" />
+              <Loader2 className="h-5 w-5 animate-spin text-muted2" />
             </div>
           ) : (eventsQuery.data?.length ?? 0) === 0 ? (
-            <p className="py-8 text-center text-xs text-[#B5BAC1]">
+            <p className="py-8 text-center text-xs text-muted2">
               Nenhum evento agendado ainda.
             </p>
           ) : (
@@ -210,12 +210,12 @@ export function EventsModal({
               return (
                 <div
                   key={ev.id}
-                  className="rounded-xl border border-white/[0.06] bg-[#2B2D31] p-3.5"
+                  className="rounded-xl border border-white/[0.06] bg-sidebar p-3.5"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold">{ev.name}</p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[#B5BAC1]">
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted2">
                         <span className="text-emerald-400">
                           {starts.toLocaleString("pt-BR", {
                             day: "2-digit",
@@ -239,7 +239,7 @@ export function EventsModal({
                         )}
                       </p>
                       {ev.description && (
-                        <p className="mt-1 line-clamp-2 text-xs text-[#DBDEE1]/80">
+                        <p className="mt-1 line-clamp-2 text-xs text-bodyx/80">
                           {ev.description}
                         </p>
                       )}
@@ -250,7 +250,7 @@ export function EventsModal({
                         aria-label={`Cancelar evento ${ev.name}`}
                         disabled={cancelEvent.isPending}
                         onClick={() => cancelEvent.mutate({ eventId: ev.id })}
-                        className="rounded p-1 text-[#B5BAC1] transition-colors hover:bg-red-500/10 hover:text-red-400"
+                        className="rounded p-1 text-muted2 transition-colors hover:bg-red-500/10 hover:text-red-400"
                       >
                         <X className="h-4 w-4" />
                       </button>

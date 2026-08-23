@@ -8,6 +8,7 @@ import { notificationRouter } from "./notificationRouter";
 import { officialRouter } from "./officialRouter";
 import { badgeRouter } from "./badgeRouter";
 import { adminRouter } from "./adminRouter";
+import { safetyRouter } from "./safetyRouter";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -23,6 +24,7 @@ export const appRouter = createRouter({
   official: officialRouter,
   badge: badgeRouter,
   admin: adminRouter,
+  safety: safetyRouter,
 });
 
 export type AppRouter = typeof appRouter;

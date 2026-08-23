@@ -42,13 +42,13 @@ export function QuickSwitcherModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden bg-[#2B2D31] border border-white/10 text-white rounded-2xl shadow-2xl select-none">
+      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden bg-sidebar border border-white/10 text-white rounded-2xl shadow-2xl select-none">
         <DialogTitle className="sr-only">Quick Switcher Nexora</DialogTitle>
-        <div className="p-3 border-b border-white/10 flex items-center gap-2 bg-[#313338]">
+        <div className="p-3 border-b border-white/10 flex items-center gap-2 bg-chat">
           <Search className="h-4 w-4 text-[#5865F2] shrink-0" />
           <input
             autoFocus
-            className="w-full bg-transparent outline-none text-sm text-white placeholder:text-[#B5BAC1]"
+            className="w-full bg-transparent outline-none text-sm text-white placeholder:text-muted2"
             placeholder="Para onde você quer ir na Nexora? (digite o nome da DM ou servidor)"
             value={query}
             onChange={e => setQuery(e.target.value)}
@@ -59,7 +59,7 @@ export function QuickSwitcherModal({
           {/* DMs */}
           {filteredDMs.length > 0 && (
             <div>
-              <div className="px-2 py-1 text-[10px] font-bold uppercase text-[#B5BAC1]">
+              <div className="px-2 py-1 text-[10px] font-bold uppercase text-muted2">
                 MENSAGENS DIRETAS
               </div>
               {filteredDMs.slice(0, 5).map(d => (
@@ -83,7 +83,7 @@ export function QuickSwitcherModal({
           {/* Servers */}
           {filteredServers.length > 0 && (
             <div>
-              <div className="px-2 py-1 text-[10px] font-bold uppercase text-[#B5BAC1]">
+              <div className="px-2 py-1 text-[10px] font-bold uppercase text-muted2">
                 COMUNIDADES
               </div>
               {filteredServers.slice(0, 5).map(s => (
@@ -103,7 +103,7 @@ export function QuickSwitcherModal({
           )}
 
           {filteredDMs.length === 0 && filteredServers.length === 0 && (
-            <div className="p-6 text-center text-[#B5BAC1]">
+            <div className="p-6 text-center text-muted2">
               Nenhum canal ou usuário encontrado com &quot;{query}&quot;.
             </div>
           )}

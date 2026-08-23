@@ -2,6 +2,7 @@ import { z } from "zod";
 import { and, eq, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery } from "./middleware";
+import { assertCanInteract } from "./services/accountSafety";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
 import { RateLimits } from "@contracts/constants";
@@ -38,6 +39,7 @@ export const friendRouter = createRouter({
   sendRequest: authedQuery
     .input(z.object({ username: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
+      await assertCanInteract(ctx.user.id);
       rateLimit(`friendRequest:${ctx.user.id}`, RateLimits.friendRequest.limit, RateLimits.friendRequest.windowMs);
       const db = getDb();
       const target = await db.query.users.findFirst({

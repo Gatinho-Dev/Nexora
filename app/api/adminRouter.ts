@@ -24,6 +24,15 @@ import {
 } from "./utils/platformDtos";
 import { toPublicUser } from "./utils/permissions";
 import { broadcastToAll } from "./realtime";
+import {
+  addInternalNote,
+  confirmViolation,
+  listViolations,
+  manualSuspend,
+  manualUnban,
+  markFalsePositive,
+  resolveViolation,
+} from "./services/accountSafety";
 import { rateLimit } from "./utils/rateLimit";
 
 const announcementKind = z.enum([
@@ -457,5 +466,61 @@ export const adminRouter = createRouter({
         })),
         nextCursor: hasMore ? (page.at(-1)?.log.id ?? null) : null,
       };
+    }),
+
+  // ── Safety & moderation queue ────────────────────────────────
+  safetyQueue: adminQuery
+    .input(
+      z.object({
+        status: z.enum(["pending_review", "confirmed", "false_positive", "resolved"]),
+      })
+    )
+    .query(async ({ input }) => listViolations(input.status)),
+
+  reviewViolation: adminQuery
+    .input(
+      z.object({
+        violationId: z.number(),
+        decision: z.enum(["confirm", "false_positive"]),
+        note: z.string().max(2000).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.decision === "confirm") {
+        const result = await confirmViolation(input.violationId, ctx.user.id);
+        if (input.note) await addInternalNote(input.violationId, ctx.user.id, input.note);
+        return result;
+      }
+      await markFalsePositive(input.violationId, ctx.user.id, input.note);
+      return { severeStrikes: null, banned: false };
+    }),
+
+  resolveViolation: adminQuery
+    .input(z.object({ violationId: z.number(), note: z.string().max(2000).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      await resolveViolation(input.violationId, ctx.user.id, input.note);
+      return { ok: true };
+    }),
+
+  noteViolation: adminQuery
+    .input(z.object({ violationId: z.number(), note: z.string().min(1).max(2000) }))
+    .mutation(async ({ ctx, input }) => {
+      await addInternalNote(input.violationId, ctx.user.id, input.note);
+      return { ok: true };
+    }),
+
+  suspendUser: adminQuery
+    .input(z.object({ userId: z.number(), days: z.number().min(1).max(30) }))
+    .mutation(async ({ ctx, input }) => {
+      await manualSuspend(input.userId, input.days, ctx.user.id);
+      return { ok: true };
+    }),
+
+  unbanUser: adminQuery
+    .input(z.object({ userId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await manualUnban(input.userId);
+      void ctx;
+      return { ok: true };
     }),
 });

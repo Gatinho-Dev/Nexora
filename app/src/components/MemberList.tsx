@@ -51,7 +51,7 @@ export function MemberList({
   return (
     <aside
       aria-label="Lista de membros"
-      className="w-60 shrink-0 bg-[#2B2D31] border-l border-black/20 overflow-y-auto py-4 px-2 h-full select-none"
+      className="w-60 shrink-0 bg-sidebar border-l border-black/20 overflow-y-auto py-4 px-2 h-full select-none"
     >
       {sortedGroups.map(group => {
         const online = group.members.filter(m => statusOf(m) !== "offline");
@@ -61,7 +61,7 @@ export function MemberList({
 
         return (
           <div key={group.name} className="mb-4">
-            <div className="px-2 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-[#949BA4] flex items-center justify-between">
+            <div className="px-2 mb-1.5 text-[11px] font-bold uppercase tracking-wide text-faint flex items-center justify-between">
               <span>
                 {group.name} - {group.members.length}
               </span>
@@ -125,7 +125,7 @@ function MemberRow({
         onOpenContextMenu?.(e, "user", member.user.id);
       }}
       className={cn(
-        "flex min-h-11 w-full items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-[#35373C] cursor-pointer transition-colors group text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]",
+        "flex min-h-11 w-full items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-hov cursor-pointer transition-colors group text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]",
         dimmed && "opacity-40 saturate-[0.4] hover:opacity-100 hover:saturate-100"
       )}
       aria-label={`Ver perfil de ${member.nickname ?? member.user.name ?? member.user.username ?? "usuário"}`}
@@ -141,7 +141,7 @@ function MemberRow({
       />
       <div className="min-w-0 flex-1">
         <div
-          className="text-xs font-semibold truncate flex items-center gap-1 group-hover:text-white transition-colors"
+          className="text-xs font-semibold truncate flex items-center gap-1 group-hover:text-foreground transition-colors"
           style={{ color: topRole?.color || undefined }}
         >
           <span>
@@ -152,7 +152,7 @@ function MemberRow({
           )}
         </div>
         {topRole && (
-          <div className="text-[10px] text-[#949BA4] truncate">
+          <div className="text-[10px] text-faint truncate">
             {topRole.name}
           </div>
         )}

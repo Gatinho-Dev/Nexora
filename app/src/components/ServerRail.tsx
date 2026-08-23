@@ -39,7 +39,7 @@ export function ServerRail({
   return (
     <nav
       aria-label="Comunidades"
-      className="w-[72px] shrink-0 bg-[#1E1F22] flex flex-col items-center py-3 gap-2 overflow-y-auto z-20 border-r border-black/20 select-none"
+      className="w-[72px] shrink-0 bg-rail flex flex-col items-center py-3 gap-2 overflow-y-auto z-20 border-r border-black/20 select-none"
     >
       <TooltipProvider delayDuration={100}>
         {/* Nexora Home button */}
@@ -159,11 +159,11 @@ function RailButton({
                 ? "rounded-[16px] bg-[#5865F2] text-white"
                 : actionType === "add" || actionType === "explore"
                   ? cn(
-                      "bg-[#313338] text-[#23A559] hover:bg-[#23A559] hover:text-white",
+                      "bg-chat text-[#23A559] hover:bg-[#23A559] hover:text-white",
                       hovered ? "rounded-full" : "rounded-[16px]"
                     )
                   : cn(
-                      "bg-[#313338] text-foreground hover:bg-[#5865F2] hover:text-white",
+                      "bg-chat text-foreground hover:bg-[#5865F2] hover:text-white",
                       hovered ? "rounded-full" : "rounded-[16px]"
                     )
             )}

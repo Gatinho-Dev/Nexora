@@ -19,6 +19,9 @@ type AppState = {
   messages: Record<string, MessageDTO[]>;
   hasMore: Record<string, boolean>;
   typing: Record<string, Record<number, TypingEntry>>;
+  // safety
+  sensitiveMediaPref: "hide" | "warn" | "auto";
+  setSensitiveMediaPref: (pref: "hide" | "warn" | "auto") => void;
   // presence & unread
   presence: Record<number, string>;
   unreadChannels: Record<number, number>;
@@ -103,6 +106,7 @@ export const useAppStore = create<AppState>(set => ({
   hasMore: {},
   typing: {},
   presence: {},
+  sensitiveMediaPref: "warn",
   unreadChannels: {},
   unreadConversations: {},
   voiceParticipants: {},
@@ -202,6 +206,9 @@ export const useAppStore = create<AppState>(set => ({
   setUnread: (channels, conversations) =>
     set({ unreadChannels: channels, unreadConversations: conversations }),
 
+  setSensitiveMediaPref: pref => {
+    set({ sensitiveMediaPref: pref });
+  },
   bumpUnreadChannel: id =>
     set(s => ({
       unreadChannels: {

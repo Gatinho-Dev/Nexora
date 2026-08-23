@@ -6,6 +6,12 @@ module.exports = {
     extend: {
       colors: {
         border: "hsl(var(--border))",
+        panel: "var(--panel)",
+        hov: "var(--hov)",
+        act: "var(--act)",
+        bodyx: "var(--body-t)",
+        muted2: "var(--muted2)",
+        faint: "var(--faint)",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",

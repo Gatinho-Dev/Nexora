@@ -42,7 +42,17 @@ type PendingFile = {
   mimeType: string;
   size: number;
   url: string;
+  moderationStatus?: string | null;
 };
+
+/** Terminal moderation states allow sending; others must be awaited. */
+function isMediaCleared(f: PendingFile): boolean {
+  return (
+    !f.moderationStatus ||
+    f.moderationStatus === "approved" ||
+    f.moderationStatus === "sensitive"
+  );
+}
 
 type ToolbarAction =
   | "bold"
@@ -260,6 +270,10 @@ export function MessageInput({
   const doSend = () => {
     const content = text.trim();
     if ((!content && files.length === 0) || send.isPending) return;
+    if (!files.every(isMediaCleared)) {
+      toast.error("Verificando mídia... Aguarde a análise de segurança.");
+      return;
+    }
     send.mutate(
       {
         channelId,
@@ -332,11 +346,49 @@ export function MessageInput({
           continue;
         }
         setFiles(prev => [...prev, data]);
+        if (data.moderationStatus === "processing") {
+          void waitForModeration(data.id);
+        }
       }
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  /** Poll the safety pipeline until this file reaches a terminal state. */
+  const waitForModeration = async (fileId: number, tries = 60) => {
+    for (let i = 0; i < tries; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      try {
+        const res = await fetch(
+          apiUrl(`/api/moderation/status?ids=${fileId}`),
+          { credentials: "include" }
+        );
+        if (!res.ok) continue;
+        const { statuses } = (await res.json()) as {
+          statuses: Record<string, string>;
+        };
+        const status = statuses[String(fileId)];
+        if (!status) continue;
+        setFiles(prev =>
+          prev.map(f =>
+            f.id === fileId ? { ...f, moderationStatus: status } : f
+          )
+        );
+        if (status === "blocked") {
+          setFiles(prev => prev.filter(f => f.id !== fileId));
+          toast.error("Mídia bloqueada pela segurança do Nexora.");
+          return;
+        }
+        if (status === "approved" || status === "sensitive") return;
+      } catch {
+        // transient network error — keep polling
+      }
+    }
+    // Timed out: drop the chip so it can never be published unmoderated.
+    setFiles(prev => prev.filter(f => f.id !== fileId));
+    toast.error("Não foi possível verificar esta mídia no momento. Tente novamente.");
   };
 
   // Drag and drop listener
@@ -447,15 +499,15 @@ export function MessageInput({
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   return (
-    <div className="px-4 pb-4 pt-1 relative bg-[#313338]">
+    <div className="px-4 pb-4 pt-1 relative bg-chat">
       {/* Dropzone overlay */}
       {isDraggingOver && (
-        <div className="fixed inset-0 z-50 bg-[#1E1F22]/90 border-4 border-dashed border-[#5865F2] backdrop-blur-xs flex flex-col items-center justify-center gap-3 text-white pointer-events-none animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 bg-rail/90 border-4 border-dashed border-[#5865F2] backdrop-blur-xs flex flex-col items-center justify-center gap-3 text-white pointer-events-none animate-in fade-in duration-150">
           <UploadCloud className="h-16 w-16 text-[#5865F2]" />
           <h2 className="text-2xl font-bold tracking-tight">
             Solte para enviar
           </h2>
-          <p className="text-sm text-[#B5BAC1]">
+          <p className="text-sm text-muted2">
             Envie seus arquivos diretamente para o chat da Nexora
           </p>
         </div>
@@ -463,7 +515,7 @@ export function MessageInput({
 
       {/* Reply header banner */}
       {replyingTo && (
-        <div className="flex items-center gap-2 rounded-t-xl bg-[#2B2D31] border border-white/10 px-3.5 py-2 text-xs text-white select-none">
+        <div className="flex items-center gap-2 rounded-t-xl bg-sidebar border border-white/10 px-3.5 py-2 text-xs text-white select-none">
           <CornerUpLeft className="h-3.5 w-3.5 text-[#5865F2]" />
           <span>
             Respondendo a{" "}
@@ -471,11 +523,11 @@ export function MessageInput({
               @{replyingTo.author.name ?? replyingTo.author.username}
             </span>
           </span>
-          <span className="truncate text-[#B5BAC1] text-xs flex-1">
+          <span className="truncate text-muted2 text-xs flex-1">
             {replyingTo.content}
           </span>
           <button
-            className="text-[#B5BAC1] hover:text-white transition-colors"
+            className="text-muted2 hover:text-white transition-colors"
             onClick={() => setReplyingTo(null)}
           >
             <X className="h-4 w-4" />
@@ -485,13 +537,13 @@ export function MessageInput({
 
       {/* Pending attachments */}
       {files.length > 0 && (
-        <div className="flex flex-wrap gap-2 rounded-t-xl bg-[#2B2D31] border border-white/10 px-3.5 py-2.5">
+        <div className="flex flex-wrap gap-2 rounded-t-xl bg-sidebar border border-white/10 px-3.5 py-2.5">
           {files.map(f => {
             const isSpoiler = spoilerIds.includes(f.id);
             return (
               <div
                 key={f.id}
-                className="relative flex items-center gap-2 rounded-lg border border-white/10 bg-[#232428] px-2.5 py-1.5 text-xs text-white"
+                className="relative flex items-center gap-2 rounded-lg border border-white/10 bg-panel px-2.5 py-1.5 text-xs text-white"
               >
                 {f.mimeType.startsWith("image/") ? (
                   <div className="relative">
@@ -514,7 +566,7 @@ export function MessageInput({
                 )}
                 <div className="max-w-32">
                   <div className="truncate font-medium">{f.filename}</div>
-                  <div className="text-[#B5BAC1]">{formatSize(f.size)}</div>
+                  <div className="text-muted2">{formatSize(f.size)}</div>
                 </div>
                 {/* Attachment actions */}
                 {f.mimeType.startsWith("image/") && (
@@ -527,7 +579,7 @@ export function MessageInput({
                       isSpoiler ? "Remover marcação de spoiler" : "Marcar como spoiler"
                     }
                     onClick={() => toggleSpoiler(f.id)}
-                    className="rounded-full bg-white/10 p-0.5 text-[#B5BAC1] hover:text-white transition-colors"
+                    className="rounded-full bg-white/10 p-0.5 text-muted2 hover:text-white transition-colors"
                   >
                     {isSpoiler ? (
                       <EyeOff className="h-3 w-3" />
@@ -553,7 +605,7 @@ export function MessageInput({
       {/* Markdown formatting toolbar */}
       {toolbarVisible && !recording && !recordedUrl && (
         <div
-          className="mb-1 flex flex-wrap items-center gap-0.5 rounded-t-lg bg-[#2B2D31] px-2 py-1"
+          className="mb-1 flex flex-wrap items-center gap-0.5 rounded-t-lg bg-sidebar px-2 py-1"
           role="toolbar"
           aria-label="Formatação de texto"
         >
@@ -567,12 +619,12 @@ export function MessageInput({
                 e.preventDefault();
                 runToolbarAction(action);
               }}
-              className="rounded p-1.5 text-[#B5BAC1] transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded p-1.5 text-muted2 transition-colors hover:bg-white/10 hover:text-white"
             >
               <Icon className="h-4 w-4" />
             </button>
           ))}
-          <span className="ml-auto hidden pr-1 text-[10px] font-bold uppercase tracking-wider text-[#949BA4] sm:block">
+          <span className="ml-auto hidden pr-1 text-[10px] font-bold uppercase tracking-wider text-faint sm:block">
             Markdown
           </span>
         </div>
@@ -580,7 +632,7 @@ export function MessageInput({
 
       {/* Voice recording controls */}
       {recording || recordedUrl ? (
-        <div className="flex items-center gap-3 rounded-xl bg-[#2B2D31] border border-white/10 px-4 py-3 text-white shadow-lg">
+        <div className="flex items-center gap-3 rounded-xl bg-sidebar border border-white/10 px-4 py-3 text-white shadow-lg">
           {recording ? (
             <>
               <span className="h-3 w-3 rounded-full bg-red-500 animate-ping" />
@@ -623,12 +675,12 @@ export function MessageInput({
               >
                 <Play className="h-3.5 w-3.5 text-[#5865F2]" /> Ouvir
               </button>
-              <span className="text-xs font-mono text-[#B5BAC1]">
+              <span className="text-xs font-mono text-muted2">
                 {fmtSecs(recordSeconds)}
               </span>
               <div className="ml-auto flex gap-2">
                 <button
-                  className="flex items-center gap-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[#B5BAC1] hover:text-white px-3 py-1.5 text-xs font-medium transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-muted2 hover:text-white px-3 py-1.5 text-xs font-medium transition-colors"
                   onClick={cancelRecording}
                 >
                   <Trash2 className="h-3.5 w-3.5" /> Descartar
@@ -654,7 +706,7 @@ export function MessageInput({
         >
           {/* Mention Candidates Autocomplete */}
           {mentionCandidates.length > 0 && (
-            <div className="absolute bottom-full left-0 mb-2 w-64 rounded-xl bg-[#232428] border border-white/10 shadow-2xl overflow-hidden z-30 select-none">
+            <div className="absolute bottom-full left-0 mb-2 w-64 rounded-xl bg-panel border border-white/10 shadow-2xl overflow-hidden z-30 select-none">
               {mentionCandidates.map((m, i) => (
                 <button
                   key={m.id}
@@ -662,7 +714,7 @@ export function MessageInput({
                     "w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors",
                     i === mentionIndex
                       ? "bg-[#5865F2]/20 text-white font-bold"
-                      : "text-[#B5BAC1] hover:bg-white/5 hover:text-white"
+                      : "text-muted2 hover:bg-white/5 hover:text-white"
                   )}
                   onMouseDown={e => {
                     e.preventDefault();
@@ -688,7 +740,7 @@ export function MessageInput({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="p-1.5 text-[#B5BAC1] hover:text-white transition-colors disabled:opacity-40"
+                  className="p-1.5 text-muted2 hover:text-white transition-colors disabled:opacity-40"
                   disabled={disabled || uploading}
                   onClick={() => fileInputRef.current?.click()}
                 >
@@ -702,7 +754,7 @@ export function MessageInput({
           <textarea
             ref={textareaRef}
             rows={1}
-            className="flex-1 bg-transparent outline-none resize-none text-sm text-[#DBDEE1] py-1.5 max-h-48 placeholder:text-[#949BA4] disabled:opacity-50"
+            className="flex-1 bg-transparent outline-none resize-none text-sm text-bodyx py-1.5 max-h-48 placeholder:text-faint disabled:opacity-50"
             placeholder={uploading ? "Enviando arquivos..." : placeholder}
             value={text}
             disabled={disabled || uploading}
@@ -721,7 +773,7 @@ export function MessageInput({
 
           <EmojiPicker onPick={emoji => setText(t => t + emoji)}>
             <button
-              className="p-1.5 text-[#B5BAC1] hover:text-white transition-colors"
+              className="p-1.5 text-muted2 hover:text-white transition-colors"
               title="Emojis"
               type="button"
             >
@@ -732,7 +784,7 @@ export function MessageInput({
           {!disabled && (
             <GifPicker onPick={url => setText(t => `${t}${t ? " " : ""}${url} `)}>
               <button
-                className="p-0.5 text-[10px] font-extrabold tracking-wider rounded bg-white/5 hover:bg-white/15 border border-[#B5BAC1]/40 text-[#B5BAC1] hover:text-white transition-colors disabled:opacity-40"
+                className="p-0.5 text-[10px] font-extrabold tracking-wider rounded bg-white/5 hover:bg-white/15 border border-[#B5BAC1]/40 text-muted2 hover:text-white transition-colors disabled:opacity-40"
                 title="GIFs"
                 type="button"
                 disabled={disabled}
@@ -762,7 +814,7 @@ export function MessageInput({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="p-1.5 text-[#B5BAC1] hover:text-white transition-colors disabled:opacity-40"
+                    className="p-1.5 text-muted2 hover:text-white transition-colors disabled:opacity-40"
                     disabled={disabled}
                     onClick={startRecording}
                   >

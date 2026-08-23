@@ -19,6 +19,7 @@ import {
   toPublicUser,
 } from "./utils/permissions";
 import { broadcastToServer, sendToUsers, setLiveStageSpeaker } from "./realtime";
+import { assertCanInteract } from "./services/accountSafety";
 
 const permissionEnum = z.enum(PERMISSIONS);
 
@@ -74,6 +75,7 @@ export const serverRouter = createRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertCanInteract(ctx.user.id);
       rateLimit(`serverCreate:${ctx.user.id}`, RateLimits.serverCreate.limit, RateLimits.serverCreate.windowMs);
       const db = getDb();
 
@@ -306,6 +308,7 @@ export const serverRouter = createRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertCanInteract(ctx.user.id);
       await requirePermission(ctx.user.id, input.serverId, "MANAGE_CHANNELS");
       const db = getDb();
       const cleanName =
@@ -522,6 +525,7 @@ export const serverRouter = createRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertCanInteract(ctx.user.id);
       rateLimit(`eventCreate:${ctx.user.id}`, 10, 60 * 60_000);
       await requirePermission(ctx.user.id, input.serverId, "MANAGE_CHANNELS");
       const startsAt = new Date(input.startsAt);
@@ -585,6 +589,7 @@ export const serverRouter = createRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      await assertCanInteract(ctx.user.id);
       rateLimit(`inviteCreate:${ctx.user.id}`, RateLimits.inviteCreate.limit, RateLimits.inviteCreate.windowMs);
       const perms = await getMemberPermissions(ctx.user.id, input.serverId);
       if (!perms) {

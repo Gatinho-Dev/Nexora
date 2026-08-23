@@ -73,6 +73,7 @@ export const env = {
   adminUserIds: numericCsv("NEXORA_ADMIN_USER_IDS"),
   appOrigin: process.env.APP_ORIGIN?.replace(/\/$/, "") ?? "",
   publicApiUrl: process.env.PUBLIC_API_URL?.replace(/\/$/, "") ?? "",
+  nvidiaApiKey: process.env.NVIDIA_API_KEY ?? "",
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? process.env.APP_ORIGIN ?? "")
     .split(",")
     .map(origin => origin.trim().replace(/\/$/, ""))

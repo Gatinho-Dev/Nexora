@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatSize } from "@/lib/formatSize";
+import { SensitiveMedia } from "../safety/SensitiveMedia";
+import { useAppStore } from "@/store/useAppStore";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -131,7 +133,7 @@ export function MessageItem({
       {message.replyTo && (
         <button
           type="button"
-          className="flex max-w-[calc(100%_-_3rem)] items-center gap-2 mb-1 ml-12 text-left text-xs text-[#B5BAC1] hover:text-white transition-colors"
+          className="flex max-w-[calc(100%_-_3rem)] items-center gap-2 mb-1 ml-12 text-left text-xs text-muted2 hover:text-white transition-colors"
           onClick={() => onJumpTo(message.replyTo!.id)}
           aria-label="Ir para a mensagem respondida"
         >
@@ -165,7 +167,7 @@ export function MessageItem({
             </button>
           ) : (
             <div className="h-full flex items-start justify-center">
-              <span className="text-[10px] text-[#B5BAC1] opacity-0 group-hover:opacity-100 transition-opacity pt-0.5 font-mono">
+              <span className="text-[10px] text-muted2 opacity-0 group-hover:opacity-100 transition-opacity pt-0.5 font-mono">
                 {formatTime(message.createdAt)}
               </span>
             </div>
@@ -183,7 +185,7 @@ export function MessageItem({
                 {message.author.name ?? message.author.username}
               </button>
               <span
-                className="text-[11px] text-[#B5BAC1] font-medium"
+                className="text-[11px] text-muted2 font-medium"
                 title={formatFullDate(message.createdAt)}
               >
                 {formatTime(message.createdAt)}
@@ -195,7 +197,7 @@ export function MessageItem({
           {isEditing ? (
             <div className="mt-1">
               <textarea
-                className="w-full rounded-lg bg-[#2B2D31] border border-[#5865F2] px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-[#5865F2] resize-none"
+                className="w-full rounded-lg bg-sidebar border border-[#5865F2] px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-[#5865F2] resize-none"
                 rows={Math.min(6, editText.split("\n").length + 1)}
                 value={editText}
                 autoFocus
@@ -209,7 +211,7 @@ export function MessageItem({
                   if (e.key === "Escape") setEditing(null);
                 }}
               />
-              <div className="flex items-center justify-between mt-1 text-xs text-[#B5BAC1]">
+              <div className="flex items-center justify-between mt-1 text-xs text-muted2">
                 <span>ESC para cancelar • ENTER para salvar</span>
                 <div className="flex items-center gap-2">
                   <button
@@ -237,7 +239,7 @@ export function MessageItem({
                   <MessageContent content={message.content} />
                   {message.editedAt && (
                     <span
-                      className="text-[10px] text-[#B5BAC1] ml-1.5 font-normal select-none"
+                      className="text-[10px] text-muted2 ml-1.5 font-normal select-none"
                       title={formatFullDate(message.editedAt)}
                     >
                       (editado)
@@ -268,7 +270,7 @@ export function MessageItem({
                           "flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs border transition-[color,background-color,border-color,box-shadow,transform,opacity] active:scale-95",
                           mine
                             ? "bg-[#5865F2]/20 border-[#5865F2]/60 text-white font-bold"
-                            : "bg-[#2B2D31] border-white/10 text-[#B5BAC1] hover:border-white/20 hover:text-white"
+                            : "bg-sidebar border-white/10 text-muted2 hover:border-white/20 hover:text-white"
                         )}
                         title={r.userIds.length + " reação(ões)"}
                       >
@@ -286,7 +288,7 @@ export function MessageItem({
 
       {/* Floating Hover Action Toolbar */}
       {!isEditing && (
-        <div className="absolute -top-3.5 right-4 opacity-0 group-hover:opacity-100 transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-150 flex items-center gap-0.5 bg-[#2B2D31] border border-white/10 rounded-lg shadow-xl p-0.5 z-10 select-none">
+        <div className="absolute -top-3.5 right-4 opacity-0 group-hover:opacity-100 transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-150 flex items-center gap-0.5 bg-sidebar border border-white/10 rounded-lg shadow-xl p-0.5 z-10 select-none">
           <TooltipProvider delayDuration={150}>
             {/* Quick Emoji Reaction button */}
             <div className="relative">
@@ -294,7 +296,7 @@ export function MessageItem({
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => setEmojiBarOpen(v => !v)}
-                    className="p-1.5 rounded-md text-[#B5BAC1] hover:bg-white/10 hover:text-white transition-colors"
+                    className="p-1.5 rounded-md text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors"
                   >
                     <SmilePlus className="h-4 w-4" />
                   </button>
@@ -303,7 +305,7 @@ export function MessageItem({
               </Tooltip>
 
               {emojiBarOpen && (
-                <div className="absolute bottom-9 right-0 z-30 flex gap-1 bg-[#232428] border border-white/10 rounded-xl shadow-2xl p-1.5 animate-in zoom-in-95 duration-100">
+                <div className="absolute bottom-9 right-0 z-30 flex gap-1 bg-panel border border-white/10 rounded-xl shadow-2xl p-1.5 animate-in zoom-in-95 duration-100">
                   {QUICK_EMOJIS.map(emoji => (
                     <button
                       key={emoji}
@@ -325,7 +327,7 @@ export function MessageItem({
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setReplyingTo(message)}
-                  className="p-1.5 rounded-md text-[#B5BAC1] hover:bg-white/10 hover:text-white transition-colors"
+                  className="p-1.5 rounded-md text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors"
                 >
                   <CornerUpLeft className="h-4 w-4" />
                 </button>
@@ -336,26 +338,26 @@ export function MessageItem({
             {/* More options dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="p-1.5 rounded-md text-[#B5BAC1] hover:bg-white/10 hover:text-white transition-colors">
+                <button className="p-1.5 rounded-md text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors">
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
-                className="w-44 bg-[#232428] border-white/10 text-white text-xs"
+                className="w-44 bg-panel border-white/10 text-white text-xs"
               >
                 <DropdownMenuItem
                   onClick={copyText}
                   className="hover:bg-white/10 cursor-pointer"
                 >
-                  <Copy className="h-3.5 w-3.5 mr-2 text-[#B5BAC1]" /> Copiar
+                  <Copy className="h-3.5 w-3.5 mr-2 text-muted2" /> Copiar
                   texto
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={copyId}
                   className="hover:bg-white/10 cursor-pointer"
                 >
-                  <Copy className="h-3.5 w-3.5 mr-2 text-[#B5BAC1]" /> Copiar ID
+                  <Copy className="h-3.5 w-3.5 mr-2 text-muted2" /> Copiar ID
                 </DropdownMenuItem>
                 {isMine && (
                   <DropdownMenuItem
@@ -388,15 +390,15 @@ export function MessageItem({
 
       {/* Delete confirmation dialog */}
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent className="bg-[#2B2D31] border-white/10 text-white">
+        <AlertDialogContent className="bg-sidebar border-white/10 text-white">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir mensagem</AlertDialogTitle>
-            <AlertDialogDescription className="text-[#B5BAC1]">
+            <AlertDialogDescription className="text-muted2">
               Tem certeza que deseja excluir esta mensagem? Esta ação não pode
               ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="rounded-lg bg-[#232428] border border-white/5 p-3 text-xs text-[#F2F3F5]">
+          <div className="rounded-lg bg-panel border border-white/5 p-3 text-xs text-[#F2F3F5]">
             <span className="font-bold text-[#5865F2]">
               {message.author.name ?? message.author.username}:{" "}
             </span>
@@ -434,8 +436,8 @@ function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
   }
   if (att.mimeType.startsWith("audio/")) {
     return (
-      <div className="rounded-xl border border-white/10 bg-[#2B2D31] p-2.5 w-72">
-        <div className="text-xs font-medium text-[#B5BAC1] truncate mb-1.5">
+      <div className="rounded-xl border border-white/10 bg-sidebar p-2.5 w-72">
+        <div className="text-xs font-medium text-muted2 truncate mb-1.5">
           {att.filename}
         </div>
         <audio src={att.url} controls className="w-full h-8" />
@@ -447,14 +449,14 @@ function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
       href={att.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#2B2D31] px-3.5 py-2.5 text-xs text-white hover:bg-white/5 transition-colors"
+      className="flex items-center gap-3 rounded-xl border border-white/10 bg-sidebar px-3.5 py-2.5 text-xs text-white hover:bg-white/5 transition-colors"
     >
       <span className="text-xl">📄</span>
       <div className="min-w-0">
         <div className="truncate font-semibold text-[#5865F2] hover:underline">
           {att.filename}
         </div>
-        <div className="text-[11px] text-[#B5BAC1]">{formatSize(att.size)}</div>
+        <div className="text-[11px] text-muted2">{formatSize(att.size)}</div>
       </div>
     </a>
   );
@@ -462,6 +464,28 @@ function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
 
 function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
   const [revealed, setRevealed] = useState(!att.spoiler);
+  const mediaPref = useAppStore(s => s.sensitiveMediaPref);
+
+  // Content-safety pipeline takes precedence over user spoiler marks.
+  if (
+    att.moderationStatus === "processing" ||
+    att.moderationStatus === "blocked" ||
+    att.sensitive
+  ) {
+    return (
+      <SensitiveMedia
+        src={att.url}
+        alt={att.filename}
+        moderationStatus={
+          att.moderationStatus === "approved" || att.moderationStatus === "review_required"
+            ? "processing"
+            : att.moderationStatus
+        }
+        adultOnly={att.adultOnly}
+        pref={mediaPref}
+      />
+    );
+  }
 
   if (!att.spoiler || revealed) {
     return (
@@ -474,7 +498,7 @@ function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
         <img
           src={att.url}
           alt={att.filename}
-          className="max-h-72 max-w-full sm:max-w-md rounded-xl object-contain bg-[#2B2D31] transition-transform duration-200 group-hover/img:scale-[1.02]"
+          className="max-h-72 max-w-full sm:max-w-md rounded-xl object-contain bg-sidebar transition-transform duration-200 group-hover/img:scale-[1.02]"
           loading="lazy"
         />
       </a>

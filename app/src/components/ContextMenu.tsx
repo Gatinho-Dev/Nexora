@@ -76,7 +76,7 @@ export function ContextMenu({
     <div
       ref={menuRef}
       style={style}
-      className="fixed z-50 w-52 rounded-xl bg-[#232428] border border-white/10 p-1.5 shadow-2xl text-xs text-white select-none animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-50 w-52 rounded-xl bg-panel border border-white/10 p-1.5 shadow-2xl text-xs text-white select-none animate-in fade-in zoom-in-95 duration-100"
     >
       {menuState.type === "user" && (
         <>
@@ -115,7 +115,7 @@ export function ContextMenu({
           />
           <MenuDivider />
           <MenuItem
-            icon={<VolumeX className="h-4 w-4 text-[#B5BAC1]" />}
+            icon={<VolumeX className="h-4 w-4 text-muted2" />}
             label="Silenciar"
             onClick={() => {
               toast.info("Usuário silenciado.");
@@ -123,7 +123,7 @@ export function ContextMenu({
             }}
           />
           <MenuItem
-            icon={<ShieldAlert className="h-4 w-4 text-[#B5BAC1]" />}
+            icon={<ShieldAlert className="h-4 w-4 text-muted2" />}
             label="Bloquear"
             onClick={() => {
               toast.info("Usuário bloqueado.");
@@ -151,7 +151,7 @@ export function ContextMenu({
           />
           <MenuDivider />
           <MenuItem
-            icon={<Copy className="h-4 w-4 text-[#B5BAC1]" />}
+            icon={<Copy className="h-4 w-4 text-muted2" />}
             label="Copiar ID"
             onClick={() =>
               copyToClipboard(String(menuState.id), "ID do usuário")
@@ -171,7 +171,7 @@ export function ContextMenu({
             }}
           />
           <MenuItem
-            icon={<BellOff className="h-4 w-4 text-[#B5BAC1]" />}
+            icon={<BellOff className="h-4 w-4 text-muted2" />}
             label="Silenciar canal"
             onClick={() => {
               toast.info("Canal silenciado.");
@@ -198,14 +198,14 @@ export function ContextMenu({
           />
           <MenuDivider />
           <MenuItem
-            icon={<Link className="h-4 w-4 text-[#B5BAC1]" />}
+            icon={<Link className="h-4 w-4 text-muted2" />}
             label="Copiar link"
             onClick={() =>
               copyToClipboard(window.location.href, "Link do canal")
             }
           />
           <MenuItem
-            icon={<Copy className="h-4 w-4 text-[#B5BAC1]" />}
+            icon={<Copy className="h-4 w-4 text-muted2" />}
             label="Copiar ID"
             onClick={() => copyToClipboard(String(menuState.id), "ID do canal")}
           />
@@ -231,7 +231,7 @@ export function ContextMenu({
             }}
           />
           <MenuItem
-            icon={<BellOff className="h-4 w-4 text-[#B5BAC1]" />}
+            icon={<BellOff className="h-4 w-4 text-muted2" />}
             label="Silenciar servidor"
             onClick={() => {
               toast.info("Servidor silenciado.");
@@ -240,7 +240,7 @@ export function ContextMenu({
           />
           <MenuDivider />
           <MenuItem
-            icon={<Settings className="h-4 w-4 text-[#B5BAC1]" />}
+            icon={<Settings className="h-4 w-4 text-muted2" />}
             label="Configurações"
             onClick={() => {
               toast.info("Abrindo configurações do servidor...");

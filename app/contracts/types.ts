@@ -14,6 +14,13 @@ export type PublicUser = {
 };
 
 // ── Composite DTOs ────────────────────────────────────────────
+export type ModerationStatus =
+  | "processing"
+  | "approved"
+  | "sensitive"
+  | "blocked"
+  | "review_required";
+
 export type AttachmentDTO = {
   id: number;
   fileId: number;
@@ -22,6 +29,47 @@ export type AttachmentDTO = {
   size: number;
   url: string;
   spoiler: boolean;
+  moderationStatus: ModerationStatus;
+  sensitive: boolean;
+  adultOnly: boolean;
+  allowReveal: boolean;
+};
+
+export type AccountStatusDTO =
+  | "good_standing"
+  | "limited"
+  | "very_limited"
+  | "at_risk"
+  | "suspended"
+  | "permanently_banned";
+
+export type SafetyViolationDTO = {
+  id: number;
+  category: string;
+  severity: "warning" | "moderate" | "severe";
+  source: "automatic_ai" | "moderator" | "user_report";
+  status: "pending_review" | "confirmed" | "false_positive" | "resolved";
+  action:
+    | "none"
+    | "warning"
+    | "limited"
+    | "content_blocked"
+    | "three_day_suspension"
+    | "temporary_suspension"
+    | "permanent_ban";
+  strikeApplied: boolean;
+  internalNote?: string | null;
+  createdAt: string | Date;
+  reviewedAt?: string | Date | null;
+};
+
+export type AccountSafetyDTO = {
+  accountStatus: AccountStatusDTO;
+  severeStrikes: number;
+  maxSevereStrikes: number;
+  suspendedUntil: string | Date | null;
+  permanentBan: boolean;
+  sensitiveMediaPref: "hide" | "warn" | "auto";
 };
 
 export type ReactionDTO = {
