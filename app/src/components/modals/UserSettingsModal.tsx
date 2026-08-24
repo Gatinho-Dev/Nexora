@@ -15,7 +15,10 @@ import {
   Play,
   Square,
   Sparkles,
+  ArrowLeft,
+  ChevronRight,
 } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +74,7 @@ const MENU_GROUPS: {
       { id: "profile", label: "Perfil" },
       { id: "standing", label: "Status da Conta" },
       { id: "privacy", label: "Conteúdo e Privacidade" },
+      { id: "sensitive", label: "Conteúdo sensível" },
       { id: "connections", label: "Conexões" },
     ],
   },
@@ -100,7 +104,7 @@ export function UserSettingsModal({
   onOpenChange: (open: boolean) => void;
   initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -116,20 +120,59 @@ export function UserSettingsModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="h-[min(760px,calc(100dvh-1rem))] w-[min(1120px,calc(100vw-1rem))] max-w-none gap-0 overflow-hidden rounded-xl border-white/10 bg-chat p-0 text-white select-none sm:max-w-none sm:rounded-2xl"
+        className="h-[100dvh] w-[100vw] max-w-none gap-0 overflow-hidden rounded-none border-0 bg-chat p-0 text-white select-none sm:h-[min(760px,calc(100dvh-1rem))] sm:w-[min(1120px,calc(100vw-1rem))] sm:rounded-2xl sm:border-white/10"
       >
         <DialogTitle className="sr-only">
           Configurações do Usuário Nexora
         </DialogTitle>
-        <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden sm:flex-row">
+        {/* Shell interno: remonta a cada abertura (estado limpo no mobile). */}
+        <SettingsShell
+          isMobile={isMobile}
+          initialTab={initialTab}
+          onOpenChange={onOpenChange}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SettingsShell({
+  isMobile,
+  initialTab,
+  onOpenChange,
+}: {
+  isMobile: boolean;
+  initialTab: Tab;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  // Navegação empilhada no celular: lista → página com volta.
+  const [entered, setEntered] = useState(
+    () => isMobile && initialTab !== "account"
+  );
+  const activeLabel =
+    MENU_GROUPS.flatMap(g => g.items).find(i => i.id === tab)?.label ?? "";
+
+  const enterTab = (t: Tab) => {
+    setTab(t);
+    setEntered(true);
+  };
+
+  return (
+    <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden sm:flex-row">
           {/* Left Navigation Sidebar */}
-          <aside className="flex w-full min-w-0 max-w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-white/5 bg-sidebar p-2 sm:block sm:h-full sm:w-56 sm:overflow-x-hidden sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-4">
+          <aside
+            className={cn(
+              "flex w-full min-w-0 max-w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-white/5 bg-sidebar p-2 sm:block sm:h-full sm:w-56 sm:overflow-x-hidden sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-4",
+              isMobile && entered && "hidden"
+            )}
+          >
             <div className="mb-4 hidden px-2 sm:block">
               <NexoraLogo className="h-6 w-auto" surface="dark" />
             </div>
 
             {MENU_GROUPS.map(group => (
-              <div key={group.title} className="shrink-0 sm:mb-4">
+              <div key={group.title} className="w-full shrink-0 sm:mb-4">
                 <p className="hidden px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted2 sm:block">
                   {group.title}
                 </p>
@@ -137,15 +180,26 @@ export function UserSettingsModal({
                   {group.items.map(t => (
                     <button
                       key={t.id}
-                      onClick={() => setTab(t.id)}
+                      onClick={() => enterTab(t.id)}
+                      aria-current={tab === t.id ? "true" : undefined}
                       className={cn(
                         "flex w-auto items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors sm:w-full sm:py-1.5",
                         tab === t.id
                           ? "bg-[#5865F2]/20 text-[#5865F2]"
-                          : "text-muted2 hover:bg-white/5 hover:text-white"
+                          : "text-muted2 hover:bg-white/5 hover:text-white",
+                        // Lista vertical confortável no celular (página inicial).
+                        isMobile &&
+                          !entered &&
+                          "min-h-[48px] w-full justify-between px-4 text-sm text-white hover:bg-white/5 active:bg-white/10"
                       )}
                     >
                       <span>{t.label}</span>
+                      {isMobile && !entered && (
+                        <ChevronRight
+                          className="h-4 w-4 shrink-0 text-faint"
+                          aria-hidden
+                        />
+                      )}
                     </button>
                   ))}
                 </nav>
@@ -154,13 +208,33 @@ export function UserSettingsModal({
           </aside>
 
           {/* Right Main Content */}
-          <div className="relative min-h-0 min-w-0 flex-1 bg-chat">
+          <div
+            className={cn(
+              "relative min-h-0 min-w-0 flex-1 bg-chat",
+              isMobile && !entered && "hidden"
+            )}
+          >
+            {/* Navegação empilhada (mobile): voltar para a lista */}
+            {isMobile && (
+              <div className="absolute top-3 left-3 z-20 sm:hidden">
+                <button
+                  onClick={() => setEntered(false)}
+                  aria-label="Voltar às configurações"
+                  className="flex h-9 items-center gap-1 rounded-full pl-1 pr-3 text-sm font-bold text-white transition-colors active:bg-white/10"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                  Configurações
+                </button>
+              </div>
+            )}
+
             {/* ESC close button */}
             <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 sm:top-5 sm:right-6">
               <button
                 onClick={() => onOpenChange(false)}
                 className="flex items-center justify-center h-8 w-8 rounded-full border border-white/20 text-muted2 hover:bg-white/10 hover:text-white transition-colors"
                 title="Fechar (ESC)"
+                aria-label="Fechar configurações"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -170,7 +244,10 @@ export function UserSettingsModal({
             </div>
 
             <ScrollArea className="h-full">
-              <div className="mx-auto w-full min-w-0 max-w-3xl p-4 pr-14 sm:p-8 sm:pr-20">
+              <div className="mx-auto w-full min-w-0 max-w-3xl p-4 pt-14 pr-14 sm:p-8 sm:pt-8 sm:pr-20">
+                {isMobile && (
+                  <p className="sr-only">{activeLabel}</p>
+                )}
                 {tab === "account" && <AccountTab />}
                 {tab === "profile" && <ProfileTab />}
                 {tab === "standing" && <StandingTab />}
@@ -187,9 +264,7 @@ export function UserSettingsModal({
               </div>
             </ScrollArea>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+    </div>
   );
 }
 
@@ -1219,7 +1294,29 @@ function AppearanceTab() {
   );
 }
 
+const REDUCE_MOTION_KEY = "nexora-reduce-motion";
+
+export type SettingsTab = Tab;
+
 function AccessibilityTab() {
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    try {
+      return localStorage.getItem(REDUCE_MOTION_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleReduceMotion = (v: boolean) => {
+    try {
+      localStorage.setItem(REDUCE_MOTION_KEY, v ? "1" : "0");
+    } catch {
+      // ignore storage failures
+    }
+    document.documentElement.classList.toggle("reduce-motion", v);
+    setReduceMotion(v);
+  };
+
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-white">Acessibilidade</h2>
@@ -1227,16 +1324,24 @@ function AccessibilityTab() {
         Ajuste preferências de navegação e animações.
       </p>
       <div className="rounded-xl bg-sidebar border border-white/10 p-4 space-y-3 text-xs">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
             <p className="font-bold text-white">Reduzir animações</p>
             <p className="text-muted2 text-[11px]">
               Desativa transições para movimentação reduzida.
             </p>
           </div>
-          <Switch />
+          <Switch
+            checked={reduceMotion}
+            onCheckedChange={toggleReduceMotion}
+            aria-label="Reduzir animações"
+          />
         </div>
       </div>
+      <p className="text-[11px] text-muted2">
+        A Nexora também respeita automaticamente a preferência do seu sistema
+        (Movimentação reduzida).
+      </p>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { memo, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
+import { ImageViewer } from "./ImageViewer";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,11 @@ import {
   IconChannelStage as IconMegaphone,
 } from "../icons/figmaChannelIcons";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { MessageDTO } from "@contracts/types";
 import { Avatar } from "../Avatar";
 import { MessageContent } from "./MessageContent";
@@ -514,6 +520,68 @@ function MessageItemBase({
             className="absolute inset-x-3 bottom-3 space-y-1 rounded-2xl border border-white/10 bg-panel p-2 shadow-2xl pb-[calc(env(safe-area-inset-bottom)+8px)] animate-in slide-in-from-bottom duration-200"
             onClick={e => e.stopPropagation()}
           >
+            {/* Reações rápidas */}
+            <div className="flex items-center justify-between gap-1 px-1 pb-1.5">
+              {["👍", "❤️", "😂", "😮", "😢", "🔥"].map(emoji => (
+                <button
+                  key={emoji}
+                  onClick={() => {
+                    toggleReaction(emoji);
+                    setSheetOpen(false);
+                  }}
+                  aria-label={`Reagir com ${emoji}`}
+                  className="flex h-11 w-11 items-center justify-center rounded-full text-xl transition-transform active:scale-90 hover:bg-white/10"
+                >
+                  {emoji}
+                </button>
+              ))}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    aria-label="Mais reações"
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-muted2 transition-transform active:scale-90 hover:bg-white/10"
+                  >
+                    ＋
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  side="top"
+                  align="end"
+                  className="w-72 p-2 bg-sidebar border-white/10"
+                  onClickCapture={() => setSheetOpen(false)}
+                >
+                  <div className="max-h-56 overflow-y-auto space-y-2">
+                    {[
+                      ["Rostos", ["😀", "😄", "😁", "🤣", "😂", "🙂", "😉", "😊", "😍", "😘", "😜", "🤔", "🤨", "😐", "🙄", "😏", "😮", "😲", "😳", "🥺", "😢", "😭", "😤", "😠", "🥳", "😎"]],
+                      ["Gestos", ["👍", "👎", "👌", "✌️", "🤞", "👏", "🙌", "🙏", "💪", "🫶", "👋"]],
+                      ["Símbolos", ["❤️", "💜", "🖤", "💔", "💯", "✨", "🔥", "🎉", "⭐", "🚀"]],
+                    ].map(([label, list]) => (
+                      <div key={label as string}>
+                        <p className="px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-faint">
+                          {label as string}
+                        </p>
+                        <div className="grid grid-cols-8 gap-0.5">
+                          {(list as string[]).map(emoji => (
+                            <button
+                              key={emoji}
+                              onClick={() => {
+                                toggleReaction(emoji);
+                                setSheetOpen(false);
+                              }}
+                              aria-label={`Reagir com ${emoji}`}
+                              className="rounded p-1 text-xl transition-transform active:scale-90 hover:bg-white/10"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="h-px bg-white/[0.06]" />
             {[
               {
                 label: "Responder",
@@ -672,6 +740,7 @@ function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
 
 function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
   const [revealed, setRevealed] = useState(!att.spoiler);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const mediaPref = useAppStore(s => s.sensitiveMediaPref);
 
   // Content-safety pipeline takes precedence over user spoiler marks.
@@ -697,19 +766,28 @@ function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
 
   if (!att.spoiler || revealed) {
     return (
-      <a
-        href={att.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="group/img relative overflow-hidden rounded-xl border border-white/10"
-      >
-        <img
-          src={att.url}
-          alt={att.filename}
-          className="max-h-72 max-w-full sm:max-w-md rounded-xl object-contain bg-sidebar transition-transform duration-200 group-hover/img:scale-[1.02]"
-          loading="lazy"
-        />
-      </a>
+      <>
+        <button
+          type="button"
+          onClick={() => setViewerOpen(true)}
+          className="group/img relative block overflow-hidden rounded-xl border border-white/10"
+          aria-label={`Abrir imagem ${att.filename} em tela cheia`}
+        >
+          <img
+            src={att.url}
+            alt={att.filename}
+            className="max-h-72 max-w-full sm:max-w-md rounded-xl object-contain bg-sidebar transition-transform duration-200 group-hover/img:scale-[1.02]"
+            loading="lazy"
+          />
+        </button>
+        {viewerOpen && (
+          <ImageViewer
+            src={att.url}
+            alt={att.filename}
+            onClose={() => setViewerOpen(false)}
+          />
+        )}
+      </>
     );
   }
 

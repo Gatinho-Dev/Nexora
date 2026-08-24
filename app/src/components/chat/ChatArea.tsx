@@ -57,6 +57,8 @@ export function ChatArea({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  const [newBelowCount, setNewBelowCount] = useState(0);
+  const seenCountRef = useRef(0);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -79,10 +81,14 @@ export function ChatArea({
   // Load messages + track current view
   useEffect(() => {
     let cancelled = false;
+    // Nova conversa: começa colada no presente, sem contador herdado.
+    stickToBottom.current = true;
+    seenCountRef.current = 0;
     const timeout = setTimeout(() => {
       if (!cancelled) {
         setLoading(true);
         setLoadError(false);
+        setNewBelowCount(0);
       }
     }, 0);
     setCurrentView({ channelId, conversationId });
@@ -133,8 +139,12 @@ export function ChatArea({
   // Auto-scroll on new messages when near bottom
   useEffect(() => {
     if (stickToBottom.current) {
+      seenCountRef.current = messages?.length ?? 0;
+      setNewBelowCount(0);
       scrollToBottom();
     } else {
+      const fresh = (messages?.length ?? 0) - seenCountRef.current;
+      if (fresh > 0) setNewBelowCount(fresh);
       setShowScrollBottom(true);
     }
   }, [messages?.length]);
@@ -145,6 +155,10 @@ export function ChatArea({
     const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     stickToBottom.current = isAtBottom;
     setShowScrollBottom(!isAtBottom);
+    if (isAtBottom) {
+      seenCountRef.current = messages?.length ?? 0;
+      setNewBelowCount(0);
+    }
 
     if (
       el.scrollTop < 80 &&
@@ -278,11 +292,19 @@ export function ChatArea({
       {/* Floating Scroll to Bottom Banner */}
       {showScrollBottom && (
         <button
-          onClick={() => scrollToBottom()}
+          onClick={() => {
+            seenCountRef.current = messages?.length ?? 0;
+            setNewBelowCount(0);
+            scrollToBottom();
+          }}
           className="absolute bottom-16 right-6 z-20 flex items-center gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white px-3.5 py-2 rounded-full text-xs font-semibold shadow-xl transition-colors"
         >
           <ArrowDown className="h-3.5 w-3.5" />
-          <span>Novas mensagens</span>
+          <span>
+            {newBelowCount > 0
+              ? `${newBelowCount} nova${newBelowCount === 1 ? "" : "s"} mensagem${newBelowCount === 1 ? "" : "s"}`
+              : "Ir para o presente"}
+          </span>
         </button>
       )}
 

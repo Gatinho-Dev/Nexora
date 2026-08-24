@@ -44,7 +44,17 @@ export function ServersSheet({
         </p>
         <ul className="space-y-1">
           {servers.isLoading && (
-            <li className="py-8 text-center text-xs text-muted2">Carregando...</li>
+            <>
+              {[1, 2, 3].map(i => (
+                <li key={i} className="flex items-center gap-3 rounded-xl p-3 animate-pulse select-none">
+                  <div className="h-12 w-12 shrink-0 rounded-2xl bg-white/[0.06]" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="h-3.5 w-36 rounded bg-white/[0.08]" />
+                    <div className="h-3 w-24 rounded bg-white/[0.05]" />
+                  </div>
+                </li>
+              ))}
+            </>
           )}
           {servers.data?.map(sv => {
             const unread = serverUnread[sv.id] ?? 0;

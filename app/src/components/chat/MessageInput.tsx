@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { realtime } from "@/lib/ws";
 import { useChatUIStore } from "@/store/useChatUIStore";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { EmojiPicker } from "./EmojiPicker";
 import { GifPicker } from "./GifPicker";
 import { formatSize } from "@/lib/formatSize";
@@ -27,6 +28,9 @@ import {
   Code,
   FileCode,
   Quote,
+  Camera,
+  ImageIcon,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -98,6 +102,7 @@ export function MessageInput({
   members = [],
   disabled,
 }: Props) {
+  const isMobile = useIsMobile();
   const [text, setText] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [spoilerIds, setSpoilerIds] = useState<number[]>([]);
@@ -108,6 +113,9 @@ export function MessageInput({
   const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
   const lastTypingSent = useRef(0);
 
   const replyingTo = useChatUIStore(s => s.replyingTo);
@@ -539,7 +547,57 @@ export function MessageInput({
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   return (
-    <div className="px-4 pb-4 pt-1 relative bg-chat">
+    <div className="px-4 pt-1 relative bg-chat pb-[calc(16px+env(safe-area-inset-bottom))] md:pb-4">
+      {/* Menu de anexos (mobile) */}
+      {attachOpen && (
+        <div
+          className="fixed inset-0 z-50 md:hidden"
+          onClick={() => setAttachOpen(false)}
+        >
+          <div className="absolute inset-0 bg-black/60 animate-in fade-in duration-150" />
+          <div
+            className="absolute inset-x-3 bottom-3 space-y-1 rounded-2xl border border-white/10 bg-panel p-2 shadow-2xl pb-[calc(env(safe-area-inset-bottom)+8px)] animate-in slide-in-from-bottom duration-200"
+            onClick={e => e.stopPropagation()}
+            role="menu"
+            aria-label="Adicionar anexo"
+          >
+            <button
+              role="menuitem"
+              onClick={() => {
+                setAttachOpen(false);
+                setTimeout(() => cameraInputRef.current?.click(), 60);
+              }}
+              className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3.5 text-left text-sm font-semibold text-bodyx transition-colors hover:bg-white/5 active:bg-white/10"
+            >
+              <Camera className="h-5 w-5 text-primary" />
+              Câmera
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                setAttachOpen(false);
+                setTimeout(() => mediaInputRef.current?.click(), 60);
+              }}
+              className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3.5 text-left text-sm font-semibold text-bodyx transition-colors hover:bg-white/5 active:bg-white/10"
+            >
+              <ImageIcon className="h-5 w-5 text-primary" />
+              Foto ou vídeo
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                setAttachOpen(false);
+                setTimeout(() => fileInputRef.current?.click(), 60);
+              }}
+              className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3.5 text-left text-sm font-semibold text-bodyx transition-colors hover:bg-white/5 active:bg-white/10"
+            >
+              <FileText className="h-5 w-5 text-primary" />
+              Arquivo
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Dropzone overlay */}
       {isDraggingOver && (
         <div className="fixed inset-0 z-50 bg-rail/90 border-4 border-dashed border-[#5865F2] backdrop-blur-xs flex flex-col items-center justify-center gap-3 text-white pointer-events-none animate-in fade-in duration-150">
@@ -801,14 +859,41 @@ export function MessageInput({
             className="hidden"
             onChange={e => uploadFiles(e.target.files)}
           />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            aria-hidden
+            onChange={e => {
+              setAttachOpen(false);
+              void uploadFiles(e.target.files);
+            }}
+          />
+          <input
+            ref={mediaInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*"
+            className="hidden"
+            aria-hidden
+            onChange={e => {
+              setAttachOpen(false);
+              void uploadFiles(e.target.files);
+            }}
+          />
 
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="p-1.5 text-muted2 hover:text-white transition-colors disabled:opacity-40"
+                  className="p-1.5 text-muted2 hover:text-white transition-colors disabled:opacity-40 active:scale-90 rounded-full"
                   disabled={disabled || uploading}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => {
+                    if (isMobile) setAttachOpen(true);
+                    else fileInputRef.current?.click();
+                  }}
                 >
                   <PlusCircle className="h-5 w-5" />
                 </button>

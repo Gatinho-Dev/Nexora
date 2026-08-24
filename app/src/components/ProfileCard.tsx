@@ -206,8 +206,10 @@ export function ProfileCard({
       >
         <DialogContent
           showCloseButton={false}
-          className="max-h-[92dvh] w-[min(720px,calc(100vw-1rem))] max-w-none gap-0 overflow-y-auto rounded-2xl border-white/10 bg-[#1E2028] p-0 text-white shadow-2xl sm:max-w-[720px]"
+          className="top-auto bottom-0 left-[50%] max-h-[88dvh] w-full max-w-none translate-x-[-50%] translate-y-0 gap-0 overflow-y-auto rounded-t-2xl rounded-b-none border-white/10 bg-[#1E2028] p-0 pb-[env(safe-area-inset-bottom)] text-white shadow-2xl duration-200 data-[state=open]:slide-in-from-bottom-8 sm:bottom-auto sm:top-[50%] sm:max-h-[92dvh] sm:w-[min(720px,calc(100vw-1rem))] sm:-translate-y-1/2 sm:gap-0 sm:rounded-2xl sm:pb-0 sm:shadow-2xl"
         >
+          {/* Drag handle visual (mobile) */}
+          <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-white/20 sm:hidden" />
           <DialogTitle className="sr-only">Perfil de {displayName}</DialogTitle>
           <DialogDescription className="sr-only">
             Informações públicas e ações disponíveis para este perfil da Nexora.

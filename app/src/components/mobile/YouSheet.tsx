@@ -4,13 +4,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { Avatar } from "../Avatar";
 import { useAppStore } from "@/store/useAppStore";
 import { realtime } from "@/lib/ws";
+import { openUserSettings } from "@/lib/openUserSettings";
 import { cn } from "@/lib/utils";
 import {
   Settings,
   LogOut,
   ShieldCheck,
   X,
-  Pencil,
 } from "lucide-react";
 import type { UserStatus } from "@contracts/constants";
 
@@ -113,7 +113,7 @@ export function YouSheet({
 
         {/* Links */}
         <nav className="mt-4 space-y-1 px-4 pb-2">
-          <SheetLink icon={<Settings className="h-5 w-5" />} label="Configurações" onClick={() => navigate("/channels/@me")} close={onClose} hint="Abrir painel completo" />
+          <SheetLink icon={<Settings className="h-5 w-5" />} label="Configurações" onClick={() => openUserSettings("account")} close={onClose} hint="Conta, perfil, aparência e mais" />
           <SheetLink
             icon={<ShieldCheck className="h-5 w-5" />}
             label={
@@ -130,7 +130,7 @@ export function YouSheet({
                   ? "bg-dnd"
                   : "bg-idle"
             }
-            onClick={() => navigate("/channels/@me")}
+            onClick={() => openUserSettings("standing")}
             close={onClose}
             hint="Infrações e conformidade"
           />
@@ -149,10 +149,6 @@ export function YouSheet({
             <LogOut className="h-5 w-5" /> Sair da Nexora
           </button>
         </nav>
-
-        <p className="mt-2 hidden">
-          <Pencil className="h-3 w-3" />
-        </p>
       </div>
     </div>
   );
