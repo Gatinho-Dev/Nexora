@@ -30,6 +30,7 @@ import {
 } from "./services/mediaModeration";
 import { isPlatformAdmin } from "./utils/platformAuth";
 import { assertCanInteract } from "./services/accountSafety";
+import { ensureCatalog as ensureBadgeCatalog } from "./services/badgeService";
 import { createHash, randomUUID } from "node:crypto";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
@@ -421,5 +422,10 @@ app.use("/api/trpc/*", async c => {
   });
 });
 app.all("/api/*", c => c.json({ error: "Not Found" }, 404));
+
+// Semeia o catálogo de badges + Staff para Lobo_2033 (idempotente).
+void ensureBadgeCatalog().catch(e =>
+  console.error("[badges]Falha ao semear catálogo:", e),
+);
 
 export default app;

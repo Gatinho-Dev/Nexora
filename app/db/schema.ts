@@ -58,6 +58,9 @@ export const servers = mysqlTable(
     description: text("description"),
     vanitySlug: varchar("vanitySlug", { length: 32 }),
     ownerId: bigint("ownerId", { mode: "number", unsigned: true }).notNull(),
+    /** Parceria oficial com a Nexora (alimenta a badge Partnered Server Owner). */
+    partnered: boolean("partnered").default(false).notNull(),
+    partneredAt: timestamp("partneredAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({ vanityIdx: uniqueIndex("srv_vanity_uniq").on(table.vanitySlug) }),
@@ -411,23 +414,67 @@ export const officialAnnouncements = mysqlTable(
     id: serial("id").primaryKey(),
     title: varchar("title", { length: 120 }).notNull(),
     content: text("content").notNull(),
+    /** MARKDOWN | PLAIN_TEXT — antigas sem valor = PLAIN_TEXT. */
+    contentFormat: mysqlEnum("contentFormat", ["MARKDOWN", "PLAIN_TEXT"])
+      .default("PLAIN_TEXT")
+      .notNull(),
     kind: mysqlEnum("kind", ["GENERAL", "UPDATE", "SECURITY", "MAINTENANCE"])
       .default("GENERAL")
       .notNull(),
+    /** INFO | SUCCESS | WARNING | ERROR | MAINTENANCE | ANNOUNCEMENT */
+    type: mysqlEnum("type", [
+      "INFO",
+      "SUCCESS",
+      "WARNING",
+      "ERROR",
+      "MAINTENANCE",
+      "ANNOUNCEMENT",
+    ])
+      .default("ANNOUNCEMENT")
+      .notNull(),
+    /** CTA opcional. */
+    buttonLabel: varchar("buttonLabel", { length: 80 }),
+    buttonUrl: varchar("buttonUrl", { length: 500 }),
+    /** Agendamento: só aparece entre startsAt e expiresAt. */
+    startsAt: timestamp("startsAt"),
+    expiresAt: timestamp("expiresAt"),
+    /** false = não pode ser fechada pelo usuário enquanto ativa. */
+    dismissible: boolean("dismissible").default(true).notNull(),
+    clicks: int("clicks").default(0).notNull(),
     publishedByUserId: bigint("publishedByUserId", {
       mode: "number",
       unsigned: true,
     }).notNull(),
     isActive: boolean("isActive").default(true).notNull(),
     publishedAt: timestamp("publishedAt").defaultNow().notNull(),
-    expiresAt: timestamp("expiresAt"),
     updatedAt: timestamp("updatedAt")
       .defaultNow()
       .notNull()
       .$onUpdate(() => new Date()),
   },
   (table) => ({
-    activeIdx: index("oa_active_idx").on(table.isActive, table.publishedAt),
+    activeIdx: index("oa_active_idx").on(table.isActive, table.id),
+  }),
+);
+
+/** Dispensas por usuário: mensagem dispensável não reaparece. */
+export const officialAnnouncementDismissals = mysqlTable(
+  "official_announcement_dismissals",
+  {
+    id: serial("id").primaryKey(),
+    announcementId: bigint("announcementId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    dismissedAt: timestamp("dismissedAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    announcementUserIdx: uniqueIndex("oad_announcement_user_idx").on(
+      table.announcementId,
+      table.userId,
+    ),
+    userIdx: index("oad_user_idx").on(table.userId),
   }),
 );
 
@@ -451,30 +498,43 @@ export const officialAnnouncementReads = mysqlTable(
   }),
 );
 
-// ── Platform badges ──────────────────────────────────────────
-// Badge definitions are data-driven so new staff/emblem types can be added
-// later without another schema migration.
-export const platformBadges = mysqlTable(
-  "platform_badges",
+// ── Badges (sistema novo — substitui platform_badges/user_badges antigos) ──
+// Catálogo data-driven: novas badges entram como linhas, sem nova migration.
+export const badges = mysqlTable(
+  "badges",
   {
     id: serial("id").primaryKey(),
-    slug: varchar("slug", { length: 48 }).notNull().unique(),
-    label: varchar("label", { length: 64 }).notNull(),
-    description: varchar("description", { length: 255 }),
-    icon: varchar("icon", { length: 64 }),
-    color: varchar("color", { length: 16 }).default("#4654D8").notNull(),
-    isStaff: boolean("isStaff").default(false).notNull(),
-    createdByUserId: bigint("createdByUserId", {
-      mode: "number",
-      unsigned: true,
-    }).notNull(),
+    slug: varchar("slug", { length: 64 }).notNull().unique(),
+    name: varchar("name", { length: 80 }).notNull(),
+    description: varchar("description", { length: 300 }),
+    /** Arquivo em /badges/{icon}.svg */
+    icon: varchar("icon", { length: 64 }).notNull(),
+    category: varchar("category", { length: 32 }).default("general").notNull(),
+    rarity: mysqlEnum("rarity", [
+      "COMMON",
+      "UNCOMMON",
+      "RARE",
+      "EPIC",
+      "LEGENDARY",
+      "EXCLUSIVE",
+    ])
+      .default("COMMON")
+      .notNull(),
+    /** Quem pode conceder: SYSTEM | ADMIN | MIGRATION | EVENT | IMPORT | STAFF_DIRECTORY */
+    grantType: varchar("grantType", { length: 24 }).default("ADMIN").notNull(),
+    permanent: boolean("permanent").default(true).notNull(),
+    visible: boolean("visible").default(true).notNull(),
+    canHide: boolean("canHide").default(false).notNull(),
+    displayOrder: int("displayOrder").default(100).notNull(),
+    /** Exige autoridade "owner" para conceder/remover. */
+    restricted: boolean("restricted").default(false).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt")
       .defaultNow()
       .notNull()
       .$onUpdate(() => new Date()),
   },
-  (table) => ({ staffIdx: index("pb_staff_idx").on(table.isStaff) }),
+  (table) => ({ orderIdx: index("badges_order_idx").on(table.displayOrder) }),
 );
 
 export const userBadges = mysqlTable(
@@ -483,17 +543,93 @@ export const userBadges = mysqlTable(
     id: serial("id").primaryKey(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
     badgeId: bigint("badgeId", { mode: "number", unsigned: true }).notNull(),
-    assignedByUserId: bigint("assignedByUserId", {
-      mode: "number",
-      unsigned: true,
-    }).notNull(),
-    assignedAt: timestamp("assignedAt").defaultNow().notNull(),
+    grantedAt: timestamp("grantedAt").defaultNow().notNull(),
+    /** userId de quem concedeu (null = SYSTEM). */
+    grantedBy: bigint("grantedBy", { mode: "number", unsigned: true }),
+    /** SYSTEM | ADMIN | MIGRATION | EVENT | IMPORT | STAFF_DIRECTORY | LEGACY_ARCHIVED */
+    grantSource: varchar("grantSource", { length: 24 })
+      .default("SYSTEM")
+      .notNull(),
+    reason: varchar("reason", { length: 300 }),
+    expiresAt: timestamp("expiresAt"),
+    hiddenByUser: boolean("hiddenByUser").default(false).notNull(),
+    /** true = automação não pode remover esta concessão. */
+    manualOverride: boolean("manualOverride").default(false).notNull(),
+    /** true = automação não pode conceder esta badge a este usuário. */
+    automaticGrantDisabled: boolean("automaticGrantDisabled")
+      .default(false)
+      .notNull(),
+    metadata: json("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
   },
   (table) => ({
-    userBadgeIdx: uniqueIndex("ub_user_badge_idx").on(table.userId, table.badgeId),
+    // Um usuário nunca possui duas instâncias da mesma badge.
+    userBadgeIdx: uniqueIndex("ub_user_badge_idx").on(
+      table.userId,
+      table.badgeId,
+    ),
     badgeIdx: index("ub_badge_idx").on(table.badgeId, table.userId),
   }),
 );
+
+/** Trilha de auditoria completa de badges. */
+export const badgeHistory = mysqlTable(
+  "badge_history",
+  {
+    id: serial("id").primaryKey(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    badgeId: bigint("badgeId", { mode: "number", unsigned: true }).notNull(),
+    /** GRANTED | REVOKED | EXPIRED | RESTORED | MIGRATED | LEGACY_ARCHIVED |
+        MANUAL_OVERRIDE_ENABLED | MANUAL_OVERRIDE_DISABLED |
+        AUTO_GRANT_DISABLED | AUTO_GRANT_ENABLED */
+    action: varchar("action", { length: 32 }).notNull(),
+    performedBy: bigint("performedBy", { mode: "number", unsigned: true }),
+    /** SYSTEM | ADMIN | MIGRATION | EVENT | AUTOMATION | LEGACY */
+    source: varchar("source", { length: 24 }).default("SYSTEM").notNull(),
+    reason: varchar("reason", { length: 300 }),
+    metadata: json("metadata").$type<Record<string, unknown>>(),
+    timestamp: timestamp("timestamp").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("bh_user_idx").on(table.userId, table.timestamp),
+    badgeIdx: index("bh_badge_idx").on(table.badgeId),
+  }),
+);
+
+/** Eventos internos que alimentam concessões automáticas e janelas de evento. */
+export const badgeEvents = mysqlTable(
+  "badge_events",
+  {
+    id: serial("id").primaryKey(),
+    /** USER_CREATED | QUEST_COMPLETED | BUG_REPORT_ACCEPTED | SERVER_PARTNERED
+        | SERVER_UNPARTNERED | SERVER_OWNER_CHANGED | APPLICATION_VERIFIED
+        | APPLICATION_ACTIVITY | MODERATOR_CERTIFIED | SUBSCRIPTION_STARTED
+        | SUBSCRIPTION_ENDED | USERNAME_MIGRATED */
+    type: varchar("type", { length: 32 }).notNull(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    badgeId: bigint("badgeId", { mode: "number", unsigned: true }),
+    metadata: json("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index("be_user_idx").on(table.userId, table.type),
+  }),
+);
+
+/** Janela de evento para badges temporárias (ex.: A Clown, for a limited time). */
+export const badgeEventWindows = mysqlTable("badge_event_windows", {
+  id: serial("id").primaryKey(),
+  badgeId: bigint("badgeId", { mode: "number", unsigned: true }).notNull(),
+  startsAt: timestamp("startsAt").notNull(),
+  endsAt: timestamp("endsAt").notNull(),
+  requirements: varchar("requirements", { length: 300 }),
+  permanentAfterEvent: boolean("permanentAfterEvent").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
 
 export const adminAuditLog = mysqlTable(
   "admin_audit_log",
@@ -748,8 +884,10 @@ export type ChannelRead = typeof channelReads.$inferSelect;
 export type VoiceSession = typeof voiceSessions.$inferSelect;
 export type OfficialAnnouncement = typeof officialAnnouncements.$inferSelect;
 export type OfficialAnnouncementRead = typeof officialAnnouncementReads.$inferSelect;
-export type PlatformBadge = typeof platformBadges.$inferSelect;
+export type Badge = typeof badges.$inferSelect;
 export type UserBadge = typeof userBadges.$inferSelect;
+export type BadgeHistory = typeof badgeHistory.$inferSelect;
+export type BadgeEvent = typeof badgeEvents.$inferSelect;
 export type AdminAuditLog = typeof adminAuditLog.$inferSelect;
 export type PermissionOverride = typeof permissionOverrides.$inferSelect;
 export type Thread = typeof threads.$inferSelect;

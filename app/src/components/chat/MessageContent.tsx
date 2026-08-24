@@ -1,4 +1,5 @@
 import { Fragment, useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 /**
  * Discord-style markdown renderer, implemented as a safe tokenizer:
@@ -76,8 +77,48 @@ function renderBlocks(text: string): ReactNode[] {
     );
     quote = [];
   };
+  const flushList = (key: string) => {
+    if (listItems.length === 0) return;
+    const Tag = listOrdered ? "ol" : "ul";
+    out.push(
+      <Tag
+        key={key}
+        className={cn(
+          "my-1 pl-6",
+          listOrdered ? "list-decimal" : "list-disc",
+        )}
+      >
+        {listItems.map((item, i) => (
+          <li key={i} className="leading-6">
+            {renderInline(item)}
+          </li>
+        ))}
+      </Tag>,
+    );
+    listItems = [];
+  };
+
+  let listItems: string[] = [];
+  let listOrdered = false;
 
   lines.forEach((line, i) => {
+    // Listas: "- item", "* item" e "1. item"
+    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (bullet || ordered) {
+      flushPara(`p${i}`);
+      flushQuote(`q${i}`);
+      const wantOrdered = !!ordered;
+      if (listItems.length > 0 && wantOrdered !== listOrdered) {
+        flushList(`l${i}`);
+      }
+      listOrdered = wantOrdered;
+      listItems.push((bullet?.[1] ?? ordered?.[1]) as string);
+      return;
+    }
+    if (listItems.length > 0) {
+      flushList(`l${i}`);
+    }
     const header = line.match(/^(#{1,3})\s+(.+)$/);
     if (header && !line.startsWith("#!")) {
       flushPara(`p${i}`);
@@ -117,6 +158,7 @@ function renderBlocks(text: string): ReactNode[] {
   });
   flushPara("pend-p");
   flushQuote("pend-q");
+  flushList("pend-l");
   return out;
 }
 
@@ -162,7 +204,17 @@ function renderEmbeds(text: string): ReactNode[] {
 // ── Inline level ──────────────────────────────────────────────
 
 const TOKEN_RE =
-  /(\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*|__[^_\n]+__|_[^_\n]+_|~~[^~\n]+~~|\|\|[^|\n]+\|\||`[^`\n]+`|https?:\/\/[^\s<]+|@[a-zA-Z0-9_.-]+|@everyone|@here)/g;
+  /(\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*|__[^_\n]+__|_[^_\n]+_|~~[^~\n]+~~|\|\|[^|\n]+\|\||`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+|@[a-zA-Z0-9_.-]+|@everyone|@here)/g;
+
+/** Bloqueia esquemas perigosos (javascript:, data:, vbscript:). */
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 function renderInline(text: string): ReactNode[] {
   const segments = text.split(TOKEN_RE);
@@ -208,6 +260,22 @@ function renderInline(text: string): ReactNode[] {
       );
     }
     // Links & images
+    // Markdown link: [texto](https://…)
+    const mdLink = seg.match(/^\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)$/);
+    if (mdLink) {
+      if (!isSafeUrl(mdLink[2])) return <span key={i}>{mdLink[1]}</span>;
+      return (
+        <a
+          key={i}
+          href={mdLink[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="chat-link"
+        >
+          {mdLink[1]}
+        </a>
+      );
+    }
     if (/^https?:\/\//.test(seg)) {
       if (isImageUrl(seg)) {
         return (

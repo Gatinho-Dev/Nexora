@@ -8,6 +8,7 @@ import {
   like,
   lt,
   or,
+  sql,
 } from "drizzle-orm";
 import type { AdminAuditLogDTO } from "@contracts/types";
 import { createRouter, adminQuery, authedQuery } from "./middleware";
@@ -19,9 +20,17 @@ import {
 } from "./utils/platformAuth";
 import {
   toOfficialAnnouncementDTO,
-  toPlatformBadgeDTO,
-  toUserBadgeDTO,
 } from "./utils/platformDtos";
+import { toBadgeDTO, toUserBadgeDTO } from "./utils/badgeDtos";
+import {
+  badgeHistoryWrite,
+  checkConsistency,
+  evaluateUser,
+  fixConsistency,
+  grant,
+  recordEvent,
+  revoke,
+} from "./services/badgeService";
 import { toPublicUser } from "./utils/permissions";
 import { broadcastToAll } from "./realtime";
 import {
@@ -49,23 +58,6 @@ const pageInput = z
   })
   .optional();
 
-const badgeSlug = z
-  .string()
-  .trim()
-  .min(2)
-  .max(48)
-  .regex(
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-    "Use letras minúsculas, números e hífens no identificador.",
-  );
-
-const badgeIcon = z
-  .string()
-  .trim()
-  .min(1)
-  .max(64)
-  .regex(/^[a-z0-9_-]+$/i, "Use um identificador de ícone válido.");
-
 type AuditDatabase = Pick<ReturnType<typeof getDb>, "insert">;
 
 async function writeAudit(database: AuditDatabase, input: {
@@ -86,29 +78,22 @@ async function writeAudit(database: AuditDatabase, input: {
   });
 }
 
-function requireOwnerForStaffBadge(
+/**
+ * Permissões de badges mapeadas na autoridade da plataforma:
+ * VIEW/GRANT/REVOKE = admin · MANAGE_SYSTEM_BADGES = owner (badges
+ * restritas: Staff, Partnered, Certified Moderator, Alumni, Bug Hunter T2).
+ */
+function requireBadgeManagePermission(
   user: typeof schema.users.$inferSelect,
-  isStaff: boolean,
+  badgeRestricted: boolean,
 ) {
-  if (isStaff && !isPlatformOwner(user)) {
+  if (badgeRestricted && !isPlatformOwner(user)) {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: "Somente o proprietário da plataforma pode gerenciar emblemas de staff.",
+      message:
+        "Esta badge é restrita: somente o proprietário da plataforma pode gerenciá-la.",
     });
   }
-}
-
-async function listBadgesForUser(userId: number) {
-  const rows = await getDb()
-    .select({ badge: schema.platformBadges, assignment: schema.userBadges })
-    .from(schema.userBadges)
-    .innerJoin(
-      schema.platformBadges,
-      eq(schema.platformBadges.id, schema.userBadges.badgeId),
-    )
-    .where(eq(schema.userBadges.userId, userId))
-    .orderBy(desc(schema.userBadges.assignedAt));
-  return rows.map(row => toUserBadgeDTO(row.badge, row.assignment));
 }
 
 function escapeLike(value: string): string {
@@ -165,16 +150,42 @@ export const adminRouter = createRouter({
       z.object({
         title: z.string().trim().min(2).max(120),
         content: z.string().trim().min(1).max(10_000),
+        contentFormat: z.enum(["MARKDOWN", "PLAIN_TEXT"]).default("MARKDOWN"),
         kind: announcementKind.default("GENERAL"),
+        type: z
+          .enum(["INFO", "SUCCESS", "WARNING", "ERROR", "MAINTENANCE", "ANNOUNCEMENT"])
+          .default("ANNOUNCEMENT"),
+        buttonLabel: z.string().trim().max(80).nullable().optional(),
+        buttonUrl: z
+          .string()
+          .trim()
+          .url("Informe uma URL válida (https://…).")
+          .max(500)
+          .nullable()
+          .optional(),
+        startsAt: z.coerce.date().nullable().optional(),
         expiresAt: z.coerce.date().nullable().optional(),
+        dismissible: z.boolean().default(true),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       rateLimit(`admin:announcement:${ctx.user.id}`, 20, 60_000);
-      if (input.expiresAt && input.expiresAt <= new Date()) {
+      if (input.buttonLabel && !input.buttonUrl) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "A expiração precisa estar no futuro.",
+          message: "Informe a URL do botão (ou remova o texto do botão).",
+        });
+      }
+      if (input.buttonUrl && !input.buttonLabel) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Informe o texto do botão (ou remova a URL).",
+        });
+      }
+      if (input.expiresAt && input.startsAt && input.expiresAt <= input.startsAt) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A expiração precisa ser depois do início.",
         });
       }
 
@@ -184,9 +195,15 @@ export const adminRouter = createRouter({
           .values({
             title: input.title,
             content: input.content,
+            contentFormat: input.contentFormat,
             kind: input.kind,
-            publishedByUserId: ctx.user.id,
+            type: input.type,
+            buttonLabel: input.buttonLabel ?? null,
+            buttonUrl: input.buttonUrl ?? null,
+            startsAt: input.startsAt ?? null,
             expiresAt: input.expiresAt ?? null,
+            dismissible: input.dismissible,
+            publishedByUserId: ctx.user.id,
           })
           .$returningId();
         const created = await tx.query.officialAnnouncements.findFirst({
@@ -211,6 +228,157 @@ export const adminRouter = createRouter({
       const dto = toOfficialAnnouncementDTO(announcement);
       broadcastToAll({ t: "official:announcement", announcement: dto });
       return dto;
+    }),
+
+  /** Edita um comunicado existente (sem precisar recriar). */
+  editAnnouncement: adminQuery
+    .input(
+      z.object({
+        announcementId: z.number().int().positive(),
+        title: z.string().trim().min(2).max(120).optional(),
+        content: z.string().trim().min(1).max(10_000).optional(),
+        contentFormat: z.enum(["MARKDOWN", "PLAIN_TEXT"]).optional(),
+        type: z
+          .enum(["INFO", "SUCCESS", "WARNING", "ERROR", "MAINTENANCE", "ANNOUNCEMENT"])
+          .optional(),
+        buttonLabel: z.string().trim().max(80).nullable().optional(),
+        buttonUrl: z.string().trim().max(500).nullable().optional(),
+        startsAt: z.coerce.date().nullable().optional(),
+        expiresAt: z.coerce.date().nullable().optional(),
+        dismissible: z.boolean().optional(),
+        isActive: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { announcementId, ...patch } = input;
+      const existing = await getDb().query.officialAnnouncements.findFirst({
+        where: eq(schema.officialAnnouncements.id, announcementId),
+      });
+      if (!existing) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Comunicado oficial não encontrado.",
+        });
+      }
+      await getDb().transaction(async tx => {
+        await tx
+          .update(schema.officialAnnouncements)
+          .set(patch)
+          .where(eq(schema.officialAnnouncements.id, announcementId));
+        await writeAudit(tx, {
+          actorUserId: ctx.user.id,
+          action: "official.announcement.edit",
+          entityType: "official_announcement",
+          entityId: announcementId,
+          metadata: { fields: Object.keys(patch) },
+        });
+      });
+      const updated = await getDb().query.officialAnnouncements.findFirst({
+        where: eq(schema.officialAnnouncements.id, announcementId),
+      });
+      return updated ? toOfficialAnnouncementDTO(updated) : null;
+    }),
+
+  /** Duplica um comunicado (rascunho inativo para ajustar e publicar). */
+  duplicateAnnouncement: adminQuery
+    .input(z.object({ announcementId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await getDb().query.officialAnnouncements.findFirst({
+        where: eq(schema.officialAnnouncements.id, input.announcementId),
+      });
+      if (!existing) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Comunicado oficial não encontrado.",
+        });
+      }
+      const [{ id }] = await getDb()
+        .insert(schema.officialAnnouncements)
+        .values({
+          title: `${existing.title} (cópia)`.slice(0, 120),
+          content: existing.content,
+          contentFormat: existing.contentFormat,
+          kind: existing.kind,
+          type: existing.type,
+          buttonLabel: existing.buttonLabel,
+          buttonUrl: existing.buttonUrl,
+          dismissible: existing.dismissible,
+          isActive: false,
+          publishedByUserId: ctx.user.id,
+        })
+        .$returningId();
+      await writeAudit(getDb(), {
+        actorUserId: ctx.user.id,
+        action: "official.announcement.duplicate",
+        entityType: "official_announcement",
+        entityId: id,
+        metadata: { fromId: existing.id },
+      });
+      const created = await getDb().query.officialAnnouncements.findFirst({
+        where: eq(schema.officialAnnouncements.id, id),
+      });
+      return created ? toOfficialAnnouncementDTO(created) : null;
+    }),
+
+  /** Exclui definitivamente. */
+  deleteAnnouncement: adminQuery
+    .input(z.object({ announcementId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await getDb().query.officialAnnouncements.findFirst({
+        where: eq(schema.officialAnnouncements.id, input.announcementId),
+      });
+      if (!existing) return { ok: true as const };
+      await getDb().transaction(async tx => {
+        await tx
+          .delete(schema.officialAnnouncementReads)
+          .where(
+            eq(schema.officialAnnouncementReads.announcementId, input.announcementId),
+          );
+        await tx
+          .delete(schema.officialAnnouncementDismissals)
+          .where(
+            eq(
+              schema.officialAnnouncementDismissals.announcementId,
+              input.announcementId,
+            ),
+          );
+        await tx
+          .delete(schema.officialAnnouncements)
+          .where(eq(schema.officialAnnouncements.id, input.announcementId));
+        await writeAudit(tx, {
+          actorUserId: ctx.user.id,
+          action: "official.announcement.delete",
+          entityType: "official_announcement",
+          entityId: input.announcementId,
+          metadata: { title: existing.title },
+        });
+      });
+      return { ok: true as const };
+    }),
+
+  /** Histórico com métricas (visualizações/cliques). */
+  announcementStats: adminQuery
+    .input(z.object({ announcementId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const [views] = await getDb()
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.officialAnnouncementReads)
+        .where(
+          eq(schema.officialAnnouncementReads.announcementId, input.announcementId),
+        );
+      const [dismissals] = await getDb()
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.officialAnnouncementDismissals)
+        .where(
+          eq(
+            schema.officialAnnouncementDismissals.announcementId,
+            input.announcementId,
+          ),
+        );
+      return {
+        views: Number(views.count),
+        dismissals: Number(dismissals.count),
+      };
     }),
 
   archiveAnnouncement: adminQuery
@@ -243,77 +411,18 @@ export const adminRouter = createRouter({
       return { ok: true as const };
     }),
 
+  // ── Badges (sistema novo) ─────────────────────────────────────
+
+  /** Catálogo completo para o painel. */
   listBadges: adminQuery.query(async () => {
     const badges = await getDb()
       .select()
-      .from(schema.platformBadges)
-      .orderBy(desc(schema.platformBadges.isStaff), asc(schema.platformBadges.label));
-    return badges.map(toPlatformBadgeDTO);
+      .from(schema.badges)
+      .orderBy(asc(schema.badges.displayOrder));
+    return badges.map(toBadgeDTO);
   }),
 
-  createBadge: adminQuery
-    .input(
-      z.object({
-        slug: badgeSlug,
-        label: z.string().trim().min(2).max(64),
-        description: z.string().trim().max(255).nullable().optional(),
-        icon: badgeIcon.nullable().optional(),
-        color: z
-          .string()
-          .trim()
-          .regex(/^#[0-9a-f]{6}$/i, "Informe uma cor hexadecimal válida.")
-          .default("#4654D8"),
-        isStaff: z.boolean().default(false),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      rateLimit(`admin:badge-definition:${ctx.user.id}`, 30, 60_000);
-      requireOwnerForStaffBadge(ctx.user, input.isStaff);
-
-      const existing = await getDb().query.platformBadges.findFirst({
-        where: eq(schema.platformBadges.slug, input.slug),
-      });
-      if (existing) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "Já existe um emblema com este identificador.",
-        });
-      }
-
-      const badge = await getDb().transaction(async tx => {
-        const [{ id }] = await tx
-          .insert(schema.platformBadges)
-          .values({
-            slug: input.slug,
-            label: input.label,
-            description: input.description ?? null,
-            icon: input.icon ?? null,
-            color: input.color,
-            isStaff: input.isStaff,
-            createdByUserId: ctx.user.id,
-          })
-          .$returningId();
-        const created = await tx.query.platformBadges.findFirst({
-          where: eq(schema.platformBadges.id, id),
-        });
-        if (!created) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Não foi possível criar o emblema.",
-          });
-        }
-        await writeAudit(tx, {
-          actorUserId: ctx.user.id,
-          action: "badge.definition.create",
-          entityType: "platform_badge",
-          entityId: created.id,
-          metadata: { slug: created.slug, isStaff: created.isStaff },
-        });
-        return created;
-      });
-      return toPlatformBadgeDTO(badge);
-    }),
-
+  /** TODAS as badges de um usuário (inclusive ocultas/vencidas) + detalhes. */
   searchUsers: adminQuery
     .input(
       z.object({
@@ -339,99 +448,374 @@ export const adminRouter = createRouter({
 
   listUserBadges: adminQuery
     .input(z.object({ userId: z.number().int().positive() }))
-    .query(({ input }) => listBadgesForUser(input.userId)),
+    .query(async ({ input }) => {
+      const rows = await getDb()
+        .select({ ub: schema.userBadges, badge: schema.badges })
+        .from(schema.userBadges)
+        .innerJoin(schema.badges, eq(schema.badges.id, schema.userBadges.badgeId))
+        .where(eq(schema.userBadges.userId, input.userId))
+        .orderBy(asc(schema.badges.displayOrder));
+      const grantorIds = rows
+        .map(r => r.ub.grantedBy)
+        .filter((id): id is number => typeof id === "number");
+      const grantors = grantorIds.length
+        ? await getDb()
+            .select({ id: schema.users.id, username: schema.users.username, name: schema.users.name })
+            .from(schema.users)
+            .where(or(...grantorIds.map(id => eq(schema.users.id, id))))
+        : [];
+      const byId = new Map(grantors.map(g => [g.id, g]));
+      return rows.map(r => ({
+        ...toUserBadgeDTO(r.badge, r.ub),
+        hiddenByUser: r.ub.hiddenByUser,
+        manualOverride: r.ub.manualOverride,
+        automaticGrantDisabled: r.ub.automaticGrantDisabled,
+        reason: r.ub.reason,
+        grantedByUser: r.ub.grantedBy
+          ? byId.get(r.ub.grantedBy) ?? null
+          : null,
+      }));
+    }),
 
-  assignBadge: adminQuery
+  /** Concede badge manualmente (com override opcional e expiração). */
+  grantBadge: adminQuery
     .input(
       z.object({
         userId: z.number().int().positive(),
         badgeId: z.number().int().positive(),
+        reason: z.string().trim().max(300).optional(),
+        /** Dias até expirar; null/omitido = permanente. */
+        expiresInDays: z.number().int().min(1).max(3650).nullable().optional(),
+        manualOverride: z.boolean().default(true),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      rateLimit(`admin:badge-assignment:${ctx.user.id}`, 100, 60_000);
+      rateLimit(`admin:badge-grant:${ctx.user.id}`, 100, 60_000);
+      const authority = getPlatformAuthority(ctx.user);
+      if (!authority) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão." });
+      }
       const [user, badge] = await Promise.all([
         getDb().query.users.findFirst({ where: eq(schema.users.id, input.userId) }),
-        getDb().query.platformBadges.findFirst({
-          where: eq(schema.platformBadges.id, input.badgeId),
-        }),
+        getDb().query.badges.findFirst({ where: eq(schema.badges.id, input.badgeId) }),
       ]);
       if (!user) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado." });
       }
       if (!badge) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Emblema não encontrado." });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Badge não encontrada." });
       }
-      requireOwnerForStaffBadge(ctx.user, badge.isStaff);
+      requireBadgeManagePermission(ctx.user, badge.restricted);
 
-      const assignedAt = new Date();
-      await getDb().transaction(async tx => {
-        await tx
-          .insert(schema.userBadges)
-          .values({
-            userId: user.id,
-            badgeId: badge.id,
-            assignedByUserId: ctx.user.id,
-            assignedAt,
-          })
-          .onDuplicateKeyUpdate({
-            set: { assignedByUserId: ctx.user.id, assignedAt },
-          });
-        await writeAudit(tx, {
-          actorUserId: ctx.user.id,
-          action: "badge.assignment.assign",
-          entityType: "user_badge",
-          entityId: badge.id,
-          targetUserId: user.id,
-          metadata: { badgeSlug: badge.slug },
-        });
+      const expiresAt = input.expiresInDays
+        ? new Date(Date.now() + input.expiresInDays * 86_400_000)
+        : null;
+      const result = await grant(user.id, badge.id, {
+        source: "ADMIN",
+        grantedBy: ctx.user.id,
+        reason: input.reason ?? null,
+        expiresAt,
+        manualOverride: input.manualOverride,
       });
-      return { ok: true as const };
+      if (input.manualOverride && result.granted && !result.alreadyHad) {
+        await badgeHistoryWrite({
+          userId: user.id,
+          badgeId: badge.id,
+          action: "MANUAL_OVERRIDE_ENABLED",
+          performedBy: ctx.user.id,
+          source: "ADMIN",
+          reason: "Override manual ativado na concessão.",
+        });
+      }
+      await writeAudit(getDb(), {
+        actorUserId: ctx.user.id,
+        action: "badge.grant",
+        entityType: "user_badge",
+        entityId: badge.id,
+        targetUserId: user.id,
+        metadata: { badgeSlug: badge.slug, manualOverride: input.manualOverride },
+      });
+      return result;
     }),
 
-  unassignBadge: adminQuery
+  /** Remove badge manualmente (com motivo — vai para o histórico). */
+  revokeBadge: adminQuery
     .input(
       z.object({
         userId: z.number().int().positive(),
         badgeId: z.number().int().positive(),
+        reason: z.string().trim().max(300).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const badge = await getDb().query.platformBadges.findFirst({
-        where: eq(schema.platformBadges.id, input.badgeId),
+      const authority = getPlatformAuthority(ctx.user);
+      if (!authority) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão." });
+      }
+      const badge = await getDb().query.badges.findFirst({
+        where: eq(schema.badges.id, input.badgeId),
       });
       if (!badge) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Emblema não encontrado." });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Badge não encontrada." });
       }
-      requireOwnerForStaffBadge(ctx.user, badge.isStaff);
+      requireBadgeManagePermission(ctx.user, badge.restricted);
 
-      const assignment = await getDb().query.userBadges.findFirst({
-        where: and(
-          eq(schema.userBadges.userId, input.userId),
-          eq(schema.userBadges.badgeId, input.badgeId),
-        ),
+      const removed = await revoke(input.userId, badge.id, {
+        performedBy: ctx.user.id,
+        reason: input.reason ?? null,
+        source: "ADMIN",
       });
-      if (!assignment) return { ok: true as const };
-
-      await getDb().transaction(async tx => {
-        await tx
-          .delete(schema.userBadges)
-          .where(
-            and(
-              eq(schema.userBadges.userId, input.userId),
-              eq(schema.userBadges.badgeId, input.badgeId),
-            ),
-          );
-        await writeAudit(tx, {
+      if (removed) {
+        await writeAudit(getDb(), {
           actorUserId: ctx.user.id,
-          action: "badge.assignment.unassign",
+          action: "badge.revoke",
           entityType: "user_badge",
           entityId: badge.id,
           targetUserId: input.userId,
-          metadata: { badgeSlug: badge.slug },
+          metadata: { badgeSlug: badge.slug, reason: input.reason ?? null },
         });
+      }
+      return { removed };
+    }),
+
+  /** Liga/desliga o override manual (protege da automação). */
+  setManualOverride: adminQuery
+    .input(
+      z.object({
+        userId: z.number().int().positive(),
+        badgeId: z.number().int().positive(),
+        enabled: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const badge = await getDb().query.badges.findFirst({
+        where: eq(schema.badges.id, input.badgeId),
+      });
+      if (!badge) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Badge não encontrada." });
+      }
+      requireBadgeManagePermission(ctx.user, badge.restricted);
+      await getDb()
+        .update(schema.userBadges)
+        .set({ manualOverride: input.enabled })
+        .where(
+          and(
+            eq(schema.userBadges.userId, input.userId),
+            eq(schema.userBadges.badgeId, input.badgeId),
+          ),
+        );
+      await badgeHistoryWrite({
+        userId: input.userId,
+        badgeId: input.badgeId,
+        action: input.enabled ? "MANUAL_OVERRIDE_ENABLED" : "MANUAL_OVERRIDE_DISABLED",
+        performedBy: ctx.user.id,
+        source: "ADMIN",
+      });
+      await writeAudit(getDb(), {
+        actorUserId: ctx.user.id,
+        action: input.enabled ? "badge.override.enable" : "badge.override.disable",
+        entityType: "user_badge",
+        entityId: badge.id,
+        targetUserId: input.userId,
       });
       return { ok: true as const };
+    }),
+
+  /** Liga/desliga a automação para esta badge/usuário. */
+  setAutomaticGrantDisabled: adminQuery
+    .input(
+      z.object({
+        userId: z.number().int().positive(),
+        badgeId: z.number().int().positive(),
+        disabled: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const badge = await getDb().query.badges.findFirst({
+        where: eq(schema.badges.id, input.badgeId),
+      });
+      if (!badge) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Badge não encontrada." });
+      }
+      requireBadgeManagePermission(ctx.user, badge.restricted);
+      await getDb()
+        .update(schema.userBadges)
+        .set({ automaticGrantDisabled: input.disabled })
+        .where(
+          and(
+            eq(schema.userBadges.userId, input.userId),
+            eq(schema.userBadges.badgeId, input.badgeId),
+          ),
+        );
+      await badgeHistoryWrite({
+        userId: input.userId,
+        badgeId: input.badgeId,
+        action: input.disabled ? "AUTO_GRANT_DISABLED" : "AUTO_GRANT_ENABLED",
+        performedBy: ctx.user.id,
+        source: "ADMIN",
+      });
+      return { ok: true as const };
+    }),
+
+  /** Histórico de badges do usuário. */
+  badgeHistory: adminQuery
+    .input(
+      z.object({
+        userId: z.number().int().positive(),
+        limit: z.number().int().min(1).max(200).default(50),
+      }),
+    )
+    .query(async ({ input }) => {
+      const rows = await getDb()
+        .select({
+          history: schema.badgeHistory,
+          badge: schema.badges,
+          actor: schema.users,
+        })
+        .from(schema.badgeHistory)
+        .leftJoin(schema.badges, eq(schema.badges.id, schema.badgeHistory.badgeId))
+        .leftJoin(schema.users, eq(schema.users.id, schema.badgeHistory.performedBy))
+        .where(eq(schema.badgeHistory.userId, input.userId))
+        .orderBy(desc(schema.badgeHistory.timestamp))
+        .limit(input.limit);
+      return rows.map(r => ({
+        id: r.history.id,
+        action: r.history.action,
+        source: r.history.source,
+        reason: r.history.reason,
+        timestamp: r.history.timestamp,
+        metadata: r.history.metadata,
+        badgeSlug: r.badge?.slug ?? null,
+        badgeName: r.badge?.name ?? null,
+        performedByUser: r.actor
+          ? { id: r.actor.id, username: r.actor.username, name: r.actor.name }
+          : null,
+      }));
+    }),
+
+  /** Reavalia as badges automáticas do usuário. */
+  reevaluateUserBadges: adminQuery
+    .input(z.object({ userId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await evaluateUser(input.userId, { trigger: "ADMIN" });
+      await writeAudit(getDb(), {
+        actorUserId: ctx.user.id,
+        action: "badge.reevaluate",
+        entityType: "user",
+        targetUserId: input.userId,
+        metadata: { ...result },
+      });
+      return result;
+    }),
+
+  /** Verificador de inconsistências (Administração → Sistema → Badges). */
+  checkBadgeConsistency: adminQuery.query(async () => checkConsistency()),
+
+  fixBadgeConsistency: adminQuery.mutation(async ({ ctx }) => {
+    const result = await fixConsistency(ctx.user.id);
+    await writeAudit(getDb(), {
+      actorUserId: ctx.user.id,
+      action: "badge.consistency.fix",
+      entityType: "system",
+      metadata: { ...result },
+    });
+    return result;
+  }),
+
+  /** Define parceria de servidor (alimenta Partnered Server Owner). */
+  setServerPartnership: adminQuery
+    .input(
+      z.object({
+        serverId: z.number().int().positive(),
+        partnered: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!isPlatformOwner(ctx.user)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Somente o proprietário da plataforma gerencia parcerias.",
+        });
+      }
+      const [server] = await getDb()
+        .select()
+        .from(schema.servers)
+        .where(eq(schema.servers.id, input.serverId))
+        .limit(1);
+      if (!server) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Servidor não encontrado." });
+      }
+      await getDb()
+        .update(schema.servers)
+        .set({
+          partnered: input.partnered,
+          partneredAt: input.partnered ? new Date() : null,
+        })
+        .where(eq(schema.servers.id, input.serverId));
+      await recordEvent(
+        input.partnered ? "SERVER_PARTNERED" : "SERVER_UNPARTNERED",
+        server.ownerId,
+        { serverId: server.id, serverName: server.name },
+      );
+      await writeAudit(getDb(), {
+        actorUserId: ctx.user.id,
+        action: input.partnered ? "server.partner" : "server.unpartner",
+        entityType: "server",
+        entityId: server.id,
+        targetUserId: server.ownerId,
+      });
+      return { ok: true as const };
+    }),
+
+  /** Registra bug report aceito (Bug Hunter). */
+  recordBugReport: adminQuery
+    .input(
+      z.object({
+        userId: z.number().int().positive(),
+        critical: z.boolean().default(false),
+        description: z.string().trim().max(300).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await recordEvent("BUG_REPORT_ACCEPTED", input.userId, {
+        critical: input.critical,
+        description: input.description ?? null,
+      });
+      await writeAudit(getDb(), {
+        actorUserId: ctx.user.id,
+        action: "badge.bugReport.record",
+        entityType: "user",
+        targetUserId: input.userId,
+        metadata: { critical: input.critical },
+      });
+      const result = await evaluateUser(input.userId, {
+        trigger: "BUG_REPORT_ACCEPTED",
+      });
+      return result;
+    }),
+
+  /** Registra quest completada. */
+  recordQuest: adminQuery
+    .input(
+      z.object({
+        userId: z.number().int().positive(),
+        description: z.string().trim().max(300).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await recordEvent("QUEST_COMPLETED", input.userId, {
+        description: input.description ?? null,
+      });
+      await writeAudit(getDb(), {
+        actorUserId: ctx.user.id,
+        action: "badge.quest.record",
+        entityType: "user",
+        targetUserId: input.userId,
+      });
+      const result = await evaluateUser(input.userId, {
+        trigger: "QUEST_COMPLETED",
+      });
+      return result;
     }),
 
   listAuditLog: adminQuery

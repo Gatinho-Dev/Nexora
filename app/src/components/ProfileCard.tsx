@@ -6,6 +6,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar } from "./Avatar";
 import { NexoraMark } from "./NexoraBrand";
+import { BadgeList } from "./badges/BadgeUI";
+import type { UserBadgeDTO } from "@contracts/types";
 import { UserSettingsModal } from "./modals/UserSettingsModal";
 import { statusColor } from "@/lib/statusColor";
 import { cn } from "@/lib/utils";
@@ -18,33 +20,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  BadgeCheck,
   CalendarDays,
   Check,
   Clock3,
   Loader2,
   MessageSquare,
   Pencil,
-  ShieldCheck,
-  Sparkles,
   UserPlus,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 
-type ProfileBadgeData = {
-  id?: number;
-  slug?: string;
-  label: string;
-  description?: string | null;
-  color?: string | null;
-  isStaff?: boolean;
-};
-
 type ProfileDetails = PublicUser & {
   banner?: string | null;
   createdAt?: string | Date | null;
-  badges?: ProfileBadgeData[];
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -54,10 +43,6 @@ const STATUS_LABELS: Record<string, string> = {
   invisible: "Invisível",
   offline: "Offline",
 };
-
-function badgeColor(value?: string | null) {
-  return value && /^#[\da-f]{6}$/i.test(value) ? value : "#7383FF";
-}
 
 function ProfileBanner({ profile }: { profile: ProfileDetails | null }) {
   if (profile?.banner) {
@@ -82,47 +67,12 @@ function ProfileBanner({ profile }: { profile: ProfileDetails | null }) {
   );
 }
 
-function ProfileBadges({ badges }: { badges?: ProfileBadgeData[] }) {
-  if (!badges?.length) {
-    return (
-      <div className="flex items-center gap-3 rounded-xl border border-dashed border-white/15 bg-white/[0.025] px-3.5 py-3 text-left">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-faint">
-          <BadgeCheck className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-bodyx">
-            Espaço para emblemas
-          </p>
-          <p className="mt-0.5 text-[11px] leading-4 text-faint">
-            Emblemas oficiais aparecerão aqui quando forem concedidos.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+function ProfileBadges({ badges }: { badges?: UserBadgeDTO[] }) {
   return (
-    <div className="flex flex-wrap gap-2" aria-label="Emblemas do perfil">
-      {badges.map((badge, index) => {
-        const color = badgeColor(badge.color);
-        const Icon = badge.isStaff ? ShieldCheck : Sparkles;
-        return (
-          <span
-            key={badge.id ?? badge.slug ?? `${badge.label}-${index}`}
-            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold"
-            style={{
-              borderColor: `${color}66`,
-              backgroundColor: `${color}1f`,
-              color,
-            }}
-            title={badge.description ?? badge.label}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {badge.label}
-          </span>
-        );
-      })}
-    </div>
+    <BadgeList
+      badges={badges ?? []}
+      emptyMessage="Nenhum emblema ainda — participe de eventos e programas da Nexora para conquistar o seu."
+    />
   );
 }
 

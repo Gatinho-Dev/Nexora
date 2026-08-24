@@ -12,6 +12,7 @@ import { getSessionCookieOptions } from "./lib/cookies";
 import { Session } from "@contracts/constants";
 import { rateLimit } from "./utils/rateLimit";
 import { toPublicUser } from "./utils/permissions";
+import { recordEvent } from "./services/badgeService";
 import { env } from "./lib/env";
 
 // ── Password hashing (scrypt, no native deps) ─────────────────
@@ -97,6 +98,10 @@ export const accountRouter = createRouter({
       const user = await getDb().query.users.findFirst({
         where: eq(schema.users.id, id),
       });
+      // Badge "I'm new here, say hi!" — concessão automática (7 dias).
+      void recordEvent("USER_CREATED", id, { username: input.username }).catch(
+        () => {},
+      );
       return { user: user ? toPublicUser(user) : null };
     }),
 

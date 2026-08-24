@@ -22,6 +22,7 @@ import {
 } from "@/components/modals/UserSettingsModal";
 import { OPEN_SETTINGS_EVENT } from "@/lib/openUserSettings";
 import { MigrationBanner } from "@/components/MigrationBanner";
+import { GlobalMessageBanner } from "@/components/GlobalMessageBanner";
 import { BottomNav, type MobileTab } from "@/components/mobile/BottomNav";
 import { YouSheet } from "@/components/mobile/YouSheet";
 import { NotificationsSheet } from "@/components/mobile/NotificationsSheet";
@@ -179,6 +180,7 @@ export function AppLayout() {
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-rail select-none text-[#F2F3F5]">
       <MigrationBanner />
+      <GlobalMessageBanner />
 
       <div className="flex min-h-0 flex-1">
       {/* Desktop Rail */}

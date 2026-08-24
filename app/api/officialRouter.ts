@@ -7,6 +7,7 @@ import {
   gt,
   isNull,
   lt,
+  lte,
   or,
   sql,
 } from "drizzle-orm";
@@ -19,6 +20,11 @@ function visibleAnnouncementWhere(cursor?: number) {
   const now = new Date();
   return and(
     eq(schema.officialAnnouncements.isActive, true),
+    // Agendamento: só entre startsAt e expiresAt.
+    or(
+      isNull(schema.officialAnnouncements.startsAt),
+      lte(schema.officialAnnouncements.startsAt, now),
+    ),
     or(
       isNull(schema.officialAnnouncements.expiresAt),
       gt(schema.officialAnnouncements.expiresAt, now),
@@ -125,5 +131,77 @@ export const officialRouter = createRouter({
         .onDuplicateKeyUpdate({ set: { readAt } });
 
       return { ok: true as const, readAt };
+    }),
+
+  /** Mensagem global ativa mais recente ainda não dispensada (banner). */
+  activeBanner: authedQuery.query(async ({ ctx }) => {
+    const rows = await getDb()
+      .select({
+        announcement: schema.officialAnnouncements,
+        dismissedAt: schema.officialAnnouncementDismissals.dismissedAt,
+      })
+      .from(schema.officialAnnouncements)
+      .leftJoin(
+        schema.officialAnnouncementDismissals,
+        and(
+          eq(
+            schema.officialAnnouncementDismissals.announcementId,
+            schema.officialAnnouncements.id,
+          ),
+          eq(schema.officialAnnouncementDismissals.userId, ctx.user.id),
+        ),
+      )
+      .where(
+        and(
+          visibleAnnouncementWhere(),
+          isNull(schema.officialAnnouncementDismissals.id),
+        ),
+      )
+      .orderBy(desc(schema.officialAnnouncements.id))
+      .limit(1);
+    const row = rows[0];
+    return row
+      ? {
+          ...toOfficialAnnouncementDTO(row.announcement),
+          dismissed: false,
+        }
+      : null;
+  }),
+
+  /** Dispensa uma mensagem global (só se dismissible). */
+  dismiss: authedQuery
+    .input(z.object({ announcementId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const announcement = await getDb().query.officialAnnouncements.findFirst({
+        where: eq(schema.officialAnnouncements.id, input.announcementId),
+      });
+      if (!announcement) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Comunicado não encontrado.",
+        });
+      }
+      if (!announcement.dismissible) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Esta mensagem não pode ser dispensada.",
+        });
+      }
+      await getDb()
+        .insert(schema.officialAnnouncementDismissals)
+        .values({ announcementId: announcement.id, userId: ctx.user.id })
+        .onDuplicateKeyUpdate({ set: { dismissedAt: new Date() } });
+      return { ok: true as const };
+    }),
+
+  /** Contabiliza clique no CTA (fire-and-forget do cliente). */
+  trackClick: authedQuery
+    .input(z.object({ announcementId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      await getDb()
+        .update(schema.officialAnnouncements)
+        .set({ clicks: sql`${schema.officialAnnouncements.clicks} + 1` })
+        .where(eq(schema.officialAnnouncements.id, input.announcementId));
+      return { ok: true as const };
     }),
 });

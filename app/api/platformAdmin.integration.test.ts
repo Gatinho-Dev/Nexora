@@ -4,6 +4,7 @@ import { adminRouter } from "./adminRouter";
 import { officialRouter } from "./officialRouter";
 import { getDb } from "./queries/connection";
 import { env } from "./lib/env";
+import { ensureCatalog } from "./services/badgeService";
 import * as schema from "@db/schema";
 
 const runDatabaseIntegration = process.env.RUN_DB_INTEGRATION_TESTS === "true";
@@ -46,22 +47,36 @@ describe.skipIf(!runDatabaseIntegration)("platform admin database flow", () => {
         canManageStaffBadges: true,
       });
 
-      const badge = await admin.createBadge({
-        slug: `integration-staff-${suffix}`,
-        label: "Integration Staff",
-        icon: "shield-check",
-        color: "#4654D8",
-        isStaff: true,
+      await ensureCatalog();
+      const catalog = await admin.listBadges();
+      const staff = catalog.find(b => b.slug === "staff");
+      expect(staff).toBeTruthy();
+      if (!staff) throw new Error("staff badge not seeded");
+      badgeId = staff.id;
+      await admin.grantBadge({
+        userId,
+        badgeId,
+        reason: "Integration test staff",
+        manualOverride: true,
       });
-      badgeId = badge.id;
-      await admin.assignBadge({ userId, badgeId });
-      await expect(admin.listUserBadges({ userId })).resolves.toEqual([
-        expect.objectContaining({ id: badgeId, isStaff: true }),
+      const badges = await admin.listUserBadges({ userId });
+      expect(badges).toEqual([
+        expect.objectContaining({
+          id: badgeId,
+          slug: "staff",
+          manualOverride: true,
+          restricted: true,
+        }),
       ]);
 
       const announcement = await admin.createAnnouncement({
         title: "Comunicado de integração",
-        content: "Mensagem oficial usada somente pelo teste automatizado.",
+        content: "**Mensagem oficial** usada somente pelo teste: [Nexora](https://nexorachat.cloud)",
+        contentFormat: "MARKDOWN",
+        type: "ANNOUNCEMENT",
+        buttonLabel: "Abrir",
+        buttonUrl: "https://nexorachat.cloud",
+        dismissible: true,
         kind: "UPDATE",
       });
       announcementId = announcement.id;
@@ -93,12 +108,17 @@ describe.skipIf(!runDatabaseIntegration)("platform admin database flow", () => {
         .map(item => item.action);
       expect(actions).toEqual(
         expect.arrayContaining([
-          "badge.definition.create",
-          "badge.assignment.assign",
+          "badge.grant",
           "official.announcement.create",
           "official.announcement.archive",
         ]),
       );
+
+      // Reavaliação e verificador de consistência operam sem erro.
+      const evaluation = await admin.reevaluateUserBadges({ userId });
+      expect(evaluation).toHaveProperty("kept");
+      const consistency = await admin.checkBadgeConsistency();
+      expect(consistency).toHaveProperty("usersAnalyzed");
     } finally {
       const ownerIndex = env.ownerUserIds.lastIndexOf(userId);
       if (ownerIndex >= 0) env.ownerUserIds.splice(ownerIndex, 1);
@@ -114,6 +134,9 @@ describe.skipIf(!runDatabaseIntegration)("platform admin database flow", () => {
         await db
           .delete(schema.userBadges)
           .where(eq(schema.userBadges.badgeId, badgeId));
+        await db
+          .delete(schema.badgeHistory)
+          .where(eq(schema.badgeHistory.badgeId, badgeId));
       }
       await db
         .delete(schema.adminAuditLog)
@@ -128,11 +151,7 @@ describe.skipIf(!runDatabaseIntegration)("platform admin database flow", () => {
           .delete(schema.officialAnnouncements)
           .where(eq(schema.officialAnnouncements.id, announcementId));
       }
-      if (badgeId !== null) {
-        await db
-          .delete(schema.platformBadges)
-          .where(eq(schema.platformBadges.id, badgeId));
-      }
+      // Catálogo é permanente — nada a limpar.
       await db.delete(schema.users).where(eq(schema.users.id, userId));
     }
   });
