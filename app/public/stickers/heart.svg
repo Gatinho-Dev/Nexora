@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160">
+  <circle cx="80" cy="80" r="74" fill="#ED4245"/>
+  <circle cx="80" cy="80" r="74" fill="none" stroke="#11131A" stroke-width="6" opacity="0.35"/>
+  <circle cx="80" cy="80" r="60" fill="#FFFFFF" opacity="0.12"/>
+  <text x="80" y="104" font-size="76" text-anchor="middle">❤️</text>
+</svg>
