@@ -86,6 +86,7 @@ export type MessageDTO = {
   content: string;
   replyToId: number | null;
   threadId?: number | null;
+  threadReplyCount?: number | null;
   tag?: string | null;
   createdAt: string | Date;
   editedAt: string | Date | null;

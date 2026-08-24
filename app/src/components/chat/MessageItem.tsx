@@ -345,9 +345,20 @@ function MessageItemBase({
               {!grouped && message.threadId != null && !message.replyToId && (
             <a
               href={`/channels/${window.location.pathname.split("/")[2]}/${message.channelId}/t/${message.threadId}`}
-              className="mb-1 ml-12 inline-flex items-center gap-1.5 rounded-lg bg-[#5865F2]/10 px-2 py-1 text-[11px] font-bold text-[#8ea1ff] hover:bg-[#5865F2]/20"
+              className="inline-flex items-center gap-1.5 mt-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-[#7383FF] hover:bg-white/[0.08] transition-colors"
             >
-              🧵 ver thread #{message.threadId}
+              🧵 Tópico
+              <span className="opacity-60">·</span>
+              {message.threadReplyCount != null && (
+                <>
+                  <span className="text-white/80">
+                    {message.threadReplyCount}{" "}
+                    {message.threadReplyCount === 1 ? "resposta" : "respostas"}
+                  </span>
+                  <span className="opacity-60">·</span>
+                </>
+              )}
+              ver conversa →
             </a>
           )}
 
@@ -622,6 +633,17 @@ function MessageItemBase({
                 run: () => {
                   navigator.clipboard.writeText(message.content).catch(() => {});
                   toast.success("Texto copiado.");
+                },
+              },
+              {
+                label: "Copiar link da mensagem",
+                run: () => {
+                  const link =
+                    message.channelId != null
+                      ? `${window.location.origin}/channels/${window.location.pathname.split("/")[2]}/${message.channelId}/`
+                      : `${window.location.origin}/channels/@me/${message.conversationId}`;
+                  navigator.clipboard.writeText(link).catch(() => {});
+                  toast.success("Link copiado.");
                 },
               },
               ...(isMine
