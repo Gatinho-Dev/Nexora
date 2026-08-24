@@ -4,6 +4,7 @@ import { serverRouter } from "./serverRouter";
 import { messageRouter, forumRouter } from "./messageRouter";
 import { friendRouter } from "./friendRouter";
 import { dmRouter } from "./dmRouter";
+import { groupRouter } from "./groupRouter";
 import { notificationRouter } from "./notificationRouter";
 import { officialRouter } from "./officialRouter";
 import { badgeRouter } from "./badgeRouter";
@@ -21,6 +22,7 @@ export const appRouter = createRouter({
   forum: forumRouter,
   friend: friendRouter,
   dm: dmRouter,
+  group: groupRouter,
   notification: notificationRouter,
   official: officialRouter,
   badge: badgeRouter,

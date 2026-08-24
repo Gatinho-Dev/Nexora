@@ -20,12 +20,17 @@ import { env } from "./lib/env";
 import { publicFileUrl } from "./lib/urls";
 import {
   enqueueModeration,
+  isRealImage,
+  moderationMetrics,
   moderationStatusForUploader,
+  metricsSnapshot,
+  processMedia,
+  retryModeration,
   shouldModerate,
 } from "./services/mediaModeration";
 import { isPlatformAdmin } from "./utils/platformAuth";
 import { assertCanInteract } from "./services/accountSafety";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -115,7 +120,28 @@ app.post("/api/upload", async c => {
   // Images go through content-safety analysis before becoming public.
   let moderationStatus: string | null = null;
   if (shouldModerate(mimeType)) {
+    // Magic-byte validation: a renamed .txt is not an image.
+    if (!isRealImage(buffer)) {
+      return c.json(
+        { error: "Arquivo inválido: o conteúdo não corresponde a uma imagem." },
+        400
+      );
+    }
+    const requestId = randomUUID();
     await enqueueModeration(id, user.id);
+    void processMedia(id, requestId).catch(() => {});
+    moderationMetrics.uploadsTotal += 1;
+    console.log(
+      JSON.stringify({
+        event: "image_upload",
+        requestId,
+        userId: `***${String(user.id).slice(-2)}`,
+        mime: mimeType,
+        size: buffer.length,
+        upload: "success",
+        moderationProvider: "pending",
+      })
+    );
     moderationStatus = "processing";
   }
 
@@ -269,6 +295,33 @@ app.post("/api/webhooks/:id/:token", async c => {
   void messageId;
 
   return c.json({ ok: true });
+});
+
+// Owner retries a media that hit MODERATION_UNAVAILABLE.
+app.post("/api/moderation/retry/:fileId", async c => {
+  let user;
+  try {
+    user = await authenticateRequest(c.req.raw.headers);
+  } catch {
+    return c.json({ error: "Não autenticado." }, 401);
+  }
+  const fileId = parseInt(c.req.param("fileId"));
+  if (!Number.isFinite(fileId)) return c.json({ error: "ID inválido." }, 400);
+  const ok = await retryModeration(fileId, user.id);
+  return ok
+    ? c.json({ ok: true })
+    : c.json({ error: "Mídia não encontrada ou fora do estado de retry." }, 404);
+});
+
+// Technical moderation metrics — platform admins only, no private media.
+app.get("/api/moderation/metrics", async c => {
+  try {
+    const user = await authenticateRequest(c.req.raw.headers);
+    if (!isPlatformAdmin(user)) return c.json({ error: "Sem permissão." }, 403);
+  } catch {
+    return c.json({ error: "Não autenticado." }, 401);
+  }
+  return c.json(metricsSnapshot());
 });
 
 // ── KLIPY GIF proxy (server-side API key, never exposed) ──────

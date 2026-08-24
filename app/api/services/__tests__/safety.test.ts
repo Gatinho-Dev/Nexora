@@ -7,12 +7,12 @@ import {
   shouldEscalateToBan,
   MAX_SEVERE_STRIKES,
 } from "../accountSafety";
-import { decidePolicy } from "../mediaModeration";
+import { decideFromVerdict } from "../mediaModeration";
+import type { NormalizedVerdict } from "../nvidiaContentSafety";
 import {
   analyzeImage,
   ModerationUnavailableError,
-  SEXUAL_MARKERS,
-  SEXUAL_MINOR_MARKERS,
+  normalizeVerdict,
 } from "../nvidiaContentSafety";
 import { env } from "../../lib/env";
 
@@ -21,40 +21,120 @@ const DAY = 86_400_000;
 
 // ── Media policy (spec tests 1–3) ─────────────────────────────
 
-describe("decidePolicy", () => {
-  it("test 1: imagem segura → approved e visível normalmente", () => {
-    const d = decidePolicy({ safe: true, sexualMinor: false, sexualAdult: false, categories: [] });
+describe("decideFromVerdict", () => {
+  const v = (
+    decision: NormalizedVerdict["decision"],
+    sexualMinor = false
+  ): NormalizedVerdict => ({
+    decision,
+    confidence: 0.9,
+    categories: [],
+    sexualMinor,
+    sexualAdult: false,
+    raw: null,
+  });
+
+  it("test 1: ALLOW → approved e visível normalmente", () => {
+    const d = decideFromVerdict(v("ALLOW"));
     expect(d.status).toBe("approved");
     expect(d.sensitive).toBe(false);
     expect(d.allowReveal).toBe(true);
+    expect(d.severeMinor).toBe(false);
   });
 
-  it("test 2: Sexual adulto → sensitive com blur +18 e botão mostrar", () => {
-    const d = decidePolicy({ safe: false, sexualMinor: false, sexualAdult: true, categories: ["Sexual"] });
+  it("test 6: SENSITIVE_ADULT → sensitive com blur e revelação", () => {
+    const d = decideFromVerdict(v("SENSITIVE_ADULT"));
     expect(d.status).toBe("sensitive");
     expect(d.sensitive).toBe(true);
     expect(d.adultOnly).toBe(true);
     expect(d.allowReveal).toBe(true);
+    expect(d.severeMinor).toBe(false);
   });
 
-  it("test 3: Sexual (minor) → blocked SEM revelação (ordem checada antes de Sexual)", () => {
-    // Even if a generic "Sexual" marker also appears, minor wins.
-    const d = decidePolicy({ safe: false, sexualMinor: true, sexualAdult: true, categories: ["Sexual (minor)", "Sexual"] });
-    expect(d.severeMinor).toBe(true);
+  it("test 7: BLOCK (minor) → bloqueado sem revelação e caminho severo", () => {
+    const d = decideFromVerdict(v("BLOCK", true));
     expect(d.status).toBe("blocked");
     expect(d.allowReveal).toBe(false);
+    expect(d.severeMinor).toBe(true);
   });
 
-  it("outras categorias unsafe ficam sensíveis genéricas", () => {
-    const d = decidePolicy({ safe: false, sexualMinor: false, sexualAdult: false, categories: ["Violence"] });
-    expect(d.status).toBe("sensitive");
-    expect(d.adultOnly).toBe(false);
-    expect(d.allowReveal).toBe(true);
+  it("UNCERTAIN → revisão privada, sem punição", () => {
+    const d = decideFromVerdict(v("UNCERTAIN"));
+    expect(d.status).toBe("review_required");
+    expect(d.severeMinor).toBe(false);
+  });
+});
+
+// ── Normalização de scores do modelo ──────────────────────────
+
+describe("normalizeVerdict", () => {
+  it("scores numéricos NÃO são tratados como boolean truthy", () => {
+    // sexual=0.02 é truthy em JS — deve virar ALLOW por threshold.
+    const verdict = normalizeVerdict({
+      safe: 0.96,
+      sexual: 0.02,
+      violence: 0.01,
+    });
+    expect(verdict.decision).toBe("ALLOW");
+    expect(verdict.sexualAdult).toBe(false);
   });
 
-  it("marcadores cobrem variantes de nomenclatura do modelo", () => {
-    expect(SEXUAL_MINOR_MARKERS.some(m => "sexual (minor)".includes(m))).toBe(true);
-    expect(SEXUAL_MARKERS.some(m => "Sexual".toLowerCase().includes(m))).toBe(true);
+  it("sexual >= threshold → SENSITIVE_ADULT", () => {
+    const verdict = normalizeVerdict({ safe: 0.1, sexual: 0.8 });
+    expect(verdict.decision).toBe("SENSITIVE_ADULT");
+  });
+
+  it("minor acima do threshold → BLOCK mesmo com sexual presente", () => {
+    const verdict = normalizeVerdict({
+      "Sexual (minor)": 0.9,
+      Sexual: 0.7,
+    });
+    expect(verdict.decision).toBe("BLOCK");
+    expect(verdict.sexualMinor).toBe(true);
+  });
+
+  it("minor abaixo do threshold NÃO pune (falso positivo sério)", () => {
+    const verdict = normalizeVerdict({ "Sexual (minor)": 0.3 });
+    expect(verdict.sexualMinor).toBe(false);
+    expect(["ALLOW", "UNCERTAIN"]).toContain(verdict.decision);
+  });
+
+  it("boolean safe=false com categorias nomeadas → sensível", () => {
+    const verdict = normalizeVerdict({ safe: false, categories: ["Violence"] });
+    expect(["SENSITIVE_ADULT", "UNCERTAIN"]).toContain(verdict.decision);
+  });
+
+  it("strings de score são normalizadas ('high'/'0.9')", () => {
+    const verdict = normalizeVerdict({ sexual: "high" });
+    expect(verdict.decision).toBe("SENSITIVE_ADULT");
+  });
+
+  it("payload irreconhecível lança INVALID_RESPONSE (nunca unsafe)", () => {
+    expect(() => normalizeVerdict("texto solto")).toThrow();
+    expect(() => normalizeVerdict({ foo: "bar" })).toThrow();
+  });
+});
+
+// ── Magic bytes ───────────────────────────────────────────────
+
+describe("isRealImage", () => {
+  it("reconhece JPEG/PNG/GIF/WebP reais", async () => {
+    const { isRealImage } = await import("../mediaModeration");
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(16)]);
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(16)]);
+    const gif = Buffer.concat([Buffer.from([0x47, 0x49, 0x46, 0x38]), Buffer.alloc(16)]);
+    const webp = Buffer.concat([
+      Buffer.from("RIFF"),
+      Buffer.alloc(4),
+      Buffer.from("WEBP"),
+      Buffer.alloc(8),
+    ]);
+    const fake = Buffer.from("%PDF-1.4 texto qualquer");
+    expect(isRealImage(jpeg)).toBe(true);
+    expect(isRealImage(png)).toBe(true);
+    expect(isRealImage(gif)).toBe(true);
+    expect(isRealImage(webp)).toBe(true);
+    expect(isRealImage(fake)).toBe(false);
   });
 });
 

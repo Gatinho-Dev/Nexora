@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
-import { User, Search, Compass } from "lucide-react";
+import { User, Search, Compass, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { groupDisplayName } from "@/lib/groupDisplayName";
 
 export function QuickSwitcherModal({
   open,
@@ -36,7 +37,9 @@ export function QuickSwitcherModal({
   );
 
   const filteredDMs = (dms ?? []).filter(d => {
-    const name = d.otherUser?.name ?? d.otherUser?.username ?? "";
+    const name = d.isGroup
+      ? groupDisplayName(d)
+      : (d.otherUser?.name ?? d.otherUser?.username ?? "");
     return name.toLowerCase().includes(query.toLowerCase());
   });
 
@@ -60,7 +63,7 @@ export function QuickSwitcherModal({
           {filteredDMs.length > 0 && (
             <div>
               <div className="px-2 py-1 text-[10px] font-bold uppercase text-muted2">
-                MENSAGENS DIRETAS
+                MENSAGENS
               </div>
               {filteredDMs.slice(0, 5).map(d => (
                 <button
@@ -71,9 +74,15 @@ export function QuickSwitcherModal({
                   }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/10 text-left transition-colors"
                 >
-                  <User className="h-4 w-4 text-[#5865F2]" />
-                  <span className="font-bold text-white">
-                    {d.otherUser?.name ?? d.otherUser?.username ?? "Usuário"}
+                  {d.isGroup ? (
+                    <Users className="h-4 w-4 shrink-0 text-[#5865F2]" />
+                  ) : (
+                    <User className="h-4 w-4 shrink-0 text-[#5865F2]" />
+                  )}
+                  <span className="font-bold text-white truncate">
+                    {d.isGroup
+                      ? groupDisplayName(d)
+                      : (d.otherUser?.name ?? d.otherUser?.username ?? "Usuário")}
                   </span>
                 </button>
               ))}

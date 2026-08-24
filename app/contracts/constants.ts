@@ -58,7 +58,30 @@ export const RateLimits = {
   friendRequest: { limit: 10, windowMs: 60_000 },
   upload: { limit: 10, windowMs: 60_000 },
   reaction: { limit: 20, windowMs: 10_000 },
+  groupCreate: { limit: 4, windowMs: 60 * 60_000 },
+  groupInviteCreate: { limit: 10, windowMs: 60 * 60_000 },
+  groupMemberChange: { limit: 30, windowMs: 60_000 },
 } as const;
+
+// ── Groups (conversas privadas em grupo) ─────────────────────
+export const GroupLimits = {
+  /** Total de participantes contando o criador. */
+  MIN_MEMBERS: 3,
+  MAX_MEMBERS: 50,
+  MAX_NAME_LENGTH: 100,
+  MAX_DESCRIPTION_LENGTH: 500,
+} as const;
+
+/** Opções de expiração de convite de grupo (em horas; null = nunca). */
+export const GROUP_INVITE_EXPIRY_HOURS = [1, 24, 168, null] as const;
+/** Opções de limite de usos por convite de grupo (null = sem limite). */
+export const GROUP_INVITE_MAX_USES = [1, 5, 10, null] as const;
+
+/** Durações de silenciamento por conversa (minutos; null = até reativar). */
+export const GROUP_MUTE_MINUTES = [15, 60, 480, 1440, 10080, null] as const;
+
+/** Quem pode usar @todos/@everyone num grupo por padrão. */
+export type GroupRole = "owner" | "admin" | "member";
 
 // ── Uploads ───────────────────────────────────────────────────
 export const MAX_UPLOAD_MB = 8;

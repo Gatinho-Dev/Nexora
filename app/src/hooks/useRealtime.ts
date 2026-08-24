@@ -132,14 +132,21 @@ export function useRealtime(myUserId: number | undefined) {
             document.hidden
           ) {
             const n = event.notification;
+            const actorName = n.actor?.name ?? "Alguém";
             const title =
               n.type === "mention"
-                ? `${n.actor?.name ?? "Alguém"} mencionou você`
+                ? `${actorName} mencionou você`
                 : n.type === "dm"
-                  ? `Nova mensagem de ${n.actor?.name ?? "Alguém"}`
+                  ? `Nova mensagem de ${actorName}`
                   : n.type === "reply"
-                    ? `${n.actor?.name ?? "Alguém"} respondeu você`
-                    : "Nexora";
+                    ? `${actorName} respondeu você`
+                    : n.type === "group_added"
+                      ? "Você foi adicionado a um grupo"
+                      : n.type === "group_removed"
+                        ? "Você foi removido de um grupo"
+                        : n.type === "call_started"
+                          ? `${actorName} iniciou uma chamada`
+                          : "Nexora";
             new Notification(title, {
               body: n.content ?? undefined,
               icon: "/icon.svg",
@@ -169,6 +176,12 @@ export function useRealtime(myUserId: number | undefined) {
           break;
         case "dm:refresh":
           utils.dm.list.invalidate();
+          utils.dm.get.invalidate();
+          break;
+        case "group:update":
+          // Atualiza listas e o grupo aberto (renome, membros, etc).
+          utils.dm.list.invalidate();
+          utils.group.get.invalidate({ conversationId: event.conversationId });
           break;
         case "friends:refresh":
           utils.friend.list.invalidate();

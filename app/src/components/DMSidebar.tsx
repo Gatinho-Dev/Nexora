@@ -1,11 +1,15 @@
 import { useLocation, useNavigate, useParams } from "react-router";
+import { useState } from "react";
 import { trpc } from "@/providers/trpc";
-import { BadgeCheck, ShieldCheck, Users, Inbox } from "lucide-react";
+import { BadgeCheck, ShieldCheck, Users, Inbox, UserPlus } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar } from "./Avatar";
 import { UserPanel } from "./UserPanel";
 import { cn } from "@/lib/utils";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { CreateGroupModal } from "./groups/CreateGroupModal";
+import { GroupAvatar } from "./groups/GroupAvatar";
+import { groupDisplayName } from "@/lib/groupDisplayName";
 
 export function DMSidebar({
   onOpenProfile,
@@ -15,6 +19,7 @@ export function DMSidebar({
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const activeConversationId = params.conversationId
     ? Number(params.conversationId)
     : null;
@@ -33,17 +38,29 @@ export function DMSidebar({
       aria-label="Mensagens diretas"
       className="flex h-full w-60 flex-col border-r border-black/20 bg-sidebar select-none"
     >
-      <div className="flex h-12 items-center border-b border-white/5 px-3">
+      <div className="flex h-12 items-center gap-2 border-b border-white/5 px-3">
         <button
           onClick={() => navigate("/channels/@me")}
           className={cn(
-            "flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+            "flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
             !activeConversationId
               ? "bg-act text-foreground"
               : "text-muted2 hover:bg-hov hover:text-bodyx"
           )}
         >
           <Users className="h-4 w-4" /> Amigos
+        </button>
+        <button
+          onClick={() => setCreateGroupOpen(true)}
+          className={cn(
+            "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
+            "text-muted2 hover:bg-hov hover:text-bodyx"
+          )}
+          aria-label="Criar grupo"
+          title="Criar grupo"
+        >
+          <UserPlus className="h-4 w-4" />
+          <span className="hidden xl:inline">Criar grupo</span>
         </button>
       </div>
 
@@ -152,6 +169,7 @@ export function DMSidebar({
               {conversations.data
                 ?.filter(c => !c.isRequest)
                 .map(conv => {
+                  const isGroup = conv.isGroup === true;
                   const other = conv.otherUser;
                   const unread = unreadConversations[conv.id] ?? 0;
                   return (
@@ -164,7 +182,21 @@ export function DMSidebar({
                           : "text-muted2 hover:bg-hov hover:text-bodyx"
                       )}
                     >
-                      {other?.id ? (
+                      {isGroup ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/channels/@me/${conv.id}`)}
+                          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                          aria-label={`Abrir grupo`}
+                        >
+                          <GroupAvatar
+                            users={conv.members}
+                            src={conv.avatarUrl}
+                            name={groupDisplayName(conv)}
+                            size="sm"
+                          />
+                        </button>
+                      ) : other?.id ? (
                         <button
                           type="button"
                           onClick={() => onOpenProfile?.(other.id)}
@@ -188,19 +220,43 @@ export function DMSidebar({
                         type="button"
                         onClick={() => navigate(`/channels/@me/${conv.id}`)}
                         className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none"
-                        aria-label={`Abrir conversa com ${other?.name ?? other?.username ?? "usuário"}`}
+                        aria-label={
+                          isGroup
+                            ? `Abrir grupo ${groupDisplayName(conv)}`
+                            : `Abrir conversa com ${other?.name ?? other?.username ?? "usuário"}`
+                        }
                       >
                         <div className="min-w-0 flex-1">
                           <p
                             className={cn(
-                              "truncate text-xs font-semibold group-hover:text-white transition-colors",
+                              "flex items-center gap-1 truncate text-xs font-semibold group-hover:text-white transition-colors",
                               unread > 0 && "text-foreground font-bold"
                             )}
                           >
-                            {other?.name ?? other?.username ?? "Conversa"}
+                            {isGroup && (
+                              <span
+                                className="inline-flex shrink-0"
+                                title="Grupo"
+                                aria-label="Grupo"
+                              >
+                                <Users
+                                  className="h-3 w-3 text-faint"
+                                  aria-hidden
+                                />
+                              </span>
+                            )}
+                            <span className="truncate">
+                              {isGroup
+                                ? groupDisplayName(conv)
+                                : (other?.name ?? other?.username ?? "Conversa")}
+                            </span>
                           </p>
                           {conv.lastMessage && (
                             <p className="truncate text-[11px] text-muted2/70">
+                              {isGroup &&
+                              conv.lastMessage.authorId !== undefined
+                                ? `${conv.members.find(m => m.id === conv.lastMessage!.authorId)?.name ?? ""}: `
+                                : ""}
                               {conv.lastMessage.content || "📎 Anexo enviado"}
                             </p>
                           )}
@@ -220,6 +276,11 @@ export function DMSidebar({
       </div>
 
       <UserPanel />
+
+      <CreateGroupModal
+        open={createGroupOpen}
+        onOpenChange={setCreateGroupOpen}
+      />
     </aside>
   );
 }

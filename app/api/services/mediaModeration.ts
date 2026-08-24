@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../queries/connection";
 import * as schema from "@db/schema";
@@ -5,31 +6,97 @@ import {
   analyzeImage,
   MODERATION_MODEL,
   ModerationUnavailableError,
+  type ModerationErrorCode,
+  type NormalizedVerdict,
 } from "./nvidiaContentSafety";
 import { handleSevereViolation } from "./accountSafety";
 import { env } from "../lib/env";
 
-let warnedNoKey = false;
-
 /**
- * Media moderation pipeline.
+ * Media moderation pipeline (audit-hardened).
  *
- * Upload → media_moderation row (processing) → NVIDIA analysis → policy:
- *   safe            → approved
- *   Sexual (adult)  → sensitive (blurred +18, reveal allowed)
- *   other unsafe    → sensitive (generic blur)
- *   Sexual (minor)  → blocked + 3-day suspension + pending_review violation
- *
- * Failures NEVER auto-approve: the file stays private ("processing") and is
- * retried with backoff. Processing is idempotent per fileId — a guarded
- * status transition prevents duplicate violations/strikes.
+ * Upload → private row (processing) → analyzeImage → normalized verdict →
+ *   ALLOW            → approved
+ *   SENSITIVE_ADULT  → sensitive (blur +18, reveal allowed)
+ *   BLOCK            → blocked + severe violation path
+ *   UNCERTAIN        → review_required (no punishment on ambiguity)
+ * Provider failures  → MODERATION_UNAVAILABLE: retries with backoff, then
+ *   review_required — media stays PRIVATE. Never auto-blocked, never
+ *   auto-approved, and never treated as prohibited content.
  */
 
-const RETRY_DELAYS_MS = [1_000, 4_000, 10_000];
+const RETRY_DELAYS_MS = [500, 1500];
 const IMAGE_PREFIXES = ["image/"];
+
+// ── Circuit breaker ───────────────────────────────────────────
+export const BREAKER_THRESHOLD = 5;
+export const BREAKER_COOLDOWN_MS = 60_000;
+let consecutiveFailures = 0;
+let breakerOpenUntil = 0;
+
+export function breakerOpen(): boolean {
+  return Date.now() < breakerOpenUntil;
+}
+export function recordFailure() {
+  consecutiveFailures += 1;
+  if (consecutiveFailures >= BREAKER_THRESHOLD) {
+    breakerOpenUntil = Date.now() + BREAKER_COOLDOWN_MS;
+    console.warn(
+      JSON.stringify({
+        event: "moderation_breaker_open",
+        cooldownMs: BREAKER_COOLDOWN_MS,
+        timestamp: new Date().toISOString(),
+      })
+    );
+  }
+}
+export function recordSuccess() {
+  consecutiveFailures = 0;
+  breakerOpenUntil = 0;
+}
+
+// ── Metrics (in-memory snapshot for the admin debug endpoint) ──
+export const moderationMetrics = {
+  uploadsTotal: 0,
+  allowed: 0,
+  sensitive: 0,
+  blocked: 0,
+  unavailable: 0,
+  timeouts: 0,
+  latencySumMs: 0,
+  latencyCount: 0,
+};
+
+export function metricsSnapshot() {
+  return {
+    ...moderationMetrics,
+    averageLatencyMs:
+      moderationMetrics.latencyCount > 0
+        ? Math.round(moderationMetrics.latencySumMs / moderationMetrics.latencyCount)
+        : 0,
+    provider: env.nvidiaApiKey ? "nvidia" : "disabled",
+    breakerOpen: breakerOpen(),
+    consecutiveFailures,
+  };
+}
 
 export function shouldModerate(mimeType: string): boolean {
   return IMAGE_PREFIXES.some(p => mimeType.startsWith(p));
+}
+
+/** Magic-byte sniffing — never trust the declared filename/MIME alone. */
+export function isRealImage(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false;
+  const b = buffer;
+  const jpeg = b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  const png =
+    b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+  const gif =
+    b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38;
+  const webp =
+    b.subarray(0, 4).toString("ascii") === "RIFF" &&
+    b.subarray(8, 12).toString("ascii") === "WEBP";
+  return jpeg || png || gif || webp;
 }
 
 export async function enqueueModeration(
@@ -38,16 +105,9 @@ export async function enqueueModeration(
 ): Promise<void> {
   const db = getDb();
 
-  // Deployment-level switch: without NVIDIA_API_KEY the instance opted out of
-  // AI moderation, so media is released immediately (never stuck private).
-  // A CONFIGURED key that later fails still keeps media private per policy.
+  // Deployment-level switch: without NVIDIA_API_KEY moderation is disabled —
+  // release immediately instead of stranding every upload in processing.
   if (!env.nvidiaApiKey) {
-    if (!warnedNoKey) {
-      console.warn(
-        "[media] NVIDIA_API_KEY ausente — moderação de imagens desativada neste deploy."
-      );
-      warnedNoKey = true;
-    }
     await db
       .insert(schema.mediaModeration)
       .values({
@@ -61,22 +121,7 @@ export async function enqueueModeration(
         moderatedAt: new Date(),
       })
       .onDuplicateKeyUpdate({ set: { uploaderId } });
-    // Self-heal uploads stranded in processing before this fix existed.
-    await db
-      .update(schema.mediaModeration)
-      .set({
-        status: "approved",
-        safety: "unknown",
-        allowReveal: true,
-        moderationModel: "unmoderated",
-        moderatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(schema.mediaModeration.uploaderId, uploaderId),
-          eq(schema.mediaModeration.status, "processing")
-        )
-      );
+    await healStuckProcessing(uploaderId);
     return;
   }
 
@@ -84,7 +129,7 @@ export async function enqueueModeration(
     .insert(schema.mediaModeration)
     .values({ fileId, uploaderId, categories: [] })
     .onDuplicateKeyUpdate({ set: { uploaderId } });
-  // Fire-and-forget: never block the upload response on the external API.
+  // Fire-and-forget: the upload response never blocks on the external API.
   void processMedia(fileId).catch(() => {});
 }
 
@@ -92,29 +137,27 @@ async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function bumpAttempts(fileId: number, error: string): Promise<void> {
+async function markFailedAttempt(
+  fileId: number,
+  attempts: number,
+  code: ModerationErrorCode
+) {
   const db = getDb();
   await db
     .update(schema.mediaModeration)
-    .set({ attempts: (await currentAttempts(fileId)) + 1, lastError: error.slice(0, 490) })
+    .set({
+      attempts,
+      lastError: code.slice(0, 490),
+    })
     .where(eq(schema.mediaModeration.fileId, fileId));
 }
 
-async function currentAttempts(fileId: number): Promise<number> {
-  const [row] = await getDb()
-    .select({ attempts: schema.mediaModeration.attempts })
-    .from(schema.mediaModeration)
-    .where(eq(schema.mediaModeration.fileId, fileId));
-  return row?.attempts ?? 0;
-}
-
-/** Guarded transition: only "processing" rows can leave processing. */
+/** Guarded transition: only rows still in `processing` can be finalized. */
 async function finalizeIfProcessing(
   fileId: number,
   patch: Partial<typeof schema.mediaModeration.$inferInsert>
 ): Promise<boolean> {
-  const db = getDb();
-  const [res] = await db
+  const [res] = await getDb()
     .update(schema.mediaModeration)
     .set({ ...patch, moderatedAt: new Date() })
     .where(
@@ -126,7 +169,8 @@ async function finalizeIfProcessing(
   return (res as unknown as { affectedRows: number }).affectedRows > 0;
 }
 
-export async function processMedia(fileId: number): Promise<void> {
+export async function processMedia(fileId: number, requestId?: string): Promise<void> {
+  const rid = requestId ?? randomUUID();
   const db = getDb();
 
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
@@ -136,55 +180,152 @@ export async function processMedia(fileId: number): Promise<void> {
       .select()
       .from(schema.mediaModeration)
       .where(eq(schema.mediaModeration.fileId, fileId));
-    // Already finalized by a concurrent run — idempotent exit.
+    // Concurrent run already finalized this file — idempotent exit.
     if (!mod || mod.status !== "processing") return;
+
+    // Circuit breaker open → skip straight to unavailable state.
+    if (breakerOpen()) {
+      await giveUp(fileId, attempt + 1, "BREAKER_OPEN", rid);
+      return;
+    }
 
     const file = await db.query.files.findFirst({
       where: eq(schema.files.id, fileId),
     });
-    if (!file) return;
+    if (!file || file.size === 0) {
+      // Prohibited content already purged, or orphan row.
+      await finalizeIfProcessing(fileId, {
+        status: "blocked",
+        safety: "unsafe",
+        categories: ["purged"],
+        allowReveal: false,
+        moderationModel: MODERATION_MODEL,
+      });
+      return;
+    }
 
+    const startedAt = Date.now();
     try {
-      const analysis = await analyzeImage(file.data, file.mimeType);
-      await applyPolicy(fileId, mod.uploaderId, analysis, file.mimeType);
+      const verdict = await analyzeImage(file.data, file.mimeType);
+      recordSuccess();
+      const latency = Date.now() - startedAt;
+      moderationMetrics.latencySumMs += latency;
+      moderationMetrics.latencyCount += 1;
+
+      await applyPolicy(fileId, mod.uploaderId, verdict);
+
+      console.log(
+        JSON.stringify({
+          event: "image_upload",
+          requestId: rid,
+          userId: `***${String(mod.uploaderId).slice(-2)}`,
+          mime: file.mimeType,
+          size: file.size,
+          upload: "success",
+          moderationProvider: "nvidia",
+          moderation: "success",
+          decision: verdict.decision,
+          durationMs: latency,
+        })
+      );
       return;
     } catch (e) {
-      const message =
-        e instanceof ModerationUnavailableError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : "erro desconhecido";
-      await bumpAttempts(fileId, message);
-      // Loop retries; after the last one the media stays private/processing
-      // with the error recorded (never auto-approved).
+      const code: ModerationErrorCode =
+        e instanceof ModerationUnavailableError ? e.code : "PROVIDER_ERROR";
+      recordFailure();
+      moderationMetrics.unavailable += 1;
+      if (code === "TIMEOUT") moderationMetrics.timeouts += 1;
+      await markFailedAttempt(fileId, attempt + 1, code);
+      console.warn(
+        JSON.stringify({
+          event: "image_upload",
+          requestId: rid,
+          upload: "success",
+          moderation: "failed",
+          reason: code,
+          attempt: attempt + 1,
+        })
+      );
+      // Loop retries; final iteration falls through to giveUp below.
     }
   }
+  await giveUp(fileId, RETRY_DELAYS_MS.length + 1, "EXHAUSTED", rid);
 }
 
+/**
+ * Terminal provider failure → review_required (media stays private).
+ * NEVER classified as unsafe/prohibited by itself.
+ */
+async function giveUp(
+  fileId: number,
+  attempts: number,
+  code: ModerationErrorCode | "EXHAUSTED" | "BREAKER_OPEN",
+  rid: string
+) {
+  await finalizeIfProcessing(fileId, {
+    status: "review_required",
+    safety: "unknown",
+    allowReveal: false,
+    lastError: code,
+    attempts,
+    moderationModel: MODERATION_MODEL,
+  });
+  moderationMetrics.unavailable += 1;
+  console.error(
+    JSON.stringify({
+      event: "image_moderation_unavailable",
+      requestId: rid,
+      fileId,
+      reason: code,
+      timestamp: new Date().toISOString(),
+    })
+  );
+}
+
+/** Owner-triggered retry after MODERATION_UNAVAILABLE. */
+export async function retryModeration(
+  fileId: number,
+  requesterId: number
+): Promise<boolean> {
+  const db = getDb();
+  const [mod] = await db
+    .select()
+    .from(schema.mediaModeration)
+    .where(eq(schema.mediaModeration.fileId, fileId));
+  if (!mod || mod.uploaderId !== requesterId) return false;
+  if (mod.status !== "review_required") return false;
+  await db
+    .update(schema.mediaModeration)
+    .set({ status: "processing", attempts: 0, lastError: null })
+    .where(eq(schema.mediaModeration.fileId, fileId));
+  void processMedia(fileId).catch(() => {});
+  return true;
+}
+
+// ── Policy decision (pure, unit-tested) ───────────────────────
+
 export type PolicyDecision = {
-  status: "approved" | "sensitive" | "blocked";
+  status: "approved" | "sensitive" | "blocked" | "review_required";
   safety: "safe" | "unsafe" | "unknown";
   categories: string[];
   sensitive: boolean;
   adultOnly: boolean;
   allowReveal: boolean;
   moderationModel: string;
+  severeMinor: boolean;
 };
 
-/** Pure decision logic — unit-tested separately from I/O. */
-export function decidePolicy(analysis: {
-  safe: boolean;
-  sexualMinor: boolean;
-  sexualAdult: boolean;
-  categories: string[];
-}): PolicyDecision & { severeMinor: boolean } {
-  // Rule order matters: minor-related sexual content FIRST.
-  if (!analysis.safe && analysis.sexualMinor) {
+/**
+ * Pure decision from a NORMALIZED verdict. Order matters: minor-related
+ * sexual content is evaluated before generic sexual content, and only
+ * confident minor detection triggers the severe path.
+ */
+export function decideFromVerdict(v: NormalizedVerdict): PolicyDecision {
+  if (v.decision === "BLOCK") {
     return {
       status: "blocked",
       safety: "unsafe",
-      categories: analysis.categories,
+      categories: v.categories,
       sensitive: true,
       adultOnly: true,
       allowReveal: false,
@@ -192,11 +333,11 @@ export function decidePolicy(analysis: {
       severeMinor: true,
     };
   }
-  if (!analysis.safe && analysis.sexualAdult) {
+  if (v.decision === "SENSITIVE_ADULT") {
     return {
       status: "sensitive",
       safety: "unsafe",
-      categories: analysis.categories,
+      categories: v.categories,
       sensitive: true,
       adultOnly: true,
       allowReveal: true,
@@ -204,26 +345,26 @@ export function decidePolicy(analysis: {
       severeMinor: false,
     };
   }
-  if (!analysis.safe) {
-    // Other unsafe categories (violence, hate...) stay behind a generic blur.
+  if (v.decision === "ALLOW") {
     return {
-      status: "sensitive",
-      safety: "unsafe",
-      categories: analysis.categories,
-      sensitive: true,
+      status: "approved",
+      safety: "safe",
+      categories: [],
+      sensitive: false,
       adultOnly: false,
       allowReveal: true,
       moderationModel: MODERATION_MODEL,
       severeMinor: false,
     };
   }
+  // UNCERTAIN: hold privately for review — no punishment, no publish.
   return {
-    status: "approved",
-    safety: "safe",
-    categories: [],
+    status: "review_required",
+    safety: "unknown",
+    categories: v.categories,
     sensitive: false,
     adultOnly: false,
-    allowReveal: true,
+    allowReveal: false,
     moderationModel: MODERATION_MODEL,
     severeMinor: false,
   };
@@ -232,17 +373,17 @@ export function decidePolicy(analysis: {
 export async function applyPolicy(
   fileId: number,
   uploaderId: number,
-  analysis: {
-    safe: boolean;
-    sexualMinor: boolean;
-    sexualAdult: boolean;
-    categories: string[];
-  },
-  mimeType: string
+  verdict: NormalizedVerdict
 ): Promise<void> {
-  const decision = decidePolicy(analysis);
+  const decision = decideFromVerdict(verdict);
   const claimed = await finalizeIfProcessing(fileId, decision);
-  if (!claimed) return; // concurrent run already handled this file
+  if (!claimed) return;
+
+  moderationMetrics.uploadsTotal += 1;
+  if (decision.status === "approved") moderationMetrics.allowed += 1;
+  else if (decision.status === "sensitive") moderationMetrics.sensitive += 1;
+  else if (decision.status === "blocked") moderationMetrics.blocked += 1;
+  else moderationMetrics.unavailable += 1;
 
   if (decision.severeMinor) {
     // Do not retain prohibited content unnecessarily.
@@ -259,49 +400,17 @@ export async function applyPolicy(
     return;
   }
 
-  if (decision.status === "sensitive" || decision.status === "blocked") {
-    await getDb()
-      .insert(schema.violations)
-      .values({
-        userId: uploaderId,
-        fileId,
-        category: decision.categories[0]?.slice(0, 120) ?? "unsafe_content",
-        severity: decision.status === "blocked" ? "severe" : "moderate",
-        source: "automatic_ai",
-        moderationModel: MODERATION_MODEL,
-        status: "resolved", // informational; no strike for blurred content
-        action: "content_blocked",
-      })
-      .onDuplicateKeyUpdate({ set: { action: "content_blocked" } })
-      .catch(() => {});
-  }
-
-  void mimeType;
+  void decision;
 }
 
-/** Batched status lookup for the uploader's pending chips. */
+/** Batched status lookup for the sender's pending chips. */
 export async function moderationStatusForUploader(
   uploaderId: number,
   fileIds: number[]
 ): Promise<Record<number, string>> {
   if (fileIds.length === 0) return {};
   if (!env.nvidiaApiKey) {
-    // No moderation configured: release anything stranded in processing.
-    await getDb()
-      .update(schema.mediaModeration)
-      .set({
-        status: "approved",
-        safety: "unknown",
-        allowReveal: true,
-        moderationModel: "unmoderated",
-        moderatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(schema.mediaModeration.uploaderId, uploaderId),
-          eq(schema.mediaModeration.status, "processing")
-        )
-      );
+    await healStuckProcessing(uploaderId);
   }
   const rows = await getDb()
     .select({
@@ -317,3 +426,23 @@ export async function moderationStatusForUploader(
     );
   return Object.fromEntries(rows.map(r => [r.fileId, r.status]));
 }
+
+async function healStuckProcessing(uploaderId: number) {
+  await getDb()
+    .update(schema.mediaModeration)
+    .set({
+      status: "approved",
+      safety: "unknown",
+      allowReveal: true,
+      moderationModel: "unmoderated",
+      moderatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(schema.mediaModeration.uploaderId, uploaderId),
+        eq(schema.mediaModeration.status, "processing")
+      )
+    );
+}
+
+void randomUUID;

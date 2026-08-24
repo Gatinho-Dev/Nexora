@@ -845,6 +845,18 @@ export const serverRouter = createRouter({
       return { server, memberCount, alreadyMember };
     }),
 
+  byVanity: authedQuery
+    .input(z.object({ slug: z.string().min(3).max(32) }))
+    .query(async ({ input }) => {
+      const server = await getDb().query.servers.findFirst({
+        where: eq(schema.servers.vanitySlug, input.slug),
+      });
+      if (!server) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Link inválido." });
+      }
+      return { serverId: server.id, name: server.name };
+    }),
+
   joinByCode: authedQuery
     .input(z.object({ code: z.string() }))
     .mutation(async ({ ctx, input }) => {

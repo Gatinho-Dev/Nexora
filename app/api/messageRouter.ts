@@ -24,7 +24,7 @@ import {
 import { assertCanInteract } from "./services/accountSafety";
 
 // ── DTO assembly ──────────────────────────────────────────────
-async function buildMessageDTO(
+export async function buildMessageDTO(
   msg: typeof schema.messages.$inferSelect
 ): Promise<MessageDTO> {
   const db = getDb();
@@ -101,6 +101,7 @@ async function buildMessageDTO(
     authorId: msg.authorId,
     content: msg.content,
     replyToId: msg.replyToId,
+    tag: msg.tag ?? null,
     createdAt: msg.createdAt,
     editedAt: msg.editedAt,
     author: author
@@ -243,20 +244,89 @@ async function processMentions(
       });
     }
   } else if (msg.conversationId) {
-    const members = await db
-      .select({ userId: schema.conversationMembers.userId })
+    const conversation = await db.query.conversations.findFirst({
+      where: eq(schema.conversations.id, msg.conversationId),
+    });
+    if (!conversation) return;
+    const memberRows = await db
+      .select({
+        userId: schema.conversationMembers.userId,
+        role: schema.conversationMembers.role,
+        level: schema.conversationMembers.notificationLevel,
+        mutedUntil: schema.conversationMembers.mutedUntil,
+      })
       .from(schema.conversationMembers)
-      .where(eq(schema.conversationMembers.conversationId, msg.conversationId));
-    await notifyUsers(
-      members.map(m => m.userId).filter(id => id !== authorId),
-      {
-        type: "dm",
+      .where(
+        eq(schema.conversationMembers.conversationId, msg.conversationId)
+      );
+
+    // DMs keep the original behavior: everyone gets a "dm" notification.
+    if (!conversation.isGroup) {
+      await notifyUsers(
+        memberRows.map(m => m.userId).filter(id => id !== authorId),
+        {
+          type: "dm",
+          actorId: authorId,
+          conversationId: msg.conversationId,
+          messageId: msg.id,
+          content: content.slice(0, 140),
+        }
+      );
+      return;
+    }
+
+    // Groups: honor per-member notification settings and @mention rules.
+    const usernames = [...content.matchAll(/@([a-zA-Z0-9_.-]+)/g)].map(m =>
+      m[1].toLowerCase()
+    );
+    const mentionAll = /@(everyone|todos)\b/i.test(content);
+    const authorIsManager =
+      conversation.ownerId === authorId ||
+      memberRows.some(
+        m => m.userId === authorId && (m.role === "owner" || m.role === "admin")
+      );
+
+    const mentionedIds = new Set<number>();
+    if (usernames.length > 0 || mentionAll) {
+      for (const m of memberRows) {
+        if (mentionAll && authorIsManager) {
+          mentionedIds.add(m.userId);
+          continue;
+        }
+        const user = await db.query.users.findFirst({
+          where: eq(schema.users.id, m.userId),
+        });
+        if (
+          user?.username &&
+          usernames.includes(user.username.toLowerCase())
+        ) {
+          mentionedIds.add(m.userId);
+        }
+      }
+    }
+    mentionedIds.delete(authorId);
+
+    const now = Date.now();
+    const targets: Array<{ userId: number; mention: boolean }> = [];
+    for (const m of memberRows) {
+      if (m.userId === authorId) continue;
+      if (m.mutedUntil && new Date(m.mutedUntil).getTime() > now) continue;
+      const isMentioned = mentionedIds.has(m.userId);
+      if (m.level === "muted") continue;
+      if (m.level === "mentions" && !isMentioned) continue;
+      targets.push({ userId: m.userId, mention: isMentioned });
+    }
+
+    for (const t of targets) {
+      await notifyUsers([t.userId], {
+        type: t.mention ? "mention" : "dm",
         actorId: authorId,
         conversationId: msg.conversationId,
+        channelId: null,
         messageId: msg.id,
         content: content.slice(0, 140),
-      }
-    );
+      });
+    }
   }
 }
 
@@ -278,6 +348,7 @@ export const forumRouter = createRouter({
       z.object({
         channelId: z.number(),
         before: z.number().optional(),
+        tag: z.string().max(24).optional(),
         limit: z.number().min(1).max(100).default(50),
       })
     )
@@ -294,6 +365,8 @@ export const forumRouter = createRouter({
         eq(schema.messages.channelId, input.channelId),
         sql`${schema.messages.replyToId} IS NULL`,
       ];
+      if (input.tag)
+        conditions.push(eq(schema.messages.tag, input.tag));
       if (input.before)
         conditions.push(sql`${schema.messages.id} < ${input.before}`);
 
@@ -419,6 +492,7 @@ export const messageRouter = createRouter({
         content: z.string().max(4000),
         replyToId: z.number().optional(),
         threadId: z.number().optional(),
+        tag: z.string().min(1).max(24).optional(),
         attachmentIds: z.array(z.number()).max(10).optional(),
         spoilerIds: z.array(z.number()).max(10).optional(),
       })

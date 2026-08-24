@@ -14,6 +14,7 @@ const user: User = {
   bio: null,
   status: "offline",
   role: "user",
+  readReceipts: true,
   createdAt: new Date(),
   updatedAt: new Date(),
   lastSignInAt: new Date(),

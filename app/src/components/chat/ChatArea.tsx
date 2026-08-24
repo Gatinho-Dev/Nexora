@@ -6,7 +6,18 @@ import { MessageItem } from "./MessageItem";
 import { IconHash } from "../icons/channelIcons";
 import { MessageInput } from "./MessageInput";
 import { useChatUIStore } from "@/store/useChatUIStore";
-import { Loader2, ArrowDown } from "lucide-react";
+import {
+  Loader2,
+  ArrowDown,
+  CheckCheck,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Avatar } from "../Avatar";
 
 type Props = {
   channelId?: number;
@@ -15,6 +26,8 @@ type Props = {
   members?: { id: number; username: string | null; name: string | null }[];
   myId: number;
   canManageMessages?: boolean;
+  /** Reservado para recibos de leitura (feature em desenvolvimento). */
+  showReadReceipts?: boolean;
   channelType?: string;
   canPublish?: boolean;
   sendDisabled?: boolean;
@@ -32,6 +45,7 @@ export function ChatArea({
   myId,
   canManageMessages = false,
   sendDisabled = false,
+  showReadReceipts = false,
   onOpenProfile,
   header,
 }: Props) {
@@ -162,6 +176,16 @@ export function ChatArea({
       .map(([, entry]) => entry.name);
   }, [typingMap, myId, now]);
 
+  // Última mensagem própria (não-sistema) para o recibo "Visto por N".
+  const lastOwnMessageId = useMemo(() => {
+    if (!showReadReceipts || !messages) return null;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.authorId === myId && m.tag !== "system") return m.id;
+    }
+    return null;
+  }, [messages, myId, showReadReceipts]);
+
   return (
     <main className="flex-1 flex flex-col min-w-0 h-full bg-chat relative select-text">
       {header}
@@ -232,6 +256,11 @@ export function ChatArea({
           <ArrowDown className="h-3.5 w-3.5" />
           <span>Novas mensagens</span>
         </button>
+      )}
+
+      {/* Read receipts (grupos — item 12) */}
+      {showReadReceipts && lastOwnMessageId != null && (
+        <ReadReceipts messageId={lastOwnMessageId} />
       )}
 
       {/* Typing Indicator Bar */}
@@ -313,7 +342,8 @@ function renderMessages(
     const grouped =
       lastAuthor === msg.authorId &&
       date.getTime() - lastTime < 5 * 60 * 1000 &&
-      !msg.replyTo;
+      !msg.replyTo &&
+      msg.tag !== "system";
     items.push(
       <MessageItem
         key={msg.id}
@@ -327,8 +357,11 @@ function renderMessages(
         onOpenProfile={onOpenProfile}
       />
     );
-    lastAuthor = msg.authorId;
-    lastTime = date.getTime();
+    // Eventos de sistema não participam do agrupamento visual.
+    if (msg.tag !== "system") {
+      lastAuthor = msg.authorId;
+      lastTime = date.getTime();
+    }
   }
   return items;
 }
@@ -347,5 +380,58 @@ function SkeletonChatLoader() {
         </div>
       ))}
     </div>
+  );
+}
+
+/** "Visto por N" + lista de quem leu (grupos). */
+function ReadReceipts({ messageId }: { messageId: number }) {
+  const [open, setOpen] = useState(false);
+  const receipts = trpc.group.readBy.useQuery(
+    { messageId },
+    { enabled: messageId > 0, staleTime: 10_000 }
+  );
+  const readers = receipts.data?.users ?? [];
+  if (readers.length === 0) return null;
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="mr-1 mt-0.5 flex h-5 items-center gap-1 self-end rounded-full px-1.5 text-[10px] font-semibold text-muted2 transition-colors hover:text-bodyx"
+        aria-label={`Visto por ${readers.length} pessoa(s)`}
+      >
+        <CheckCheck className="h-3.5 w-3.5 text-[#3BA55C]" aria-hidden />
+        Visto por {readers.length}
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Visto por</DialogTitle>
+          </DialogHeader>
+          <ul className="max-h-64 space-y-1 overflow-y-auto">
+            {readers.map(u => (
+              <li
+                key={u.id}
+                className="flex items-center gap-2.5 rounded-lg px-2 py-1.5"
+              >
+                <Avatar
+                  userId={u.id}
+                  name={u.name ?? u.username}
+                  src={u.avatar}
+                  size="xs"
+                />
+                <span className="truncate text-xs font-semibold text-bodyx">
+                  {u.name ?? u.username ?? "Usuário"}
+                </span>
+                <CheckCheck
+                  className="ml-auto h-3.5 w-3.5 shrink-0 text-[#3BA55C]"
+                  aria-hidden
+                />
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

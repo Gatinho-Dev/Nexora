@@ -207,4 +207,30 @@ export const accountRouter = createRouter({
       if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado." });
       return toPublicUser(user);
     }),
+
+  // ── Privacidade ──────────────────────────────────────────────
+  privacy: authedQuery.query(async ({ ctx }) => {
+    const [row] = await getDb()
+      .select({ readReceipts: schema.users.readReceipts })
+      .from(schema.users)
+      .where(eq(schema.users.id, ctx.user.id));
+    return { readReceipts: row?.readReceipts ?? true };
+  }),
+
+  setPrivacy: authedQuery
+    .input(
+      z.object({
+        readReceipts: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const patch: Partial<typeof schema.users.$inferInsert> = {};
+      if (input.readReceipts !== undefined) patch.readReceipts = input.readReceipts;
+      if (Object.keys(patch).length === 0) return { ok: true };
+      await getDb()
+        .update(schema.users)
+        .set(patch)
+        .where(eq(schema.users.id, ctx.user.id));
+      return { ok: true };
+    }),
 });
