@@ -8,6 +8,7 @@ import { realtime } from "@/lib/ws";
 import { voiceManager } from "@/lib/rtc";
 import { UserSettingsModal } from "./modals/UserSettingsModal";
 import { NexoraMark } from "./NexoraBrand";
+import { BadgeIcon } from "./badges/BadgeUI";
 import { cn } from "@/lib/utils";
 import {
   BadgeCheck,
@@ -17,8 +18,7 @@ import {
   Headphones,
   VolumeX,
   Settings,
-  LogOut,
-  Pencil,
+  LogOut,  Pencil,
   PhoneOff,
   Wifi,
   WifiOff,
@@ -235,19 +235,14 @@ export function UserPanel() {
                 </div>
                 {myBadges.data?.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {myBadges.data.slice(0, 6).map((badge, index) => (
+                    {myBadges.data.slice(0, 6).map(badge => (
                       <span
-                        key={
-                          badge.id ?? badge.slug ?? `${badge.label}-${index}`
-                        }
+                        key={badge.id}
                         className="inline-flex h-7 items-center gap-1 rounded-md border border-white/10 bg-white/[0.05] px-2 text-[10px] font-semibold text-bodyx"
-                        title={badge.description ?? badge.label}
+                        title={badge.description ?? badge.name}
                       >
-                        <BadgeCheck
-                          className="h-3 w-3"
-                          style={{ color: badge.color ?? "#7383FF" }}
-                        />
-                        {badge.label}
+                        <BadgeIcon badge={badge} size={14} />
+                        {badge.name}
                       </span>
                     ))}
                   </div>

@@ -14,6 +14,7 @@ import {
 import { DMSidebar } from "@/components/DMSidebar";
 import { SidebarPortal } from "@/components/SidebarPortal";
 import { OfficialIdentity } from "@/components/official/OfficialIdentity";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,7 @@ function formatAnnouncementDate(value: string | Date) {
   }).format(new Date(value));
 }
 function AnnouncementItem({ announcement }: { announcement: OfficialAnnouncementDTO }) {
+  const trackClick = trpc.official.trackClick.useMutation();
   const presentation = kindPresentation[announcement.kind];
   const KindIcon = presentation.icon;
 
@@ -99,9 +101,25 @@ function AnnouncementItem({ announcement }: { announcement: OfficialAnnouncement
         <h2 className="mt-2 text-[15px] font-bold leading-snug text-[#f5f6f8]">
           {announcement.title}
         </h2>
-        <p className="mt-1.5 whitespace-pre-wrap break-words text-[13px] leading-6 text-[#c8cdd5]">
-          {announcement.content}
-        </p>
+        {announcement.contentFormat === "MARKDOWN" ? (
+          <MarkdownRenderer content={announcement.content} className="mt-1.5" />
+        ) : (
+          <p className="mt-1.5 whitespace-pre-wrap break-words text-[13px] leading-6 text-[#c8cdd5]">
+            {announcement.content}
+          </p>
+        )}
+        {announcement.buttonLabel && announcement.buttonUrl && (
+          <a
+            href={announcement.buttonUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => trackClick.mutate({ announcementId: announcement.id })}
+            className="mt-3 inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-[#5865F2] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#4752C4] active:scale-[0.98]"
+          >
+            {announcement.buttonLabel}
+            <span aria-hidden>→</span>
+          </a>
+        )}
         {announcement.expiresAt && (
           <p className="mt-3 inline-flex items-center gap-1.5 text-[10px] text-[#858b95]">
             <CalendarClock className="h-3.5 w-3.5" />

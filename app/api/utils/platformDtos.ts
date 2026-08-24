@@ -1,12 +1,8 @@
 import type {
   OfficialAnnouncementDTO,
-  PlatformBadgeDTO,
-  UserBadgeDTO,
 } from "@contracts/types";
 import type {
   OfficialAnnouncement,
-  PlatformBadge,
-  UserBadge,
 } from "@db/schema";
 
 const OFFICIAL_SENDER = {
@@ -25,34 +21,19 @@ export function toOfficialAnnouncementDTO(
     id: announcement.id,
     title: announcement.title,
     content: announcement.content,
+    contentFormat: announcement.contentFormat ?? "PLAIN_TEXT",
     kind: announcement.kind,
-    publishedAt: announcement.publishedAt,
+    type: announcement.type,
+    buttonLabel: announcement.buttonLabel,
+    buttonUrl: announcement.buttonUrl,
+    startsAt: announcement.startsAt,
     expiresAt: announcement.expiresAt,
+    dismissible: announcement.dismissible,
+    clicks: announcement.clicks,
+    publishedAt: announcement.publishedAt,
     isActive: announcement.isActive,
     isRead: readAt !== null,
     readAt,
     sender: OFFICIAL_SENDER,
-  };
-}
-
-export function toPlatformBadgeDTO(badge: PlatformBadge): PlatformBadgeDTO {
-  return {
-    id: badge.id,
-    slug: badge.slug,
-    label: badge.label,
-    description: badge.description,
-    icon: badge.icon,
-    color: badge.color,
-    isStaff: badge.isStaff,
-  };
-}
-
-export function toUserBadgeDTO(
-  badge: PlatformBadge,
-  assignment: UserBadge,
-): UserBadgeDTO {
-  return {
-    ...toPlatformBadgeDTO(badge),
-    assignedAt: assignment.assignedAt,
   };
 }

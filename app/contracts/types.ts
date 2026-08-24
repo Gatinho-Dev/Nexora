@@ -249,13 +249,29 @@ export type OfficialAnnouncementKind =
   | "SECURITY"
   | "MAINTENANCE";
 
+export type OfficialAnnouncementType =
+  | "INFO"
+  | "SUCCESS"
+  | "WARNING"
+  | "ERROR"
+  | "MAINTENANCE"
+  | "ANNOUNCEMENT";
+
 export type OfficialAnnouncementDTO = {
   id: number;
   title: string;
   content: string;
+  /** MARKDOWN | PLAIN_TEXT — antigas sem valor = PLAIN_TEXT. */
+  contentFormat: "MARKDOWN" | "PLAIN_TEXT";
   kind: OfficialAnnouncementKind;
-  publishedAt: string | Date;
+  type: OfficialAnnouncementType;
+  buttonLabel: string | null;
+  buttonUrl: string | null;
+  startsAt: string | Date | null;
   expiresAt: string | Date | null;
+  dismissible: boolean;
+  clicks: number;
+  publishedAt: string | Date;
   isActive: boolean;
   isRead: boolean;
   readAt: string | Date | null;
@@ -268,18 +284,35 @@ export type OfficialAnnouncementDTO = {
   };
 };
 
-export type PlatformBadgeDTO = {
+export type BadgeRarity =
+  | "COMMON"
+  | "UNCOMMON"
+  | "RARE"
+  | "EPIC"
+  | "LEGENDARY"
+  | "EXCLUSIVE";
+
+export type BadgeDTO = {
   id: number;
   slug: string;
-  label: string;
+  name: string;
   description: string | null;
-  icon: string | null;
-  color: string;
-  isStaff: boolean;
+  /** Arquivo /badges/{icon}.svg */
+  icon: string;
+  category: string;
+  rarity: BadgeRarity;
+  grantType: string;
+  permanent: boolean;
+  visible: boolean;
+  canHide: boolean;
+  displayOrder: number;
+  restricted: boolean;
 };
 
-export type UserBadgeDTO = PlatformBadgeDTO & {
-  assignedAt: string | Date;
+export type UserBadgeDTO = BadgeDTO & {
+  grantedAt: string | Date;
+  grantSource: string;
+  expiresAt: string | Date | null;
 };
 
 export type AdminAuditLogDTO = {

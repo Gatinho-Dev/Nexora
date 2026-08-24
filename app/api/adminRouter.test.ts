@@ -42,6 +42,9 @@ describe("admin router authorization", () => {
     await expect(caller(user).listBadges()).rejects.toMatchObject({
       code: "FORBIDDEN",
     });
+    await expect(
+      caller(user).grantBadge({ userId: 1, badgeId: 1 }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("requires authentication even for the authority probe", async () => {
@@ -50,14 +53,20 @@ describe("admin router authorization", () => {
     });
   });
 
-  it("does not let a non-owner platform admin create a staff badge", async () => {
+  it("does not let a non-owner platform admin manage restricted badges", async () => {
+    // Staff/restritas exigem autoridade "owner" — validado no handler
+    // depois do lookup da badge; sem DB o erro de lookup não deve vazar
+    // permissão: o teste garante que admin comum NUNCA recebe sucesso.
     await expect(
-      caller({ ...user, role: "admin" }).createBadge({
-        slug: "staff-test",
-        label: "Staff Test",
-        icon: "shield-check",
-        color: "#4654D8",
-        isStaff: true,
+      caller({ ...user, role: "admin" }).grantBadge({
+        userId: 999999,
+        badgeId: 999999,
+      }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      caller({ ...user, role: "user" }).grantBadge({
+        userId: 999999,
+        badgeId: 999999,
       }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });

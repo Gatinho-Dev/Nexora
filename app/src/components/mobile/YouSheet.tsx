@@ -5,6 +5,7 @@ import { Avatar } from "../Avatar";
 import { useAppStore } from "@/store/useAppStore";
 import { realtime } from "@/lib/ws";
 import { openUserSettings } from "@/lib/openUserSettings";
+import { BadgeIcon } from "../badges/BadgeUI";
 import { cn } from "@/lib/utils";
 import {
   Settings,
@@ -81,12 +82,12 @@ export function YouSheet({
             <div className="mt-2 flex flex-wrap gap-1">
               {myBadges.data.slice(0, 6).map(b => (
                 <span
-                  key={b.id ?? b.slug}
-                  title={b.description ?? b.label}
-                  className="rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[10px] font-semibold"
-                  style={{ color: b.color ?? undefined }}
+                  key={b.id}
+                  title={b.description ?? b.name}
+                  className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.05] px-1.5 py-0.5 text-[10px] font-semibold text-bodyx"
                 >
-                  {b.label}
+                  <BadgeIcon badge={b} size={12} />
+                  {b.name}
                 </span>
               ))}
             </div>
