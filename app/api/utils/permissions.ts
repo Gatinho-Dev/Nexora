@@ -2,7 +2,11 @@ import { and, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../queries/connection";
 import * as schema from "@db/schema";
-import { ALL_PERMISSIONS, type Permission } from "@contracts/constants";
+import {
+  ALL_PERMISSIONS,
+  DEFAULT_MEMBER_PERMISSIONS,
+  type Permission,
+} from "@contracts/constants";
 import type { PublicUser } from "@contracts/types";
 
 export function toPublicUser(u: typeof schema.users.$inferSelect): PublicUser {
@@ -59,6 +63,11 @@ export async function getMemberPermissions(
     }
   }
   if (perms.has("ADMINISTRATOR")) return new Set(ALL_PERMISSIONS);
+  // Servidores criados antes da feature de permissões podem não ter cargo
+  // nenhum (ou cargos sem as flags básicas). Sem isso, membros comuns ficariam
+  // sem VIEW_CHANNEL e veriam o servidor "vazio". Overrides de canal continuam
+  // podendo negar tudo depois — o fallback só restaura o comportamento antigo.
+  if (perms.size === 0) return new Set(DEFAULT_MEMBER_PERMISSIONS);
   return perms;
 }
 

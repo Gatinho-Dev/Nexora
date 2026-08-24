@@ -71,6 +71,13 @@
       "when": 1787529941506,
       "tag": "0009_read_receipts_privacy",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1787534358416,
+      "tag": "0010_backfill_role_permissions",
+      "breakpoints": true
     }
   ]
 }

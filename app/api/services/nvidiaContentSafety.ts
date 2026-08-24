@@ -87,7 +87,7 @@ function extractJson(text: string): unknown {
 
 /** Coerces unknown value to a finite number in 0..1 (or NaN if not usable). */
 function toScore(value: unknown): number {
-  if (typeof value === "number") return Number.isFinite(value) ? value : NaN;
+  if (typeof value === "number") return normalizeScale(value);
   if (typeof value === "boolean") return value ? 1 : 0;
   if (typeof value === "string") {
     const trimmed = value.trim().toLowerCase();
@@ -97,9 +97,16 @@ function toScore(value: unknown): number {
     const word = { high: 0.9, medium: 0.5, low: 0.15, none: 0 }[trimmed];
     if (word !== undefined) return word;
     const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : NaN;
+    return Number.isFinite(parsed) ? normalizeScale(parsed) : NaN;
   }
   return NaN;
+}
+
+/** Accepts 0..1 probabilities and 0..100 percent scales; clamps the rest. */
+function normalizeScale(n: number): number {
+  if (!Number.isFinite(n)) return NaN;
+  if (n > 1) return Math.min(n / 100, 1);
+  return Math.max(0, n);
 }
 
 type ParsedPayload = {
@@ -117,12 +124,13 @@ function parsePayload(parsed: unknown): ParsedPayload {
   const scores: Record<string, number> = {};
 
   // Shape A/B: categories array of strings OR objects with label/score.
+  // Bare strings carry NO score — the model listing a label without a number
+  // must not be read as "score 1" (that flagged every normal image as +18).
   const rawCats = p.categories ?? p.flagged_categories ?? p.labels;
   if (Array.isArray(rawCats)) {
     for (const item of rawCats) {
       if (typeof item === "string") {
         categories.push(item);
-        scores[item.toLowerCase()] = Math.max(scores[item.toLowerCase()] ?? 0, 1);
       } else if (item && typeof item === "object") {
         const obj = item as Record<string, unknown>;
         const label = String(obj.category ?? obj.label ?? obj.name ?? "");
@@ -162,6 +170,17 @@ function parsePayload(parsed: unknown): ParsedPayload {
 /**
  * Pure normalizer: model payload → Nexora verdict. Unit-tested.
  * Minor-related labels are evaluated BEFORE generic sexual ones.
+ *
+ * Decision order (audit 2026-08-23, false-positive fix):
+ * 1. Confident minor detection → BLOCK.
+ * 2. Explicit adult score ≥ threshold → SENSITIVE_ADULT.
+ * 3. Flagged unsafe with ANY explicit score ≥ threshold → SENSITIVE_ADULT
+ *    (confident non-sexual violation still gets the caution blur).
+ * 4. Explicitly safe (`flagged === false`) → ALLOW. Low/unrated category
+ *    mentions never override an explicit "safe" verdict from the model.
+ * 5. Anything ambiguous (flagged without confident scores, unrated labels)
+ *    → UNCERTAIN → review_required: media stays private WITHOUT punishing
+ *    the sender and WITHOUT showing the +18 blur to everyone.
  */
 export function normalizeVerdict(parsed: unknown): NormalizedVerdict {
   const { flagged, categories, scores } = parsePayload(parsed);
@@ -180,29 +199,24 @@ export function normalizeVerdict(parsed: unknown): NormalizedVerdict {
       .map(([, v]) => v),
     0
   );
-  const otherUnsafe =
-    flagged === true &&
-    !SEXUAL_MINOR_MARKERS.some(k => k in scores) &&
-    !SEXUAL_ADULT_MARKERS.some(k => k.includes(Object.keys(scores)[0] ?? "")) &&
-    categories.length > 0;
+  const maxAnyScore = Math.max(0, ...Object.values(scores), 0);
 
   const sexualMinor = minorScore >= MINOR_BLOCK_THRESHOLD;
   const sexualAdult = !sexualMinor && adultScore >= ADULT_THRESHOLD;
 
   let decision: NormalizedVerdict["decision"];
-  if (sexualMinor || (flagged === true && minorScore > 0 && minorScore >= MINOR_BLOCK_THRESHOLD)) {
+  if (sexualMinor) {
     decision = "BLOCK";
   } else if (sexualAdult) {
     decision = "SENSITIVE_ADULT";
+  } else if (flagged === true && maxAnyScore >= ADULT_THRESHOLD) {
+    // Confidently unsafe, just not sexual — caution blur with reveal allowed.
+    decision = "SENSITIVE_ADULT";
   } else if (
     flagged === false ||
-    (flagged === null && categories.length === 0)
+    (flagged === null && categories.length === 0 && maxAnyScore <= 0)
   ) {
     decision = "ALLOW";
-  } else if (otherUnsafe || flagged === true) {
-    // Unsafe but not confidently classified → human-style caution without
-    // punishing anyone.
-    decision = "SENSITIVE_ADULT";
   } else {
     decision = "UNCERTAIN";
   }

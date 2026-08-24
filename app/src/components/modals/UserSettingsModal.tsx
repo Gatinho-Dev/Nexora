@@ -616,12 +616,32 @@ function ConnectionsTab() {
 // ── Notificações (Com controle de som!) ───────────────────────
 function NotificationsTab() {
   const [prefs, setPrefs] = useState(() => soundManager.getPrefs());
+  const supported = typeof Notification !== "undefined";
+  const [permission, setPermission] = useState<
+    "granted" | "denied" | "default" | "unsupported"
+  >(() =>
+    supported ? Notification.permission : "unsupported"
+  );
 
   const updateSound = (
     patch: Partial<ReturnType<typeof soundManager.getPrefs>>
   ) => {
     soundManager.savePrefs(patch);
     setPrefs(soundManager.getPrefs());
+  };
+
+  const enableDesktopNotifications = async () => {
+    if (!supported) return;
+    try {
+      const result = await Notification.requestPermission();
+      setPermission(result);
+      if (result === "granted") {
+        toast.success("Notificações do computador ativadas!");
+        localStorage.setItem("nexora-desktop-notif-asked", "1");
+      }
+    } catch {
+      toast.error("Não foi possível pedir permissão agora.");
+    }
   };
 
   return (
@@ -631,6 +651,49 @@ function NotificationsTab() {
         <p className="text-xs text-muted2 mt-1">
           Ajuste os efeitos sonoros originais e notificações da Nexora.
         </p>
+      </div>
+
+      <div className="rounded-xl bg-sidebar border border-white/10 p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white">
+              Notificações na área de trabalho
+            </p>
+            <p className="text-xs text-muted2">
+              {permission === "granted"
+                ? "Ativas: você recebe avisos do sistema quando a aba está em segundo plano."
+                : permission === "denied"
+                  ? "Bloqueadas pelo navegador. Libere as notificações deste site nas permissões do navegador."
+                  : permission === "unsupported"
+                    ? "Seu navegador não suporta notificações."
+                    : "Receba avisos no PC mesmo com a Nexora em segundo plano."}
+            </p>
+          </div>
+          {permission === "granted" || permission === "unsupported" ? (
+            <Switch
+              disabled={permission === "unsupported"}
+              checked={permission === "granted"}
+              onCheckedChange={() => {
+                if (!supported) return;
+                if (Notification.permission === "default") {
+                  void enableDesktopNotifications();
+                } else if (Notification.permission === "denied") {
+                  toast.error(
+                    "As notificações foram bloqueadas nas permissões do navegador."
+                  );
+                }
+              }}
+            />
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => void enableDesktopNotifications()}
+              className="shrink-0 bg-[#5865F2] hover:bg-[#4752C4] text-white"
+            >
+              Ativar
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl bg-sidebar border border-white/10 p-5 space-y-4">

@@ -113,6 +113,45 @@ describe("normalizeVerdict", () => {
     expect(() => normalizeVerdict("texto solto")).toThrow();
     expect(() => normalizeVerdict({ foo: "bar" })).toThrow();
   });
+
+  // ── Regressões: toda imagem virava +18 ──────────────────────
+
+  it("REGRESSÃO: categorias como strings + safe alto NÃO são +18", () => {
+    // Formato real do llama-3.2-11b: labels sem score junto de safe 0.92.
+    const verdict = normalizeVerdict({
+      safe: 0.92,
+      categories: ["Violence", "Sexual"],
+    });
+    expect(verdict.decision).toBe("ALLOW");
+    expect(verdict.sexualAdult).toBe(false);
+  });
+
+  it("REGRESSÃO: flagged sem nenhuma categoria pontuada → UNCERTAIN (não +18)", () => {
+    const verdict = normalizeVerdict({ safe: 0.4 });
+    expect(["ALLOW", "UNCERTAIN"]).toContain(verdict.decision);
+    expect(verdict.decision).not.toBe("SENSITIVE_ADULT");
+  });
+
+  it("REGRESSÃO: escala percentual (0..100) é normalizada", () => {
+    const verdict = normalizeVerdict({
+      safe: 90,
+      categories: [{ category: "Sexual", score: 5 }],
+    });
+    expect(verdict.decision).toBe("ALLOW");
+  });
+
+  it("formato canônico seguro continua ALLOW", () => {
+    const verdict = normalizeVerdict({
+      safe: 0.98,
+      categories: [{ category: "Sexual", score: 0.01 }],
+    });
+    expect(verdict.decision).toBe("ALLOW");
+  });
+
+  it("flagged com violência confusa e score explícito alto segue sensível", () => {
+    const verdict = normalizeVerdict({ safe: 0.05, violence: 0.9 });
+    expect(verdict.decision).toBe("SENSITIVE_ADULT");
+  });
 });
 
 // ── Magic bytes ───────────────────────────────────────────────

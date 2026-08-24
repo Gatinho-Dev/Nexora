@@ -30,6 +30,14 @@ function notificationText(n: NotificationDTO): string {
       return `${actor} enviou um pedido de amizade`;
     case "reply":
       return `${actor} respondeu sua mensagem`;
+    case "group_added":
+      return "Você foi adicionado a um grupo";
+    case "group_removed":
+      return "Você foi removido de um grupo";
+    case "call_started":
+      return `${actor} iniciou uma chamada`;
+    case "moderation":
+      return "Aviso da moderação";
     default:
       return "Nova notificação";
   }

@@ -16,6 +16,7 @@ import { groupDisplayName } from "@/lib/groupDisplayName";
 import { GroupInfoModal } from "@/components/groups/GroupInfoModal";
 import { GroupSearchModal } from "@/components/groups/GroupSearchModal";
 import { voiceManager } from "@/lib/rtc";
+import { soundManager } from "@/lib/sound";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -70,6 +71,9 @@ export function DMConversation() {
   const isGroup = conversation.data?.isGroup === true;
   const other = conversation.data?.otherUser;
   const inCall = voiceConversationId === conversationId;
+  const ongoingParticipants = useAppStore(
+    s => s.voiceParticipants[`dm:${conversationId}`]
+  )?.filter(p => p.userId !== me?.id) ?? [];
   const isRequest = !isGroup && conversation.data?.isRequest === true;
   const utils = trpc.useUtils();
   const startCallNotify = trpc.group.startCall.useMutation();
@@ -105,11 +109,12 @@ export function DMConversation() {
     setJoining(true);
     try {
       await voiceManager.join({ conversationId, myId: me.id });
+      useAppStore.getState().setIncomingCall(null);
+      soundManager.stopRingtone();
       if (withCamera) await voiceManager.toggleCamera();
-      // Grupos: avisa os membros fora da chamada (item 25).
-      if (isGroup) {
-        startCallNotify.mutate({ conversationId });
-      }
+      // Avisa os outros participantes (DM 1:1 toca o telefone deles;
+      // grupos recebem a notificação de chamada).
+      startCallNotify.mutate({ conversationId });
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "Não foi possível iniciar a chamada."
@@ -215,6 +220,18 @@ export function DMConversation() {
               </TooltipProvider>
             )}
           </>
+        )}
+
+        {!isGroup && ongoingParticipants.length > 0 && !inCall && (
+          <button
+            onClick={() => void startCall(false)}
+            disabled={joining}
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-2.5 py-1.5 text-xs font-bold text-emerald-400 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+            title="Entrar na chamada em andamento"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            Entrar ({ongoingParticipants.length})
+          </button>
         )}
 
         <TooltipProvider delayDuration={150}>

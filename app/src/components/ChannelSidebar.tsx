@@ -100,7 +100,11 @@ export function ChannelSidebar({
     kind: "text" | "voice"
   ) =>
     channels.filter(c => {
-      const isTextKind = c.type === "TEXT" || c.type === "FORUM";
+      const isTextKind =
+        c.type === "TEXT" ||
+        c.type === "FORUM" ||
+        c.type === "ANNOUNCEMENT" ||
+        c.type === "MEDIA";
       const isVoiceKind = c.type === "VOICE" || c.type === "STAGE";
       return kind === "text"
         ? isTextKind && (categoryId === null || c.categoryId === categoryId)
