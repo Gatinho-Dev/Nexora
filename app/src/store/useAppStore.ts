@@ -48,6 +48,13 @@ type AppState = {
   localStream: MediaStream | null;
   localVideo: MediaStream | null;
   remoteStreams: Record<number, MediaStream>;
+  incomingCall: {
+    conversationId: number;
+    actorName: string;
+    actorAvatar?: string | null;
+    notificationId?: number;
+    video: boolean;
+  } | null;
   // mobile UI
   mobileNavOpen: boolean;
   mobileMembersOpen: boolean;
@@ -98,6 +105,9 @@ type AppState = {
   setRemoteStream: (userId: number, stream: MediaStream | null) => void;
   setSpeaking: (userId: number, speaking: boolean) => void;
   resetVoice: () => void;
+  setIncomingCall: (
+    call: AppState["incomingCall"]
+  ) => void;
   setMobileNavOpen: (v: boolean) => void;
   setMobileMembersOpen: (v: boolean) => void;
   setMembersOpen: (v: boolean) => void;
@@ -133,6 +143,7 @@ export const useAppStore = create<AppState>(set => ({
   localStream: null,
   localVideo: null,
   remoteStreams: {},
+  incomingCall: null,
   mobileNavOpen: false,
   mobileMembersOpen: false,
   membersOpen: false,
@@ -302,6 +313,8 @@ export const useAppStore = create<AppState>(set => ({
       localVideo: null,
       remoteStreams: {},
     }),
+
+  setIncomingCall: call => set({ incomingCall: call }),
 
   setMobileNavOpen: v => set({ mobileNavOpen: v }),
   setMobileMembersOpen: v => set({ mobileMembersOpen: v }),

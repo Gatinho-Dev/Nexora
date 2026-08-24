@@ -124,6 +124,25 @@ export function useRealtime(myUserId: number | undefined) {
         case "notification": {
           utils.notification.unreadCount.invalidate();
           utils.notification.list.invalidate();
+          const n = event.notification;
+          if (n.type === "call_started" && n.conversationId) {
+            const storeState = useAppStore.getState();
+            const notInThatRoom =
+              storeState.voiceConversationId !== n.conversationId &&
+              storeState.voiceChannelId === null;
+            if (notInThatRoom) {
+              soundManager.startRingtone();
+              storeState.setIncomingCall({
+                conversationId: n.conversationId,
+                actorName:
+                  n.actor?.name ?? n.actor?.username ?? "Alguém",
+                actorAvatar: n.actor?.avatar ?? null,
+                notificationId: n.id,
+                video: false,
+              });
+              break;
+            }
+          }
           soundManager.play("notification");
           // Browser notification when the tab is hidden and permission granted
           if (
@@ -131,7 +150,6 @@ export function useRealtime(myUserId: number | undefined) {
             Notification.permission === "granted" &&
             document.hidden
           ) {
-            const n = event.notification;
             const actorName = n.actor?.name ?? "Alguém";
             const title =
               n.type === "mention"
@@ -144,13 +162,20 @@ export function useRealtime(myUserId: number | undefined) {
                       ? "Você foi adicionado a um grupo"
                       : n.type === "group_removed"
                         ? "Você foi removido de um grupo"
-                        : n.type === "call_started"
-                          ? `${actorName} iniciou uma chamada`
-                          : "Nexora";
-            new Notification(title, {
+                        : n.type === "friend_request"
+                          ? `${actorName} enviou um pedido de amizade`
+                          : n.type === "call_started"
+                            ? `${actorName} iniciou uma chamada`
+                            : "Nexora";
+            const desktopNotification = new Notification(title, {
               body: n.content ?? undefined,
               icon: "/icon.svg",
+              tag: `nexora-${n.id}`,
             });
+            desktopNotification.onclick = () => {
+              window.focus();
+              desktopNotification.close();
+            };
           }
           break;
         }
@@ -163,10 +188,17 @@ export function useRealtime(myUserId: number | undefined) {
             Notification.permission === "granted" &&
             document.hidden
           ) {
-            new Notification(`Nexora Oficial: ${event.announcement.title}`, {
-              body: event.announcement.content,
-              icon: "/icon.svg",
-            });
+            const desktopNotification = new Notification(
+              `Nexora Oficial: ${event.announcement.title}`,
+              {
+                body: event.announcement.content,
+                icon: "/icon.svg",
+              }
+            );
+            desktopNotification.onclick = () => {
+              window.focus();
+              desktopNotification.close();
+            };
           }
           break;
         }

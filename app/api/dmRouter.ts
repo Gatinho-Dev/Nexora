@@ -6,8 +6,10 @@ import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
 import type { ConversationDTO } from "@contracts/types";
 import { requireConversationAccess, toPublicUser } from "./utils/permissions";
-import { sendToUsers } from "./realtime";
+import { getVoiceParticipants, sendToUsers } from "./realtime";
 import { assertCanInteract } from "./services/accountSafety";
+import { rateLimit } from "./utils/rateLimit";
+import { notifyConversationUsers } from "./groupRouter";
 
 async function buildConversationDTO(
   conversationId: number,
@@ -281,6 +283,30 @@ export const dmRouter = createRouter({
           ),
         );
       sendToUsers([ctx.user.id], { t: "dm:refresh" });
+      return { ok: true };
+    }),
+
+  // ── Calls ────────────────────────────────────────────────────
+  // Toca o telefone dos outros participantes quando uma chamada DM começa
+  // (o grupo já tinha isso; sem isto, a outra pessoa nunca fica sabendo).
+  notifyCallStart: authedQuery
+    .input(z.object({ conversationId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireConversationAccess(ctx.user.id, input.conversationId);
+      await assertCanInteract(ctx.user.id);
+      rateLimit(`call:${ctx.user.id}`, 5, 60_000);
+      const roomKey = `dm:${input.conversationId}`;
+      const inRoom = new Set(getVoiceParticipants(roomKey).map(p => p.userId));
+      const actor = await getDb().query.users.findFirst({
+        where: eq(schema.users.id, ctx.user.id),
+      });
+      await notifyConversationUsers({
+        type: "call_started",
+        actorId: ctx.user.id,
+        conversationId: input.conversationId,
+        content: `${actor?.name ?? actor?.username ?? "Alguém"} iniciou uma chamada.`,
+        skip: [...inRoom],
+      });
       return { ok: true };
     }),
 });

@@ -13,12 +13,14 @@ import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
 import { Menu, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VoiceMediaRenderer } from "@/components/voice/VoiceMediaRenderer";
+import { IncomingCallToast } from "@/components/voice/IncomingCallToast";
 import { PermanentBanScreen } from "@/components/safety/PermanentBanScreen";
 import { BottomNav, type MobileTab } from "@/components/mobile/BottomNav";
 import { YouSheet } from "@/components/mobile/YouSheet";
 import { NotificationsSheet } from "@/components/mobile/NotificationsSheet";
 import { ServersSheet } from "@/components/mobile/ServersSheet";
 import { useKeyboardOffset } from "@/hooks/useKeyboardOffset";
+import { toast } from "sonner";
 import { TriangleAlert } from "lucide-react";
 import { NexoraAppIcon, NexoraLogo } from "@/components/NexoraBrand";
 
@@ -43,6 +45,30 @@ export function AppLayout() {
     const open = () => setMobileTab("servers");
     window.addEventListener("nexora:open-servers", open);
     return () => window.removeEventListener("nexora:open-servers", open);
+  }, []);
+
+  // Notificações do PC: pergunta UMA vez (clicável = gesto do usuário).
+  useEffect(() => {
+    if (
+      typeof Notification === "undefined" ||
+      Notification.permission !== "default"
+    ) {
+      return;
+    }
+    if (localStorage.getItem("nexora-desktop-notif-asked") === "1") return;
+    localStorage.setItem("nexora-desktop-notif-asked", "1");
+    toast(
+      "Quer receber notificações da Nexora no seu computador?",
+      {
+        duration: 15_000,
+        action: {
+          label: "Ativar",
+          onClick: () => {
+            void Notification.requestPermission();
+          },
+        },
+      }
+    );
   }, []);
   const keyboardOffset = useKeyboardOffset(true);
   const voiceChannelIdGlobal = useAppStore(st => st.voiceChannelId);
@@ -241,6 +267,7 @@ export function AppLayout() {
         onOpenChange={v => useAppStore.getState().setQuickSwitcherOpen(v)}
       />
       <ShortcutsModal open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <IncomingCallToast />
       <VoiceMediaRenderer myUserId={user.id} />
     </div>
   );

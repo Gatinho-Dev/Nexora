@@ -1,7 +1,7 @@
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useState } from "react";
 import { trpc } from "@/providers/trpc";
-import { BadgeCheck, ShieldCheck, Users, Inbox, UserPlus } from "lucide-react";
+import { BadgeCheck, ShieldCheck, Users, Inbox, UserPlus, Phone } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar } from "./Avatar";
 import { UserPanel } from "./UserPanel";
@@ -31,6 +31,7 @@ export function DMSidebar({
   });
   const authority = trpc.admin.authority.useQuery();
   const unreadConversations = useAppStore(s => s.unreadConversations);
+  const voiceParticipants = useAppStore(s => s.voiceParticipants);
   const officialActive = location.pathname === "/channels/@me/official";
 
   return (
@@ -264,6 +265,16 @@ export function DMSidebar({
                         {unread > 0 && (
                           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground border border-rail">
                             {unread > 99 ? "99+" : unread}
+                          </span>
+                        )}
+                        {(voiceParticipants[`dm:${conv.id}`]?.length ?? 0) >
+                          0 && (
+                          <span
+                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/90"
+                            title="Chamada em andamento"
+                            aria-label="Chamada em andamento"
+                          >
+                            <Phone className="h-2.5 w-2.5 text-white" />
                           </span>
                         )}
                       </button>

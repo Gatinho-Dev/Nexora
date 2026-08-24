@@ -55,6 +55,8 @@ export function ChatArea({
   const hasMore = useAppStore(s => s.hasMore[key] ?? false);
   const typingMap = useAppStore(s => s.typing[key]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -78,7 +80,10 @@ export function ChatArea({
   useEffect(() => {
     let cancelled = false;
     const timeout = setTimeout(() => {
-      if (!cancelled) setLoading(true);
+      if (!cancelled) {
+        setLoading(true);
+        setLoadError(false);
+      }
     }, 0);
     setCurrentView({ channelId, conversationId });
     setReplyingTo(null);
@@ -102,7 +107,10 @@ export function ChatArea({
         requestAnimationFrame(() => scrollToBottom(true));
       })
       .catch(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoadError(true);
+          setLoading(false);
+        }
       });
 
     return () => {
@@ -111,7 +119,7 @@ export function ChatArea({
       setCurrentView({});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, conversationId]);
+  }, [channelId, conversationId, reloadTick]);
 
   // Typing indicator expiry tick
   useEffect(() => {
@@ -198,6 +206,26 @@ export function ChatArea({
       >
         {loading ? (
           <SkeletonChatLoader />
+        ) : loadError && (!messages || messages.length === 0) ? (
+          <div className="h-full flex flex-col items-center justify-center text-muted2 gap-3 p-8 select-none">
+            <div className="text-center">
+              <h3 className="text-base font-bold text-foreground mb-1">
+                Não foi possível carregar as mensagens
+              </h3>
+              <p className="text-sm text-muted2 mb-4">
+                Verifique sua conexão e tente novamente.
+              </p>
+              <button
+                onClick={() => {
+                  setLoading(true);
+                  setReloadTick(t => t + 1);
+                }}
+                className="rounded-md bg-[#5865F2] hover:bg-[#4752C4] px-4 py-2 text-sm font-semibold text-white"
+              >
+                Tentar de novo
+              </button>
+            </div>
+          </div>
         ) : !messages || messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-muted2 gap-3 p-8 select-none">
             <div className="h-16 w-16 rounded-full bg-[#41434A] flex items-center justify-center">

@@ -63,17 +63,30 @@ export function ServerChannel() {
     }
   );
 
+  const firstTextLike = (channels: { id: number; type: string }[]) =>
+    channels
+      .filter(c => ["TEXT", "ANNOUNCEMENT", "FORUM", "MEDIA"].includes(c.type))
+      .sort((a, b) => a.id - b.id)[0];
+
   useEffect(() => {
-    if (channelIdParam === "first" && details.data) {
-      const firstText = [...details.data.channels]
-        .filter(c => c.type === "TEXT")
-        .sort((a, b) => a.position - b.position)[0];
-      const firstAny = [...details.data.channels].sort(
-        (a, b) => a.position - b.position
-      )[0];
-      const target = firstText ?? firstAny;
-      if (target)
+    if (!details.data) return;
+    const channels = details.data.channels;
+    if (channelIdParam === "first") {
+      const target =
+        channels.find(c => c.type === "TEXT") ?? firstTextLike(channels);
+      if (target) {
         navigate(`/channels/${serverId}/${target.id}`, { replace: true });
+      }
+      return;
+    }
+    // Canal salvo/deep-link não existe mais (deletado/arquivado/sem acesso):
+    // resgata para o primeiro canal visível em vez de tela vazia.
+    const current = channels.find(c => c.id === Number(channelIdParam));
+    if (!current && Number.isFinite(Number(channelIdParam))) {
+      const target = firstTextLike(channels);
+      if (target) {
+        navigate(`/channels/${serverId}/${target.id}`, { replace: true });
+      }
     }
   }, [channelIdParam, details.data, navigate, serverId]);
 
@@ -180,8 +193,15 @@ export function ServerChannel() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!channel ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted2 bg-chat">
-            Selecione um canal para começar a conversar na Nexora.
+          <div className="flex flex-1 flex-col items-center justify-center gap-1 text-sm text-muted2 bg-chat px-6 text-center select-none">
+            <p className="font-semibold text-foreground">
+              Nenhum canal por aqui
+            </p>
+            <p>
+              {details.data.channels.length === 0
+                ? "Você não tem permissão para ver os canais desta comunidade. Fale com um administrador."
+                : "Selecione um canal na barra lateral para começar a conversar."}
+            </p>
           </div>
         ) : channel.type === "VOICE" || channel.type === "STAGE" ? (
           <>

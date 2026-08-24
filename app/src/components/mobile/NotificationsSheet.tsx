@@ -36,6 +36,12 @@ function describe(n: {
       return { title: `${who} respondeu você`, body: n.content ?? "" };
     case "friend_request":
       return { title: `${who} enviou um pedido de amizade`, body: "" };
+    case "group_added":
+      return { title: "Você foi adicionado a um grupo", body: n.content ?? "" };
+    case "group_removed":
+      return { title: "Você foi removido de um grupo", body: n.content ?? "" };
+    case "call_started":
+      return { title: `${who} iniciou uma chamada`, body: n.content ?? "" };
     case "moderation":
       return { title: "Aviso da moderação", body: n.content ?? "" };
     default:
