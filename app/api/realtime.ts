@@ -286,10 +286,23 @@ async function voiceJoin(
     const channel = await db.query.channels.findFirst({
       where: eq(schema.channels.id, target.channelId),
     });
-    if (!channel || (channel.type !== "VOICE" && channel.type !== "STAGE"))
+    if (!channel || (channel.type !== "VOICE" && channel.type !== "STAGE")) {
+      send(client, {
+        t: "voice:denied",
+        channelId: target.channelId,
+        reason: "Canal de voz não encontrado.",
+      });
       return;
+    }
     const perms = await getMemberPermissions(client.userId, channel.serverId);
-    if (!perms || !perms.has("CONNECT")) return;
+    if (!perms || !perms.has("CONNECT")) {
+      send(client, {
+        t: "voice:denied",
+        channelId: target.channelId,
+        reason: "Você não tem permissão para entrar neste canal de voz.",
+      });
+      return;
+    }
     roomKey = channelRoomKey(target.channelId);
     channelType = channel.type;
     channelServerId = channel.serverId;
@@ -300,7 +313,14 @@ async function voiceJoin(
         eq(schema.conversationMembers.userId, client.userId)
       ),
     });
-    if (!member) return;
+    if (!member) {
+      send(client, {
+        t: "voice:denied",
+        conversationId: target.conversationId,
+        reason: "Você não participa desta conversa.",
+      });
+      return;
+    }
     roomKey = dmRoomKey(target.conversationId);
   } else {
     return;
