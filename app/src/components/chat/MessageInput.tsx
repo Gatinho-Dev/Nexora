@@ -3,7 +3,9 @@ import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
 import { realtime } from "@/lib/ws";
 import { useChatUIStore } from "@/store/useChatUIStore";
+import { useAppStore } from "@/store/useAppStore";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/hooks/useAuth";
 import { EmojiPickerPro } from "./pickers/EmojiPickerPro";
 import { StickerPicker } from "./pickers/StickerPicker";
 import { GifPicker } from "./GifPicker";
@@ -11,7 +13,11 @@ import { SlashCommandMenu } from "./SlashCommandMenu";
 import { PollCreator } from "./poll/PollCreator";
 import {
   applyTextCommand,
+  computeFunCommand,
+  getFavoriteCommands,
+  pushRecentCommand,
   searchCommands,
+  toggleFavoriteCommand,
   type NexoraCommand,
 } from "@/lib/commands/registry";
 import { formatSize } from "@/lib/formatSize";
@@ -126,6 +132,7 @@ export function MessageInput({
   disabled,
 }: Props) {
   const isMobile = useIsMobile();
+  const { user: authUser } = useAuth();
   const [text, setText] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [spoilerIds, setSpoilerIds] = useState<number[]>([]);
@@ -149,6 +156,9 @@ export function MessageInput({
   );
   const [commandArgs, setCommandArgs] = useState("");
   const slashMatches = slashOpen ? searchCommands(text) : [];
+  const [favoriteCmds, setFavoriteCmds] = useState<string[]>(() =>
+    getFavoriteCommands(),
+  );
   const [pollOpen, setPollOpen] = useState(false);
   const [topicOpen, setTopicOpen] = useState(false);
   const [topicName, setTopicName] = useState("");
@@ -178,6 +188,9 @@ export function MessageInput({
       toast.success("Apelido atualizado!");
       setText("");
     },
+    onError: e => toast.error(e.message),
+  });
+  const friendRequest = trpc.friend.sendRequest.useMutation({
     onError: e => toast.error(e.message),
   });
 
@@ -321,6 +334,49 @@ export function MessageInput({
           return;
         }
         nickCommand.mutate({ channelId, nickname: trimmed });
+        return;
+      }
+      if (command.name === "status") {
+        const valid = ["online", "idle", "dnd", "invisible"];
+        if (!valid.includes(trimmed)) {
+          toast.error("Use: /status online, idle, dnd ou invisible");
+          return;
+        }
+        realtime.send({ t: "presence", status: trimmed as never });
+        if (authUser) {
+          useAppStore
+            .getState()
+            .setPresence(
+              authUser.id,
+              trimmed === "invisible" ? "offline" : trimmed,
+            );
+        }
+        toast.success(`Status alterado para ${trimmed}.`);
+        setText("");
+        return;
+      }
+      if (command.name === "dm") {
+        // Abre o busca-rápido oficial (usuários/DMs) — digite o nome lá.
+        toast("Digite o nome da pessoa no busca-rápido.");
+        useAppStore.getState().setQuickSwitcherOpen(true);
+        setText("");
+        return;
+      }
+      if (command.name === "friend-add") {
+        if (!trimmed) {
+          toast.error("Use: /friend-add usuário");
+          return;
+        }
+        friendRequest.mutate(
+          { username: trimmed },
+          {
+            onSuccess: () => {
+              toast.success(`Pedido de amizade enviado a @${trimmed}.`);
+              setText("");
+            },
+          },
+        );
+        return;
       }
       return;
     }
@@ -336,6 +392,18 @@ export function MessageInput({
       }
       setTopicName(trimmed);
       setTopicOpen(true);
+      setText("");
+      return;
+    }
+    if (command.name === "upload") {
+      fileInputRef.current?.click();
+      return;
+    }
+    if (command.name === "help") {
+      const list = searchCommands("")
+        .map(c => `/${c.name} — ${c.description}`)
+        .join("\n");
+      toast("Comandos disponíveis:\n" + list, { duration: 8000 });
       setText("");
       return;
     }
@@ -372,6 +440,20 @@ export function MessageInput({
       })();
       return;
     }
+    // Diversão: coinflip/dice/random/choose/8ball/calc → envia o resultado.
+    const funResult = computeFunCommand(command.name, args);
+    if (funResult !== null) {
+      send.mutate(
+        { channelId, conversationId, content: funResult, threadId },
+        {
+          onSuccess: () => {
+            setText("");
+            clearDraft();
+          },
+        },
+      );
+      return;
+    }
     const transformed = applyTextCommand(command.name, args);
     if (transformed === null) {
       toast.error("Este comando precisa de um argumento.");
@@ -391,6 +473,8 @@ export function MessageInput({
   const selectCommand = (command: NexoraCommand) => {
     setSlashOpen(false);
     setSlashIndex(0);
+    pushRecentCommand(command.name);
+    setFavoriteCmds(getFavoriteCommands());
     if (command.execution === "client" && !command.args) {
       // /shrug etc.: executa direto
       executeCommand(command, "");
@@ -913,20 +997,23 @@ export function MessageInput({
               <FileText className="h-5 w-5 text-primary" />
               Arquivo
             </button>
-            <div className="h-px bg-white/[0.06]" />
-            <button
-              role="menuitem"
-              disabled={!channelId}
-              onClick={() => {
-                setAttachOpen(false);
-                setTopicName("");
-                setTopicOpen(true);
-              }}
-              className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3.5 text-left text-sm font-semibold text-bodyx transition-colors hover:bg-white/5 active:bg-white/10 disabled:opacity-40"
-            >
-              <MessageSquarePlus className="h-5 w-5 text-primary" />
-              Criar tópico
-            </button>
+            {channelId && (
+              <>
+                <div className="h-px bg-white/[0.06]" />
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setAttachOpen(false);
+                    setTopicName("");
+                    setTopicOpen(true);
+                  }}
+                  className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3.5 text-left text-sm font-semibold text-bodyx transition-colors hover:bg-white/5 active:bg-white/10"
+                >
+                  <MessageSquarePlus className="h-5 w-5 text-primary" />
+                  Criar tópico
+                </button>
+              </>
+            )}
             <button
               role="menuitem"
               onClick={() => {
@@ -976,19 +1063,20 @@ export function MessageInput({
             <FileText className="h-4 w-4 text-primary" />
             Enviar um arquivo
           </button>
-          <button
-            role="menuitem"
-            disabled={!channelId}
-            onClick={() => {
-              setAttachOpen(false);
-              setTopicName("");
-              setTopicOpen(true);
-            }}
-            className="flex min-h-[44px] w-full items-center gap-3 px-3.5 text-left text-xs font-semibold text-bodyx transition-colors hover:bg-white/5 disabled:opacity-40"
-          >
-            <MessageSquarePlus className="h-4 w-4 text-primary" />
-            Criar tópico
-          </button>
+          {channelId && (
+            <button
+              role="menuitem"
+              onClick={() => {
+                setAttachOpen(false);
+                setTopicName("");
+                setTopicOpen(true);
+              }}
+              className="flex min-h-[44px] w-full items-center gap-3 px-3.5 text-left text-xs font-semibold text-bodyx transition-colors hover:bg-white/5"
+            >
+              <MessageSquarePlus className="h-4 w-4 text-primary" />
+              Criar tópico
+            </button>
+          )}
           <button
             role="menuitem"
             onClick={() => {
@@ -1287,6 +1375,10 @@ export function MessageInput({
               onSelect={selectCommand}
               onHover={setSlashIndex}
               query={text.replace(/^\//, "")}
+              favorites={favoriteCmds}
+              onToggleFavorite={name =>
+                setFavoriteCmds(toggleFavoriteCommand(name))
+              }
             />
           )}
 

@@ -142,6 +142,18 @@ export async function buildMessageDTO(
     replyTo,
   };
 
+  if (msg.threadId != null) {
+    const [threadRow] = await db
+      .select({
+        threadId: schema.messages.threadId,
+        count: sql<number>`count(*)`,
+      })
+      .from(schema.messages)
+      .where(eq(schema.messages.threadId, msg.threadId))
+      .groupBy(schema.messages.threadId);
+    dto.threadReplyCount = threadRow ? Number(threadRow.count) : 0;
+  }
+
   const [withPoll] = await attachPolls([dto], null);
   return withPoll;
 }
