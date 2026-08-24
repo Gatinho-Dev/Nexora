@@ -21,6 +21,7 @@ import {
   type SettingsTab,
 } from "@/components/modals/UserSettingsModal";
 import { OPEN_SETTINGS_EVENT } from "@/lib/openUserSettings";
+import { MigrationBanner } from "@/components/MigrationBanner";
 import { BottomNav, type MobileTab } from "@/components/mobile/BottomNav";
 import { YouSheet } from "@/components/mobile/YouSheet";
 import { NotificationsSheet } from "@/components/mobile/NotificationsSheet";
@@ -176,7 +177,10 @@ export function AppLayout() {
   };
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-rail select-none text-[#F2F3F5]">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-rail select-none text-[#F2F3F5]">
+      <MigrationBanner />
+
+      <div className="flex min-h-0 flex-1">
       {/* Desktop Rail */}
       <div className="hidden md:flex h-full">
         <ServerRail onOpenContextMenu={handleOpenContextMenu} />
@@ -299,6 +303,7 @@ export function AppLayout() {
       />
       <IncomingCallToast />
       <VoiceMediaRenderer myUserId={user.id} />
+      </div>
     </div>
   );
 }

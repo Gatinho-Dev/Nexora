@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiUrl } from "@/lib/endpoints";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { MigrationBanner } from "@/components/MigrationBanner";
 
 function getOAuthUrl() {
   const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
@@ -41,7 +42,9 @@ export default function Login() {
   const hasOAuth = !!import.meta.env.VITE_KIMI_AUTH_URL;
 
   return (
-    <main className="min-h-[100dvh] flex items-center justify-center bg-chat p-4 sm:p-6 select-none text-white">
+    <>
+      <MigrationBanner fixed />
+      <main className="min-h-[100dvh] flex items-center justify-center bg-chat p-4 pt-20 sm:p-6 sm:pt-24 select-none text-white">
       <div className="w-full max-w-[480px] rounded-xl bg-sidebar border border-black/20 p-6 sm:p-8 shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
         <div className="flex flex-col items-center mb-8 text-center">
           <NexoraAppIcon className="mb-5 h-12 w-12" />
@@ -139,6 +142,7 @@ export default function Login() {
           </>
         )}
       </div>
-    </main>
+      </main>
+    </>
   );
 }
