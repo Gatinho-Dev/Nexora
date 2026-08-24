@@ -43,6 +43,8 @@ type PendingFile = {
   size: number;
   url: string;
   moderationStatus?: string | null;
+  /** MODERATION_UNAVAILABLE terminal state — user can retry. */
+  failed?: boolean;
 };
 
 /** Terminal moderation states allow sending; others must be awaited. */
@@ -381,7 +383,19 @@ export function MessageInput({
         );
         if (status === "blocked") {
           setFiles(prev => prev.filter(f => f.id !== fileId));
-          toast.error("Mídia bloqueada pela segurança do Nexora.");
+          toast.error(
+            "Essa imagem não pode ser enviada porque viola as regras de segurança da Nexora."
+          );
+          return;
+        }
+        if (status === "review_required") {
+          // MODERATION_UNAVAILABLE: mantém o chip com botão de tentar novamente.
+          setFiles(prev =>
+            prev.map(f =>
+              f.id === fileId ? { ...f, moderationStatus: status, failed: true } : f
+            )
+          );
+          toast.error("Não foi possível verificar essa imagem agora. Tente novamente.");
           return;
         }
         if (status === "approved" || status === "sensitive") return;
@@ -389,9 +403,32 @@ export function MessageInput({
         // transient network error — keep polling
       }
     }
-    // Timed out: drop the chip so it can never be published unmoderated.
-    setFiles(prev => prev.filter(f => f.id !== fileId));
-    toast.error("Não foi possível verificar esta mídia no momento. Tente novamente.");
+    // Timed out polling: mark as failed (never silently publish unmoderated).
+    setFiles(prev =>
+      prev.map(f => (f.id === fileId ? { ...f, failed: true } : f))
+    );
+    toast.error("Não foi possível verificar esta mídia no momento.");
+  };
+
+  /** Owner retries a media stuck in MODERATION_UNAVAILABLE. */
+  const retryFailedMedia = async (fileId: number) => {
+    try {
+      const res = await fetch(apiUrl(`/api/moderation/retry/${fileId}`), {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error();
+      setFiles(prev =>
+        prev.map(f =>
+          f.id === fileId
+            ? { ...f, moderationStatus: "processing", failed: false }
+            : f
+        )
+      );
+      void waitForModeration(fileId);
+    } catch {
+      toast.error("Não foi possível verificar essa imagem agora. Tente novamente em alguns instantes.");
+    }
   };
 
   // Drag and drop listener
@@ -543,10 +580,16 @@ export function MessageInput({
         <div className="flex flex-wrap gap-2 rounded-t-xl bg-sidebar border border-white/10 px-3.5 py-2.5">
           {files.map(f => {
             const isSpoiler = spoilerIds.includes(f.id);
+            const isFailed = f.failed === true;
             return (
               <div
                 key={f.id}
-                className="relative flex items-center gap-2 rounded-lg border border-white/10 bg-panel px-2.5 py-1.5 text-xs text-white"
+                className={cn(
+                  "relative flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs",
+                  isFailed
+                    ? "border-amber-400/40 bg-amber-400/[0.08] text-amber-100"
+                    : "border-white/10 bg-panel text-bodyx"
+                )}
               >
                 {f.mimeType.startsWith("image/") ? (
                   <div className="relative">
@@ -589,6 +632,26 @@ export function MessageInput({
                     ) : (
                       <Eye className="h-3 w-3" />
                     )}
+                  </button>
+                )}
+                {isFailed && (
+                  <button
+                    type="button"
+                    title="Não foi possível verificar agora — tentar novamente"
+                    onClick={() => retryFailedMedia(f.id)}
+                    className="flex items-center gap-1 rounded-md bg-black/40 px-1.5 py-1 text-[10px] font-bold text-amber-200 hover:bg-black/60"
+                  >
+                    ⚠ Tentar novamente
+                  </button>
+                )}
+                {isFailed && (
+                  <button
+                    type="button"
+                    title="Não foi possível verificar agora — tentar novamente"
+                    onClick={() => retryFailedMedia(f.id)}
+                    className="flex items-center gap-1 rounded-md bg-black/40 px-1.5 py-1 text-[10px] font-bold text-amber-200 hover:bg-black/60"
+                  >
+                    ⚠ Tentar novamente
                   </button>
                 )}
                 <button
