@@ -1,6 +1,7 @@
 import { memo, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { ImageViewer } from "./ImageViewer";
+import { PollMessage } from "./poll/PollMessage";
 import {
   Dialog,
   DialogContent,
@@ -316,6 +317,15 @@ function MessageItemBase({
                 </div>
               </div>
             </div>
+          ) : message.poll ? (
+            <PollMessageView message={message} canManage={canManageMessages} myId={myId} />
+          ) : message.tag === "sticker" ? (
+            <img
+              src={`/stickers/${message.content}.svg`}
+              alt={`Sticker ${message.content}`}
+              loading="lazy"
+              className="h-40 w-40 select-none"
+            />
           ) : (
             <>
               {message.content && (
@@ -817,6 +827,35 @@ function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
 }
 
 export const MessageItem = memo(MessageItemBase);
+
+/** Enquete embutida: votar/encerrar com atualização via realtime (poll:update). */
+function PollMessageView({
+  message,
+  canManage,
+  myId,
+}: {
+  message: MessageDTO;
+  canManage: boolean;
+  myId: number;
+}) {
+  const vote = trpc.poll.vote.useMutation();
+  const close = trpc.poll.close.useMutation();
+  const poll = message.poll;
+  if (!poll) return null;
+  const canClose = message.authorId === myId || canManage;
+
+  return (
+    <PollMessage
+      poll={poll}
+      busy={vote.isPending || close.isPending}
+      canClose={canClose}
+      onVote={answerIds =>
+        vote.mutate({ messageId: message.id, answerIds })
+      }
+      onClose={() => close.mutate({ messageId: message.id })}
+    />
+  );
+}
 
 function ThreadDialog({
   open,

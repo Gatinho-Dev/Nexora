@@ -11,6 +11,8 @@ import { badgeRouter } from "./badgeRouter";
 import { adminRouter } from "./adminRouter";
 import { safetyRouter } from "./safetyRouter";
 import { threadRouter, announceRouter, webhookRouter } from "./communityRouters";
+import { pollRouter } from "./pollRouter";
+import { commandRouter } from "./services/commandRouter";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -29,6 +31,8 @@ export const appRouter = createRouter({
   admin: adminRouter,
   safety: safetyRouter,
   threads: threadRouter,
+  poll: pollRouter,
+  command: commandRouter,
   announce: announceRouter,
   webhook: webhookRouter,
 });

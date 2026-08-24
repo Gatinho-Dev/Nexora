@@ -720,9 +720,59 @@ export const threads = mysqlTable(
     createdById: bigint("createdById", { mode: "number", unsigned: true }).notNull(),
     private: boolean("private").default(false).notNull(),
     archivedAt: timestamp("archivedAt"),
+    lockedAt: timestamp("lockedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({ channelIdx: index("th_channel_idx").on(table.channelId) }),
+);
+
+
+// ── Enquetes ──────────────────────────────────────────────────
+export const polls = mysqlTable("polls", {
+  id: serial("id").primaryKey(),
+  messageId: bigint("messageId", { mode: "number", unsigned: true })
+    .notNull()
+    .unique(),
+  question: varchar("question", { length: 300 }).notNull(),
+  allowMultiple: boolean("allowMultiple").default(false).notNull(),
+  expiresAt: timestamp("expiresAt"),
+  closedAt: timestamp("closedAt"),
+  createdByUserId: bigint("createdByUserId", {
+    mode: "number",
+    unsigned: true,
+  }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const pollAnswers = mysqlTable(
+  "poll_answers",
+  {
+    id: serial("id").primaryKey(),
+    pollId: bigint("pollId", { mode: "number", unsigned: true }).notNull(),
+    text: varchar("text", { length: 120 }).notNull(),
+    position: int("position").default(0).notNull(),
+  },
+  (table) => ({ pollIdx: index("poll_answers_poll_idx").on(table.pollId) }),
+);
+
+export const pollVotes = mysqlTable(
+  "poll_votes",
+  {
+    id: serial("id").primaryKey(),
+    pollId: bigint("pollId", { mode: "number", unsigned: true }).notNull(),
+    answerId: bigint("answerId", { mode: "number", unsigned: true }).notNull(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    // Um voto por resposta por usuário — a chave garante idempotência.
+    voteUniq: uniqueIndex("poll_votes_uniq").on(
+      table.pollId,
+      table.userId,
+      table.answerId,
+    ),
+    userIdx: index("poll_votes_user_idx").on(table.userId),
+  }),
 );
 
 // ── Announcement channel follows ──────────────────────────────

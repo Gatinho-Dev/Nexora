@@ -92,6 +92,13 @@
       "when": 1787708400000,
       "tag": "0012_badges_global_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1787794800000,
+      "tag": "0013_polls_thread_lock",
+      "breakpoints": true
     }
   ]
 }

@@ -206,6 +206,19 @@ export function useRealtime(myUserId: number | undefined) {
           }
           break;
         }
+        case "poll:update": {
+          // Mescla a enquete atualizada na mensagem do store (todos os
+          // visualizadores do canal/conversa recebem o mesmo evento).
+          const roomKey = event.channelId
+            ? channelKey(event.channelId)
+            : dmKey(event.conversationId!);
+          const current = useAppStore.getState().messages[roomKey];
+          const target = current?.find(m => m.id === event.messageId);
+          if (target) {
+            store.updateMessage({ ...target, poll: event.poll });
+          }
+          break;
+        }
         case "server:refresh":
           utils.server.get.invalidate();
           utils.server.list.invalidate();

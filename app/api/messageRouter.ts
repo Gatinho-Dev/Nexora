@@ -4,6 +4,7 @@ import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
 import { publicFileUrl } from "./lib/urls";
+import { attachPolls } from "./services/pollService";
 import { RateLimits } from "@contracts/constants";
 import type {
   MessageDTO,
@@ -94,7 +95,7 @@ export async function buildMessageDTO(
     }
   }
 
-  return {
+  const dto: MessageDTO = {
     id: msg.id,
     channelId: msg.channelId,
     conversationId: msg.conversationId,
@@ -140,6 +141,9 @@ export async function buildMessageDTO(
     reactions: [...reactionMap.values()],
     replyTo,
   };
+
+  const [withPoll] = await attachPolls([dto], null);
+  return withPoll;
 }
 
 async function notifyUsers(

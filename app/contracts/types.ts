@@ -97,6 +97,7 @@ export type MessageDTO = {
     content: string;
     author: PublicUser;
   } | null;
+  poll?: PollDTO | null;
 };
 
 export type ChannelDTO = {
@@ -284,6 +285,19 @@ export type OfficialAnnouncementDTO = {
   };
 };
 
+export type PollDTO = {
+  id: number;
+  messageId: number;
+  question: string;
+  allowMultiple: boolean;
+  expiresAt: string | Date | null;
+  closedAt: string | Date | null;
+  answers: { id: number; text: string; votes: number }[];
+  totalVotes: number;
+  /** Votos do usuário visualizador (vazio para perfis anônimos). */
+  myAnswerIds: number[];
+};
+
 export type BadgeRarity =
   | "COMMON"
   | "UNCOMMON"
@@ -419,6 +433,13 @@ export type WSServerEvent =
     }
   | { t: "notification"; notification: NotificationDTO }
   | { t: "official:announcement"; announcement: OfficialAnnouncementDTO }
+  | {
+      t: "poll:update";
+      messageId: number;
+      channelId?: number;
+      conversationId?: number;
+      poll: PollDTO;
+    }
   | { t: "server:refresh"; serverId: number }
   | { t: "events:refresh"; serverId: number }
   | { t: "stage:hands"; channelId?: number; userIds: number[] }
