@@ -133,7 +133,7 @@ function VideoTile({
       {hasVideo && (
         <button
           onClick={onToggleFocus}
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover:opacity-100"
+          className="touch-show absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover:opacity-100"
           title={focused ? "Restaurar visualização" : "Expandir stream"}
           aria-label={focused ? "Restaurar visualização" : "Expandir stream"}
         >
@@ -664,7 +664,9 @@ export function VoiceView({
             </TooltipContent>
           </Tooltip>
 
-          {/* Screen Share */}
+          {/* Screen Share — indisponível em navegadores móveis */}
+          {typeof navigator !== "undefined" &&
+            !!navigator.mediaDevices?.getDisplayMedia && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -706,6 +708,7 @@ export function VoiceView({
               {screenOn ? "Parar compartilhamento" : "Compartilhar tela"}
             </TooltipContent>
           </Tooltip>
+          )}
 
           <Tooltip>
             <TooltipTrigger asChild>

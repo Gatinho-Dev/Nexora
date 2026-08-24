@@ -36,7 +36,11 @@ export function BottomNav({
         f.status === "PENDING" &&
         f.direction === "incoming"
     ).length ?? 0;
-  const notifBadge = friendRequests;
+  const unreadNotifications = trpc.notification.unreadCount.useQuery(
+    undefined,
+    { refetchInterval: 60_000, staleTime: 30_000 }
+  );
+  const notifBadge = (unreadNotifications.data?.count ?? 0) + friendRequests;
 
   const inServer = location.pathname.startsWith("/channels/") &&
     !location.pathname.startsWith("/channels/@me");
@@ -78,19 +82,27 @@ export function BottomNav({
               aria-label={item.label}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 pt-1.5 text-[10px] font-semibold transition-colors select-none",
+                "relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 pt-1.5 text-[10px] font-semibold transition-colors select-none active:scale-95",
                 active ? "text-white" : "text-muted2 hover:text-bodyx"
               )}
             >
+              {active && (
+                <span
+                  aria-hidden
+                  className="absolute top-0 h-0.5 w-8 rounded-full bg-primary"
+                />
+              )}
               <span className="relative">
                 {item.icon}
                 {showBadge && (
-                  <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white">
+                  <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white ring-2 ring-rail">
                     {(item.badge ?? 0) > 99 ? "99+" : item.badge}
                   </span>
                 )}
               </span>
-              <span className={cn(active && "text-primary")}>{item.label}</span>
+              <span className={cn(active ? "text-white" : "")}>
+                {item.label}
+              </span>
             </button>
           );
         })}

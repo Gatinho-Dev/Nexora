@@ -5,16 +5,22 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRealtime } from "@/hooks/useRealtime";
 import { useAppStore } from "@/store/useAppStore";
 import { ServerRail } from "@/components/ServerRail";
-import { NotificationsBell } from "@/components/NotificationsBell";
 import { ContextMenu, type ContextMenuState } from "@/components/ContextMenu";
 import { ProfileCard } from "@/components/ProfileCard";
 import { QuickSwitcherModal } from "@/components/modals/QuickSwitcherModal";
 import { ShortcutsModal } from "@/components/modals/ShortcutsModal";
-import { Menu, Users, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VoiceMediaRenderer } from "@/components/voice/VoiceMediaRenderer";
 import { IncomingCallToast } from "@/components/voice/IncomingCallToast";
+import { VoiceConnectionBar } from "@/components/mobile/VoiceConnectionBar";
+import { useVoiceCallView } from "@/hooks/useVoiceCallView";
 import { PermanentBanScreen } from "@/components/safety/PermanentBanScreen";
+import {
+  UserSettingsModal,
+  type SettingsTab,
+} from "@/components/modals/UserSettingsModal";
+import { OPEN_SETTINGS_EVENT } from "@/lib/openUserSettings";
 import { BottomNav, type MobileTab } from "@/components/mobile/BottomNav";
 import { YouSheet } from "@/components/mobile/YouSheet";
 import { NotificationsSheet } from "@/components/mobile/NotificationsSheet";
@@ -31,7 +37,6 @@ export function AppLayout() {
   const navigate = useNavigate();
   const mobileNavOpen = useAppStore(s => s.mobileNavOpen);
   const setMobileNavOpen = useAppStore(s => s.setMobileNavOpen);
-  const membersOpen = useAppStore(s => s.membersOpen);
   const setMembersOpen = useAppStore(s => s.setMembersOpen);
 
   // Global modals and context menu state
@@ -40,6 +45,18 @@ export function AppLayout() {
     null
   );
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("account");
+  useEffect(() => {
+    const openSettings = (e: Event) => {
+      const tab = (e as CustomEvent<{ tab?: SettingsTab }>).detail?.tab;
+      if (tab) setSettingsTab(tab);
+      setSettingsOpen(true);
+    };
+    window.addEventListener(OPEN_SETTINGS_EVENT, openSettings);
+    return () =>
+      window.removeEventListener(OPEN_SETTINGS_EVENT, openSettings);
+  }, []);
   const [mobileTab, setMobileTab] = useState<MobileTab | null>(null);
   useEffect(() => {
     const open = () => setMobileTab("servers");
@@ -71,9 +88,9 @@ export function AppLayout() {
     );
   }, []);
   const keyboardOffset = useKeyboardOffset(true);
-  const voiceChannelIdGlobal = useAppStore(st => st.voiceChannelId);
-  const voiceConversationIdGlobal = useAppStore(st => st.voiceConversationId);
   const quickSwitcherOpen = useAppStore(st => st.quickSwitcherOpen);
+  const wsConnected = useAppStore(st => st.wsConnected);
+  const { inCall, viewingCall } = useVoiceCallView();
 
   // Sync unread counters
   const unread = trpc.message.unread.useQuery(undefined, { enabled: !!user });
@@ -113,7 +130,13 @@ export function AppLayout() {
     );
   }
 
-  const inVoiceCall = voiceChannelIdGlobal !== null || voiceConversationIdGlobal !== null;
+  const inVoiceCall = inCall;
+  const mobileBottomPadding =
+    !inVoiceCall
+      ? "pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0"
+      : viewingCall
+        ? ""
+        : "pb-[calc(66px+env(safe-area-inset-bottom))] md:pb-0";
 
   // Server-side enforced ban — presentation only.
   if (safety.data?.safety.accountStatus === "permanently_banned") {
@@ -123,6 +146,9 @@ export function AppLayout() {
   const inServer =
     location.pathname.startsWith("/channels/") &&
     !location.pathname.startsWith("/channels/@me");
+  // Top bar mobile só onde não há header próprio com menu/voltar.
+  const inDmConversation = /^\/channels\/@me\/\d+/.test(location.pathname);
+  const showMobileTopBar = !inServer && !inDmConversation;
 
   function inferTab(pathname: string): MobileTab {
     if (pathname.startsWith("/channels/@me")) return "home";
@@ -173,7 +199,7 @@ export function AppLayout() {
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col",
-          !inVoiceCall && "pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0"
+          mobileBottomPadding
         )}
         style={
           keyboardOffset > 0
@@ -193,45 +219,43 @@ export function AppLayout() {
             </span>
           </button>
         )}
-        {/* Mobile top bar */}
-        <div className="flex h-12 items-center gap-2 border-b border-black/20 px-3 md:hidden bg-sidebar text-foreground">
-          <button
-            onClick={() => setMobileNavOpen(!mobileNavOpen)}
-            className="flex h-11 w-11 items-center justify-center rounded-md text-muted2 hover:bg-hov hover:text-white"
-            aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
-            title="Menu"
+        {/* Offline banner */}
+        {!wsConnected && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center justify-center gap-2 bg-amber-500/15 px-3 py-1.5 text-[11px] font-semibold text-amber-200 md:hidden"
           >
-            {mobileNavOpen ? (
-              <X className="h-5 w-5" />
-            ) : (
-              <Menu className="h-5 w-5" />
-            )}
-          </button>
-          <button
-            onClick={() => navigate("/channels/@me")}
-            className="flex items-center gap-2 min-w-0"
-            aria-label="Ir para o início da Nexora"
-            title="Nexora"
-          >
-            <NexoraLogo className="h-6 w-[112px]" decorative />
-          </button>
-          <div className="ml-auto flex items-center gap-1">
-            {inServer && (
-              <button
-                onClick={() => setMembersOpen(!membersOpen)}
-                className={cn(
-                  "flex h-11 w-11 items-center justify-center rounded-md text-muted2 hover:bg-hov",
-                  membersOpen && "bg-act text-foreground"
-                )}
-                aria-label={membersOpen ? "Ocultar membros" : "Mostrar membros"}
-                title="Membros"
-              >
-                <Users className="h-5 w-5" />
-              </button>
-            )}
-            <NotificationsBell onOpenProfile={setActiveProfileUserId} />
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300" />
+            Sem conexão — reconectando…
           </div>
-        </div>
+        )}
+        {/* Mobile top bar — só nas telas sem header próprio (home, requests,
+            oficial). Em servidores e conversas o header da tela é único. */}
+        {showMobileTopBar && (
+          <div className="flex h-12 items-center gap-2 border-b border-black/20 px-3 md:hidden bg-sidebar text-foreground">
+            <button
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}
+              className="flex h-11 w-11 items-center justify-center rounded-md text-muted2 hover:bg-hov hover:text-white"
+              aria-label={mobileNavOpen ? "Fechar menu" : "Abrir menu"}
+              title="Menu"
+            >
+              {mobileNavOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
+            </button>
+            <button
+              onClick={() => navigate("/channels/@me")}
+              className="flex items-center gap-2 min-w-0"
+              aria-label="Ir para o início da Nexora"
+              title="Nexora"
+            >
+              <NexoraLogo className="h-6 w-[112px]" decorative />
+            </button>
+          </div>
+        )}
 
         <Outlet
           context={{
@@ -248,6 +272,7 @@ export function AppLayout() {
           onTabChange={handleMobileTab}
         />
       )}
+      <VoiceConnectionBar />
       <YouSheet open={mobileTab === "you"} onClose={() => setMobileTab(null)} />
       <NotificationsSheet open={mobileTab === "notifications"} onClose={() => setMobileTab(null)} />
       <ServersSheet open={mobileTab === "servers"} onClose={() => setMobileTab(null)} />
@@ -267,6 +292,11 @@ export function AppLayout() {
         onOpenChange={v => useAppStore.getState().setQuickSwitcherOpen(v)}
       />
       <ShortcutsModal open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <UserSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        initialTab={settingsTab}
+      />
       <IncomingCallToast />
       <VoiceMediaRenderer myUserId={user.id} />
     </div>

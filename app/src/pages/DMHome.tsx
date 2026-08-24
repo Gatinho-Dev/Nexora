@@ -55,7 +55,7 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
         <QuickAction
           icon={<UserPlus className="h-5 w-5" />}
           label="Amigos"
-          onClick={() => navigate("/channels/@me?tab=friends")}
+          onClick={() => navigate("/channels/@me/friends")}
         />
         <QuickAction
           icon={<UsersRound className="h-5 w-5" />}
@@ -76,7 +76,17 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
       {/* Conversas recentes */}
       <ul className="flex-1 overflow-y-auto px-2 pb-4">
         {conversations.isLoading && (
-          <li className="py-10 text-center text-xs text-muted2">Carregando...</li>
+          <>
+            {[1, 2, 3, 4, 5].map(i => (
+              <li key={i} className="flex items-center gap-3 px-3 py-2.5 animate-pulse select-none">
+                <div className="h-12 w-12 shrink-0 rounded-full bg-white/[0.06]" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-3.5 w-32 rounded bg-white/[0.08]" />
+                  <div className="h-3 w-3/4 rounded bg-white/[0.05]" />
+                </div>
+              </li>
+            ))}
+          </>
         )}
         {(conversations.data?.length ?? 0) === 0 && !conversations.isLoading && (
           <li className="flex flex-col items-center gap-3 py-16 text-center">

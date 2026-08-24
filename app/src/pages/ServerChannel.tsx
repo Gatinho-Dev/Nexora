@@ -9,7 +9,7 @@ import { VoiceView } from "@/components/VoiceView";
 import { ForumView } from "@/components/ForumView";
 import { SidebarPortal } from "@/components/SidebarPortal";
 import { NotificationsBell } from "@/components/NotificationsBell";
-import { Users, X, ArrowLeft } from "lucide-react";
+import { Users, X, Menu } from "lucide-react";
 import {
   IconHash,
   IconVoice,
@@ -132,12 +132,12 @@ export function ServerChannel() {
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/20 px-4 bg-chat text-foreground select-none shadow-sm">
       <div className="flex items-center gap-2 min-w-0">
         <button
-          onClick={() => navigate(`/channels/${serverId}`)}
+          onClick={() => useAppStore.getState().setMobileNavOpen(true)}
           className="-ml-1 rounded p-1 text-muted2 hover:bg-white/10 hover:text-foreground md:hidden"
-          aria-label="Voltar aos canais"
-          title="Voltar"
+          aria-label="Abrir lista de canais"
+          title="Canais"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <Menu className="h-5 w-5" />
         </button>
         {channel.type === "VOICE" ? (
           <IconVoice className="h-5 w-5 text-emerald-400 shrink-0" />
@@ -162,20 +162,28 @@ export function ServerChannel() {
             Seguidores
           </button>
         )}
-        <div className="hidden md:block">
-          <NotificationsBell onOpenProfile={onOpenProfile} />
-        </div>
+        <NotificationsBell onOpenProfile={onOpenProfile} />
         {channel.type === "TEXT" && (
-          <button
-            onClick={() => setDesktopMembers(!desktopMembers)}
-            className={cn(
-              "hidden md:flex rounded-lg p-1.5 text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors",
-              desktopMembers && "bg-white/10 text-foreground"
-            )}
-            title="Lista de membros"
-          >
-            <Users className="h-4 w-4" />
-          </button>
+          <>
+            <button
+              onClick={() => setDesktopMembers(!desktopMembers)}
+              className={cn(
+                "hidden md:flex rounded-lg p-1.5 text-muted2 hover:bg-black/[0.06] hover:text-foreground transition-colors",
+                desktopMembers && "bg-white/10 text-foreground"
+              )}
+              title="Lista de membros"
+            >
+              <Users className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => useAppStore.getState().setMembersOpen(true)}
+              className="rounded-lg p-1.5 text-muted2 hover:bg-white/10 hover:text-foreground transition-colors md:hidden"
+              aria-label="Mostrar membros"
+              title="Membros"
+            >
+              <Users className="h-5 w-5" />
+            </button>
+          </>
         )}
       </div>
     </header>
@@ -328,7 +336,7 @@ export function ServerChannel() {
 
       {/* Mobile Member Overlay */}
       {channel?.type === "TEXT" && membersOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="fixed inset-0 z-50 md:hidden">
           <div
             className="absolute inset-0 bg-black/60"
             onClick={() => setMembersOpen(false)}
