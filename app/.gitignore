@@ -38,3 +38,6 @@ build/
 # Test coverage
 coverage/
 .nyc_output/
+
+# Backups locais de banco (dump com dados sensíveis)
+db-backups/

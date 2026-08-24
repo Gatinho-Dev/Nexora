@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `readReceipts` boolean DEFAULT true NOT NULL;

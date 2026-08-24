@@ -38,6 +38,11 @@ const NexoraAdminPanel = lazy(() =>
 const InvitePage = lazy(() =>
   import("./pages/InvitePage").then(module => ({ default: module.InvitePage }))
 );
+const GroupInvitePage = lazy(() =>
+  import("./pages/GroupInvitePage").then(module => ({
+    default: module.GroupInvitePage,
+  }))
+);
 const ThreadViewPage = lazy(() =>
   import("./components/ThreadView").then(module => ({
     default: module.ThreadView,
@@ -106,6 +111,14 @@ export default function App() {
         element={
           <Deferred>
             <InvitePage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/invite/group/:code"
+        element={
+          <Deferred>
+            <GroupInvitePage />
           </Deferred>
         }
       />

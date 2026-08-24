@@ -535,6 +535,25 @@ function ProfileTab() {
 }
 
 function PrivacyTab() {
+  const utils = trpc.useUtils();
+  const privacy = trpc.account.privacy.useQuery();
+  const [readReceipts, setReadReceipts] = useState<boolean | null>(null);
+
+  const setPrivacy = trpc.account.setPrivacy.useMutation({
+    onSuccess: () => void utils.account.privacy.invalidate(),
+    onError: e => toast.error(e.message),
+  });
+
+  // Sincroniza com o servidor quando os dados chegam.
+  const serverValue = privacy.data?.readReceipts ?? true;
+  const [synced, setSynced] = useState(false);
+  if (!synced && privacy.isSuccess) {
+    setSynced(true);
+    setReadReceipts(serverValue);
+  }
+
+  const current = readReceipts ?? serverValue;
+
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-white">Privacidade e Segurança</h2>
@@ -542,6 +561,30 @@ function PrivacyTab() {
         Controle quem pode enviar mensagens diretas e solicitações de amizade na
         Nexora.
       </p>
+
+      {/* Recibos de leitura (grupos — item 12) */}
+      <div className="rounded-xl bg-sidebar border border-white/10 p-4 space-y-1">
+        <div className="flex items-center justify-between gap-3">
+          <span>
+            <span className="block text-sm font-bold text-white">
+              Recibos de leitura
+            </span>
+            <span className="block text-xs text-muted2 mt-0.5 max-w-md">
+              Quando desativado, seu nome não aparece em “Visto por” nos grupos.
+            </span>
+          </span>
+          <Switch
+            checked={current}
+            disabled={setPrivacy.isPending || !privacy.isSuccess}
+            onCheckedChange={v => {
+              setReadReceipts(v);
+              setPrivacy.mutate({ readReceipts: v });
+            }}
+            aria-label="Recibos de leitura"
+          />
+        </div>
+      </div>
+
       <div className="rounded-xl bg-sidebar border border-white/10 p-4 space-y-3 text-xs">
         <div className="flex items-center justify-between">
           <span>Permitir mensagens diretas de membros do servidor</span>

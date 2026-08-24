@@ -1,6 +1,6 @@
 export type * from "../db/schema";
 export * from "./errors";
-import type { Permission, UserStatus } from "./constants";
+import type { GroupRole, Permission, UserStatus } from "./constants";
 
 // ── Public user representation (safe to expose) ───────────────
 export type PublicUser = {
@@ -179,6 +179,42 @@ export type ConversationDTO = {
   unreadCount: number;
   /** True when the other person is not a friend and I never replied. */
   isRequest?: boolean;
+  // ── Group conversations ─────────────────────────────────────
+  name?: string | null;
+  avatarUrl?: string | null;
+  description?: string | null;
+  ownerId?: number | null;
+  memberCount?: number;
+  myRole?: GroupRole | null;
+  updatedAt?: string | Date;
+  /** Minha configuração de notificação neste grupo. */
+  notificationLevel?: "all" | "mentions" | "muted";
+  mutedUntil?: string | Date | null;
+};
+
+export type GroupMemberDTO = {
+  user: PublicUser;
+  role: GroupRole;
+  joinedAt: string | Date;
+};
+
+export type GroupInviteDTO = {
+  id: number;
+  code?: string;
+  url?: string;
+  createdByUserId: number;
+  expiresAt: string | Date | null;
+  maxUses: number | null;
+  uses: number;
+  revokedAt: string | Date | null;
+  createdAt: string | Date;
+};
+
+export type PinnedMessageDTO = {
+  messageId: number;
+  pinnedByUserId: number;
+  createdAt: string | Date;
+  message: MessageDTO | null;
 };
 
 export type ServerEventDTO = {
@@ -276,6 +312,7 @@ export type WSClientEvent =
   | { t: "ping" }
   | { t: "typing"; channelId?: number; conversationId?: number }
   | { t: "presence"; status: UserStatus }
+  | { t: "group:update"; conversationId: number }
   | { t: "stage:hand"; channelId?: number; raised: boolean }
   | { t: "voice:join"; channelId?: number; conversationId?: number }
   | { t: "voice:leave"; voiceSessionId?: string }
@@ -346,5 +383,6 @@ export type WSServerEvent =
   | { t: "server:refresh"; serverId: number }
   | { t: "events:refresh"; serverId: number }
   | { t: "stage:hands"; channelId?: number; userIds: number[] }
+  | { t: "group:update"; conversationId: number }
   | { t: "dm:refresh" }
   | { t: "friends:refresh" };

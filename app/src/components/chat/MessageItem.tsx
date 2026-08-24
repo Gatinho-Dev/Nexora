@@ -131,6 +131,30 @@ function MessageItemBase({
 
   const isMine = message.authorId === myId;
   const isEditing = editing?.id === message.id;
+  const isSystem = message.tag === "system";
+
+  // Eventos administrativos de grupo (item 36): estilo discreto e centralizado.
+  if (isSystem) {
+    return (
+      <div
+        id={`msg-${message.id}`}
+        className="flex items-center gap-3 px-4 py-1.5 select-none"
+        role="note"
+      >
+        <div className="h-px flex-1 bg-white/[0.07]" />
+        <span className="max-w-[70%] truncate text-center text-[11px] font-medium text-muted2">
+          {message.content}
+        </span>
+        <span
+          className="text-[10px] text-faint"
+          title={formatFullDate(message.createdAt)}
+        >
+          {formatTime(message.createdAt)}
+        </span>
+        <div className="h-px flex-1 bg-white/[0.07]" />
+      </div>
+    );
+  }
 
   const edit = trpc.message.edit.useMutation({
     onSuccess: () => setEditing(null),

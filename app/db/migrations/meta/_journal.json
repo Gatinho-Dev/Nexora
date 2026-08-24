@@ -57,6 +57,20 @@
       "when": 1787519220005,
       "tag": "0007_message_tag",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1787520559735,
+      "tag": "0008_group_conversations",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1787529941506,
+      "tag": "0009_read_receipts_privacy",
+      "breakpoints": true
     }
   ]
 }

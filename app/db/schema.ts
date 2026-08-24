@@ -36,6 +36,8 @@ export const users = mysqlTable("users", {
     .default("offline")
     .notNull(),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  /** Privacidade: quando false, o usuário não aparece em recibos "Visto por". */
+  readReceipts: boolean("readReceipts").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt")
     .defaultNow()
@@ -238,7 +240,16 @@ export const friendships = mysqlTable(
 export const conversations = mysqlTable("conversations", {
   id: serial("id").primaryKey(),
   isGroup: boolean("isGroup").default(false).notNull(),
+  /** Group conversations only: display name (null = generated from members). */
+  name: varchar("name", { length: 100 }),
+  avatarUrl: text("avatarUrl"),
+  description: varchar("description", { length: 500 }),
+  ownerId: bigint("ownerId", { mode: "number", unsigned: true }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
 });
 
 export const conversationMembers = mysqlTable(
@@ -247,11 +258,66 @@ export const conversationMembers = mysqlTable(
     id: serial("id").primaryKey(),
     conversationId: bigint("conversationId", { mode: "number", unsigned: true }).notNull(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    role: mysqlEnum("role", ["owner", "admin", "member"])
+      .default("member")
+      .notNull(),
+    nickname: varchar("nickname", { length: 64 }),
+    mutedUntil: timestamp("mutedUntil"),
+    notificationLevel: mysqlEnum("notificationLevel", ["all", "mentions", "muted"])
+      .default("all")
+      .notNull(),
     joinedAt: timestamp("joinedAt").defaultNow().notNull(),
   },
   (table) => ({
     uniqIdx: uniqueIndex("cm_uniq_idx").on(table.conversationId, table.userId),
     userIdx: index("cm_user_idx").on(table.userId),
+  }),
+);
+
+// ── Group invites ─────────────────────────────────────────────
+// Invite links for group conversations. The raw token is never stored —
+// only its sha256 hash, mirroring the webhook secret pattern.
+export const groupInvites = mysqlTable(
+  "group_invites",
+  {
+    id: serial("id").primaryKey(),
+    conversationId: bigint("conversationId", { mode: "number", unsigned: true })
+      .notNull(),
+    /** sha256 hex of the raw invite token — raw token lives only in the link. */
+    tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
+    createdByUserId: bigint("createdByUserId", { mode: "number", unsigned: true })
+      .notNull(),
+    expiresAt: timestamp("expiresAt"),
+    maxUses: int("maxUses"),
+    uses: int("uses").default(0).notNull(),
+    revokedAt: timestamp("revokedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    tokenUniq: uniqueIndex("gi_token_uniq").on(table.tokenHash),
+    convIdx: index("gi_conv_idx").on(table.conversationId),
+  }),
+);
+
+// ── Pinned messages (group conversations) ─────────────────────
+export const pinnedMessages = mysqlTable(
+  "pinned_messages",
+  {
+    id: serial("id").primaryKey(),
+    conversationId: bigint("conversationId", { mode: "number", unsigned: true })
+      .notNull(),
+    messageId: bigint("messageId", { mode: "number", unsigned: true })
+      .notNull(),
+    pinnedByUserId: bigint("pinnedByUserId", { mode: "number", unsigned: true })
+      .notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqIdx: uniqueIndex("pm_conv_msg_uniq").on(
+      table.conversationId,
+      table.messageId,
+    ),
+    convIdx: index("pm_conv_idx").on(table.conversationId),
   }),
 );
 
@@ -673,6 +739,8 @@ export type MemberRole = typeof memberRoles.$inferSelect;
 export type Friendship = typeof friendships.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type ConversationMember = typeof conversationMembers.$inferSelect;
+export type GroupInvite = typeof groupInvites.$inferSelect;
+export type PinnedMessage = typeof pinnedMessages.$inferSelect;
 export type Invite = typeof invites.$inferSelect;
 export type Ban = typeof bans.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;

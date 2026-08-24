@@ -20,16 +20,14 @@ async function buildConversationDTO(
   if (!conversation) return null;
 
   const memberRows = await db
-    .select()
+    .select({ user: schema.users })
     .from(schema.conversationMembers)
+    .innerJoin(
+      schema.users,
+      eq(schema.users.id, schema.conversationMembers.userId),
+    )
     .where(eq(schema.conversationMembers.conversationId, conversationId));
-  const members = [];
-  for (const m of memberRows) {
-    const user = await db.query.users.findFirst({
-      where: eq(schema.users.id, m.userId),
-    });
-    if (user) members.push(toPublicUser(user));
-  }
+  const members = memberRows.map(m => toPublicUser(m.user));
 
   const [lastMessage] = await db
     .select()
@@ -90,11 +88,29 @@ async function buildConversationDTO(
     }
   }
 
+  // Group fields: role + notification prefs of the viewer inside the group.
+  let myRole: ConversationDTO["myRole"] = null;
+  let notificationLevel: ConversationDTO["notificationLevel"] = undefined;
+  let mutedUntil: Date | null = null;
+  if (conversation.isGroup) {
+    const me = await db.query.conversationMembers.findFirst({
+      where: and(
+        eq(schema.conversationMembers.conversationId, conversationId),
+        eq(schema.conversationMembers.userId, viewerId),
+      ),
+    });
+    myRole = (me?.role as ConversationDTO["myRole"]) ?? null;
+    notificationLevel = me?.notificationLevel ?? "all";
+    mutedUntil = me?.mutedUntil ?? null;
+  }
+
   return {
     id: conversation.id,
     isGroup: conversation.isGroup,
     members,
-    otherUser: members.find((m) => m.id !== viewerId) ?? null,
+    otherUser: conversation.isGroup
+      ? null
+      : (members.find((m) => m.id !== viewerId) ?? null),
     lastMessage: lastMessage
       ? {
           id: lastMessage.id,
@@ -105,6 +121,15 @@ async function buildConversationDTO(
       : null,
     unreadCount: Number(count),
     isRequest,
+    name: conversation.name,
+    avatarUrl: conversation.avatarUrl,
+    description: conversation.description,
+    ownerId: conversation.ownerId,
+    memberCount: members.length,
+    myRole,
+    updatedAt: conversation.updatedAt,
+    notificationLevel,
+    mutedUntil,
   };
 }
 
@@ -226,6 +251,16 @@ export const dmRouter = createRouter({
     .mutation(async ({ ctx, input }) => {
       await requireConversationAccess(ctx.user.id, input.conversationId);
       const db = getDb();
+      // Groups are left or deleted through the group router instead.
+      const conversation = await db.query.conversations.findFirst({
+        where: eq(schema.conversations.id, input.conversationId),
+      });
+      if (conversation?.isGroup) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Grupos são gerenciados pelo próprio grupo.",
+        });
+      }
       // Only allow removing empty request-style 1:1 conversations.
       const [{ count }] = await db
         .select({ count: sql<number>`count(*)` })

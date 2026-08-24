@@ -2,18 +2,22 @@ import { DMSidebar } from "@/components/DMSidebar";
 import { FriendsPanel } from "@/components/FriendsPanel";
 import { SidebarPortal } from "@/components/SidebarPortal";
 import { useOutletContext, useNavigate } from "react-router";
+import { useState } from "react";
 import type { AppOutletContext } from "@/lib/appOutletContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAppStore } from "@/store/useAppStore";
 import { trpc } from "@/providers/trpc";
 import { Avatar } from "@/components/Avatar";
 import { cn } from "@/lib/utils";
-import { Search, UserPlus, Users } from "lucide-react";
+import { Search, UserPlus, Users, UsersRound } from "lucide-react";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { CreateGroupModal } from "@/components/groups/CreateGroupModal";
+import { GroupAvatar } from "@/components/groups/GroupAvatar";
+import { groupDisplayName } from "@/lib/groupDisplayName";
 
 /**
  * Home: desktop mantém sidebar+friends; no celular vira uma tela de
- * conversas recentes com ações rápidas (buscar / amigos / comunidades).
+ * conversas recentes com ações rápidas (buscar / amigos / grupo / comunidades).
  */
 export function DMHome() {
   const { onOpenProfile } = useOutletContext<AppOutletContext>();
@@ -37,11 +41,12 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
   const conversations = trpc.dm.list.useQuery();
   const me = trpc.auth.me.useQuery().data;
   const unreadConversations = useAppStore(s => s.unreadConversations);
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-chat text-foreground">
       {/* Quick actions */}
-      <div className="grid grid-cols-3 gap-2 px-4 pb-2 pt-3">
+      <div className="grid grid-cols-4 gap-2 px-4 pb-2 pt-3">
         <QuickAction
           icon={<Search className="h-5 w-5" />}
           label="Buscar"
@@ -50,23 +55,22 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
         <QuickAction
           icon={<UserPlus className="h-5 w-5" />}
           label="Amigos"
-          onClick={() => {
-            // FriendsPanel já é a home desktop; no mobile abrimos o painel de amigos via rota @me + query? Mantemos simples: abre painel de amigos em sheet-less route.
-            navigate("/channels/@me?tab=friends");
-          }}
+          onClick={() => navigate("/channels/@me?tab=friends")}
+        />
+        <QuickAction
+          icon={<UsersRound className="h-5 w-5" />}
+          label="Criar grupo"
+          onClick={() => setCreateGroupOpen(true)}
         />
         <QuickAction
           icon={<Users className="h-5 w-5" />}
           label="Comunidades"
-          onClick={() => {
-            // BottomNav controla a layer; dispara clique programático via evento custom.
-            window.dispatchEvent(new CustomEvent("nexora:open-servers"));
-          }}
+          onClick={() => window.dispatchEvent(new CustomEvent("nexora:open-servers"))}
         />
       </div>
 
       <p className="px-4 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-faint">
-        Mensagens diretas
+        Mensagens
       </p>
 
       {/* Conversas recentes */}
@@ -79,11 +83,18 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
             <NexoraAppIcon className="h-12 w-12 opacity-40" />
             <p className="text-sm font-semibold">Nenhuma conversa ainda</p>
             <p className="max-w-[240px] text-xs text-muted2">
-              Adicione amigos ou entre em uma comunidade para começar a conversar.
+              Adicione amigos ou crie um grupo para conversar com várias pessoas ao mesmo tempo.
             </p>
+            <button
+              onClick={() => setCreateGroupOpen(true)}
+              className="mt-1 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary/90"
+            >
+              Criar grupo
+            </button>
           </li>
         )}
         {conversations.data?.filter(c => !c.isRequest).map(conv => {
+          const isGroup = conv.isGroup === true;
           const other = conv.otherUser;
           const unread = unreadConversations[conv.id] ?? 0;
           const last = conv.lastMessage;
@@ -92,12 +103,24 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
             <li key={conv.id}>
               <button
                 onClick={() => navigate(`/channels/@me/${conv.id}`)}
+                aria-label={
+                  isGroup
+                    ? `Abrir grupo ${groupDisplayName(conv)}`
+                    : `Abrir conversa com ${other?.name ?? other?.username ?? "usuário"}`
+                }
                 className={cn(
                   "flex min-h-[64px] w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors active:bg-white/[0.06]",
                   unread > 0 && "bg-white/[0.03]"
                 )}
               >
-                {other?.id ? (
+                {isGroup ? (
+                  <GroupAvatar
+                    users={conv.members}
+                    src={conv.avatarUrl}
+                    name={groupDisplayName(conv)}
+                    size="md"
+                  />
+                ) : other?.id ? (
                   <Avatar
                     userId={other.id}
                     name={other.name ?? other.username}
@@ -112,16 +135,30 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
                 <span className="min-w-0 flex-1">
                   <span
                     className={cn(
-                      "block truncate text-sm",
+                      "flex items-center gap-1.5 truncate text-sm",
                       unread > 0 ? "font-bold text-white" : "font-semibold text-bodyx"
                     )}
                   >
-                    {other?.name ?? other?.username ?? "Conversa"}
+                    {isGroup && (
+                      <span title="Grupo" className="inline-flex">
+                        <Users
+                          className="h-3.5 w-3.5 shrink-0 text-faint"
+                          aria-hidden
+                        />
+                      </span>
+                    )}
+                    <span className="truncate">
+                      {isGroup ? groupDisplayName(conv) : (other?.name ?? other?.username ?? "Conversa")}
+                    </span>
                   </span>
                   <span className="mt-0.5 block truncate text-xs text-muted2">
                     {last
-                      ? `${last.authorId === me?.id ? "Você: " : ""}${last.content || "📎 Anexo"}`
-                      : "Nova conversa"}
+                      ? isGroup
+                        ? `${conv.members.find(m => m.id === last.authorId)?.name ?? ""}: ${last.content || "📎 Anexo"}`
+                        : `${last.authorId === me?.id ? "Você: " : ""}${last.content || "📎 Anexo"}`
+                      : isGroup
+                        ? `${conv.memberCount ?? 0} participantes`
+                        : "Nova conversa"}
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1">
@@ -139,6 +176,8 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
       </ul>
 
       {onOpenProfile ? null : null}
+
+      <CreateGroupModal open={createGroupOpen} onOpenChange={setCreateGroupOpen} />
     </div>
   );
 }
