@@ -169,12 +169,33 @@ class VoiceManager {
     this.log("joining", nextRoomKey);
 
     try {
-      await this.loadIceServers();
+      // Microfone ANTES de qualquer await de rede: no iOS Safari o
+      // getUserMedia precisa rodar dentro da ativação do toque do usuário.
       const prefs = getDevicePrefs();
-      const rawStream = await navigator.mediaDevices.getUserMedia({
-        audio: microphoneConstraints(prefs),
-        video: false,
-      });
+      let rawStream: MediaStream;
+      try {
+        rawStream = await navigator.mediaDevices.getUserMedia({
+          audio: microphoneConstraints(prefs),
+          video: false,
+        });
+      } catch (error) {
+        // OverconstrainedError/NotFoundError: cai para o áudio padrão
+        // (dispositivo salvo pode não existir neste aparelho).
+        if (
+          error instanceof DOMException &&
+          (error.name === "OverconstrainedError" ||
+            error.name === "NotFoundError")
+        ) {
+          this.log("constraints incompatíveis; usando áudio padrão", error.name);
+          rawStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false,
+          });
+        } else {
+          throw error;
+        }
+      }
+      await this.loadIceServers();
       const rawTrack = rawStream.getAudioTracks()[0];
       if (!rawTrack || rawTrack.readyState !== "live") {
         rawStream.getTracks().forEach(track => track.stop());
@@ -220,7 +241,12 @@ class VoiceManager {
       console.error("[VOICE] Falha ao entrar", error);
       if (error instanceof DOMException && error.name === "NotAllowedError") {
         throw new Error(
-          "Nexora precisa de acesso ao microfone para chamadas de voz."
+          "Nexora precisa de acesso ao microfone para chamadas de voz. Libere a permissão nas configurações do navegador."
+        );
+      }
+      if (error instanceof DOMException && error.name === "NotFoundError") {
+        throw new Error(
+          "Nenhum microfone foi encontrado neste aparelho."
         );
       }
       throw error;
@@ -312,6 +338,16 @@ class VoiceManager {
       this.joinAck.resolve();
       this.joinAck = null;
     }
+  }
+
+  /** Servidor recusou a entrada — falha rápida com motivo claro. */
+  handleVoiceDenied(reason: string) {
+    if (!this.joinAck) return;
+    clearTimeout(this.joinAck.timer);
+    const reject = this.joinAck.reject;
+    this.joinAck = null;
+    void this.leave();
+    reject(new Error(reason));
   }
 
   private createPeer(userId: number): Peer {
@@ -616,7 +652,7 @@ class VoiceManager {
           height: { ideal: 720 },
           frameRate: { ideal: 30 },
           ...(prefs.videoInputId
-            ? { deviceId: { exact: prefs.videoInputId } }
+            ? { deviceId: { ideal: prefs.videoInputId } }
             : {}),
         },
       });

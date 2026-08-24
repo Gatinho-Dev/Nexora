@@ -22,7 +22,7 @@ describe("microphoneConstraints", () => {
       echoCancellation: true,
       noiseSuppression: false,
       autoGainControl: false,
-      deviceId: { exact: "usb-microphone" },
+      deviceId: { ideal: "usb-microphone" },
     });
   });
 

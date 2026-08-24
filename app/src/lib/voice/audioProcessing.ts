@@ -20,7 +20,9 @@ export function microphoneConstraints(
     autoGainControl: mode === "standard",
     channelCount: { ideal: 1 },
     sampleRate: { ideal: 48_000 },
-    ...(prefs.audioInputId ? { deviceId: { exact: prefs.audioInputId } } : {}),
+    // "ideal" e não "exact": um deviceId salvo no desktop não existe no
+    // celular e OverconstrainedError impediria qualquer chamada no mobile.
+    ...(prefs.audioInputId ? { deviceId: { ideal: prefs.audioInputId } } : {}),
   };
 }
 

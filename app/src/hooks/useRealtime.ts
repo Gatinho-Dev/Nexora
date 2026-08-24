@@ -114,6 +114,10 @@ export function useRealtime(myUserId: number | undefined) {
           voiceManager.handleVoiceReady(roomKey, event.voiceSessionId);
           break;
         }
+        case "voice:denied": {
+          voiceManager.handleVoiceDenied(event.reason);
+          break;
+        }
         case "signal": {
           const roomKey = event.channelId
             ? `c:${event.channelId}`

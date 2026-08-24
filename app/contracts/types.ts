@@ -372,6 +372,12 @@ export type WSServerEvent =
       voiceSessionId: string;
     }
   | {
+      t: "voice:denied";
+      channelId?: number;
+      conversationId?: number;
+      reason: string;
+    }
+  | {
       t: "signal";
       from: number;
       channelId?: number;
