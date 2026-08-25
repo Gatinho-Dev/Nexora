@@ -4,11 +4,22 @@ import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
 import type { AccountSafetyDTO, SafetyViolationDTO } from "@contracts/types";
+import { rateLimit } from "./utils/rateLimit";
 import {
   getSafety,
   calculateAccountStatus,
 } from "./services/accountSafety";
 import { moderationStatusForUploader } from "./services/mediaModeration";
+import {
+  REPORT_CATEGORIES,
+  MINOR_SAFETY_SUBCATEGORIES,
+  createReport,
+  listMyReports,
+} from "./services/reports/reportService";
+import {
+  createAppeal,
+  listMyAppeals,
+} from "./services/appeals/appealService";
 
 function toSafetyDTO(
   safety: typeof schema.accountSafety.$inferSelect
@@ -73,4 +84,51 @@ export const safetyRouter = createRouter({
     .query(async ({ ctx, input }) => {
       return moderationStatusForUploader(ctx.user.id, input.fileIds);
     }),
+
+  // ── Denúncias ────────────────────────────────────────────────
+  reportCategories: authedQuery.query(async () => ({
+    categories: REPORT_CATEGORIES,
+    minorSafetySubcategories: MINOR_SAFETY_SUBCATEGORIES,
+  })),
+
+  createReport: authedQuery
+    .input(
+      z.object({
+        targetType: z.enum(["message", "user", "media", "server", "channel"]),
+        targetId: z.number().int().positive(),
+        category: z.enum(REPORT_CATEGORIES),
+        subcategory: z.string().max(64).optional(),
+        description: z.string().max(1000).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      rateLimit(`report:${ctx.user.id}`, 5, 10 * 60 * 1000);
+      const { caseId } = await createReport({
+        reporterId: ctx.user.id,
+        ...input,
+      });
+      return {
+        ok: true as const,
+        message:
+          "Denúncia enviada. Obrigado por ajudar a manter o Nexora seguro. Nossa equipe analisará a situação.",
+        caseId,
+      };
+    }),
+
+  myReports: authedQuery.query(async ({ ctx }) => listMyReports(ctx.user.id)),
+
+  // ── Apelações ────────────────────────────────────────────────
+  createAppeal: authedQuery
+    .input(
+      z.object({
+        violationId: z.number().int().positive(),
+        reason: z.string().min(10).max(2000),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      rateLimit(`appeal:${ctx.user.id}`, 3, 60 * 60 * 1000);
+      return createAppeal({ userId: ctx.user.id, ...input });
+    }),
+
+  myAppeals: authedQuery.query(async ({ ctx }) => listMyAppeals(ctx.user.id)),
 });

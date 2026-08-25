@@ -11,7 +11,12 @@ import {
   sql,
 } from "drizzle-orm";
 import type { AdminAuditLogDTO } from "@contracts/types";
-import { createRouter, adminQuery, authedQuery } from "./middleware";
+import {
+  createRouter,
+  adminQuery,
+  authedQuery,
+  ownerQuery,
+} from "./middleware";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
 import {
@@ -42,6 +47,19 @@ import {
   markFalsePositive,
   resolveViolation,
 } from "./services/accountSafety";
+import {
+  listCases,
+  getCaseById,
+} from "./services/reports/moderationCaseService";
+import {
+  reviewAppeal as reviewAppealService,
+  listOpenAppeals,
+} from "./services/appeals/appealService";
+import { SafetyService, isSafetyKilled, setSafetyKillSwitch } from "./services/safety/safetyService";
+import { breakerOpen } from "./services/mediaModeration";
+import { logSafetyEvent, listSafetyAuditEvents } from "./services/safetyAudit";
+import { removeMessageForModeration } from "./services/textModeration";
+import { blockMediaForModeration, applyManualBan, warnUser } from "./services/moderationActions";
 import { rateLimit } from "./utils/rateLimit";
 
 const announcementKind = z.enum([
@@ -903,8 +921,198 @@ export const adminRouter = createRouter({
   unbanUser: adminQuery
     .input(z.object({ userId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      await manualUnban(input.userId);
-      void ctx;
+      await manualUnban(input.userId, ctx.user.id);
       return { ok: true };
     }),
+
+  // ── Casos de moderação (denúncias + IA) ──────────────────────
+  casesQueue: adminQuery
+    .input(
+      z.object({
+        status: z
+          .enum(["open", "under_review", "confirmed", "false_positive", "closed"])
+          .optional(),
+        priority: z.enum(["low", "normal", "high", "critical"]).optional(),
+        onlyCritical: z.boolean().optional(),
+        limit: z.number().min(1).max(200).optional(),
+      })
+    )
+    .query(async ({ input }) => listCases(input)),
+
+  caseDetail: adminQuery.input(z.object({ caseId: z.number() })).query(async ({ input }) => {
+    const detail = await getCaseById(input.caseId);
+    // Nunca expor internalContext a quem não precisa? Painel é staff-only.
+    return detail;
+  }),
+
+  reviewCase: adminQuery
+    .input(
+      z.object({
+        caseId: z.number(),
+        decision: z.enum([
+          "confirm",
+          "false_positive",
+          "remove_content",
+          "warn",
+          "timeout",
+          "suspend",
+          "unban_lift_suspension",
+          "ban",
+          "close_no_action",
+          "assign",
+        ]),
+        note: z.string().max(2000).optional(),
+        days: z.number().min(1).max(30).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const detail = await getCaseById(input.caseId);
+      await getDb()
+        .update(schema.moderationCases)
+        .set({
+          assignedModeratorId:
+            input.decision === "assign" ? ctx.user.id : detail.assignedModeratorId,
+          status:
+            input.decision === "confirm"
+              ? "confirmed"
+              : input.decision === "false_positive"
+                ? "false_positive"
+                : input.decision === "close_no_action"
+                  ? "closed"
+                  : input.decision === "assign"
+                    ? "under_review"
+                    : detail.status,
+        })
+        .where(eq(schema.moderationCases.id, input.caseId));
+
+      if (detail.linkedViolationId) {
+        if (input.decision === "confirm") {
+          await confirmViolation(detail.linkedViolationId, ctx.user.id);
+        } else if (input.decision === "false_positive") {
+          await markFalsePositive(detail.linkedViolationId, ctx.user.id, input.note);
+        } else if (input.decision === "ban") {
+          const [violation] = await getDb()
+            .select()
+            .from(schema.violations)
+            .where(eq(schema.violations.id, detail.linkedViolationId));
+          if (violation) {
+            await confirmViolation(detail.linkedViolationId, ctx.user.id);
+            await applyManualBan(violation.userId, ctx.user.id);
+          }
+        } else if (input.decision === "suspend" && detail.reportedUserId) {
+          await manualSuspend(detail.reportedUserId, input.days ?? 3, ctx.user.id);
+        } else if (input.decision === "timeout" && detail.reportedUserId) {
+          await manualSuspend(detail.reportedUserId, 1, ctx.user.id);
+        } else if (input.decision === "warn" && detail.reportedUserId) {
+          await warnUser(detail.reportedUserId, ctx.user.id, input.note);
+        }
+      }
+
+      if (input.decision === "false_positive") {
+        // Atualiza denúncias relacionadas.
+        await getDb()
+          .update(schema.reports)
+          .set({ status: "no_violation", reviewedAt: new Date() })
+          .where(eq(schema.reports.caseId, input.caseId));
+      } else if (["confirm", "ban", "suspend"].includes(input.decision)) {
+        await getDb()
+          .update(schema.reports)
+          .set({ status: "action_taken", reviewedAt: new Date() })
+          .where(eq(schema.reports.caseId, input.caseId));
+      } else if (input.decision === "close_no_action") {
+        await getDb()
+          .update(schema.reports)
+          .set({ status: "closed", reviewedAt: new Date() })
+          .where(eq(schema.reports.caseId, input.caseId));
+      }
+
+      await logSafetyEvent({
+        event: `moderation_case_${input.decision}`,
+        actorUserId: ctx.user.id,
+        targetUserId: detail.reportedUserId,
+        caseId: input.caseId,
+        violationId: detail.linkedViolationId,
+        metadata: { note: input.note ?? null, days: input.days ?? null },
+      });
+      return { ok: true };
+    }),
+
+  removeCaseContent: adminQuery
+    .input(z.object({ caseId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const detail = await getCaseById(input.caseId);
+      let removed = false;
+      if (
+        detail.targetType === "message" &&
+        detail.targetId != null &&
+        detail.reportedUserId
+      ) {
+        removed = await removeMessageForModeration(
+          detail.targetId,
+          detail.reportedUserId
+        );
+      } else if (detail.targetType === "media" && detail.targetId != null) {
+        await blockMediaForModeration(detail.targetId);
+        removed = true;
+      }
+      await logSafetyEvent({
+        event: "moderation_case_content_removed",
+        actorUserId: ctx.user.id,
+        targetUserId: detail.reportedUserId,
+        caseId: input.caseId,
+        metadata: { removed },
+      });
+      return { ok: true, removed };
+    }),
+
+  // ── Apelações (staff) ────────────────────────────────────────
+  appealsQueue: adminQuery.query(async () => listOpenAppeals()),
+
+  reviewAppeal: adminQuery
+    .input(
+      z.object({
+        appealId: z.number(),
+        decision: z.enum(["approved", "denied"]),
+        note: z.string().max(1000).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await reviewAppealService({
+        appealId: input.appealId,
+        reviewerId: ctx.user.id,
+        decision: input.decision,
+        note: input.note,
+      });
+      return { ok: true };
+    }),
+
+  // ── Status da IA / kill switch / auditoria de segurança ──────
+  safetyAiStatus: adminQuery.query(async () => ({
+    metrics: SafetyService.metricsSnapshot(),
+    breakerOpen: breakerOpen(),
+    killSwitch: isSafetyKilled(),
+    shadowMode: SafetyService.isShadowMode(),
+  })),
+
+  setSafetyKillSwitch: ownerQuery
+    .input(z.object({ killed: z.boolean() }))
+    .mutation(async ({ input }) => {
+      setSafetyKillSwitch(input.killed);
+      await logSafetyEvent({
+        event: input.killed ? "safety_kill_switch_on" : "safety_kill_switch_off",
+        metadata: {},
+      });
+      return { ok: true };
+    }),
+
+  safetyAuditEvents: adminQuery
+    .input(
+      z.object({
+        event: z.string().max(64).optional(),
+        limit: z.number().min(1).max(200).optional(),
+      })
+    )
+    .query(async ({ input }) =>
+      listSafetyAuditEvents(input.event, input.limit)
+    ),
 });

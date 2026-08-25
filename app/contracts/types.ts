@@ -47,7 +47,7 @@ export type SafetyViolationDTO = {
   id: number;
   category: string;
   severity: "warning" | "moderate" | "severe";
-  source: "automatic_ai" | "moderator" | "user_report";
+  source: "automatic_ai" | "moderator" | "user_report" | "automod";
   status: "pending_review" | "confirmed" | "false_positive" | "resolved";
   action:
     | "none"
@@ -374,6 +374,84 @@ export type VoiceParticipant = {
   speaker?: boolean;
 };
 
+// ── Segurança: denúncias / apelações / casos ──────────────────
+export type ReportTargetType = "message" | "user" | "media" | "server" | "channel";
+
+export type ReportDTO = {
+  id: number;
+  targetType: ReportTargetType;
+  targetId: number;
+  category: string;
+  status:
+    | "submitted"
+    | "triaged"
+    | "under_review"
+    | "action_taken"
+    | "no_violation"
+    | "closed";
+  priority: "low" | "normal" | "high" | "critical";
+  createdAt: string | Date;
+  reviewedAt?: string | Date | null;
+};
+
+export type AppealDTO = {
+  id: number;
+  violationId: number;
+  status: "submitted" | "under_review" | "approved" | "denied";
+  reason: string | null;
+  createdAt: string | Date;
+  reviewedAt?: string | Date | null;
+  reviewNote?: string | null;
+  violationCategory?: string | null;
+  violationAction?: string | null;
+};
+
+export type ModerationCaseDTO = {
+  id: number;
+  targetType: string;
+  targetId: number | null;
+  reportedUserId: number | null;
+  reportedUser?: {
+    id: number;
+    username: string | null;
+    name: string | null;
+    avatar: string | null;
+  } | null;
+  category: string;
+  priority: "low" | "normal" | "high" | "critical";
+  status: "open" | "under_review" | "confirmed" | "false_positive" | "closed";
+  reportsCount: number;
+  linkedViolationId: number | null;
+  assignedModeratorId: number | null;
+  aiAssessment?: Record<string, unknown> | null;
+  internalContext?: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+export type SafetyAiStatusDTO = {
+  provider: string;
+  model: string;
+  visionModel: string;
+  policyVersion: string;
+  shadowMode: boolean;
+  aiEnabled: boolean;
+  textModerationEnabled: boolean;
+  imageModerationEnabled: boolean;
+  requestsTotal: number;
+  flaggedTotal: number;
+  rateLimited: number;
+  timeouts: number;
+  errorsTotal: number;
+  cacheHits: number;
+  cacheMisses: number;
+  cacheHitRate: number;
+  averageLatencyMs: number;
+  queueDepth: number;
+  breakerOpen: boolean;
+  killSwitch: boolean;
+};
+
 // ── WebSocket protocol ────────────────────────────────────────
 // Client → Server
 export type WSClientEvent =
@@ -466,4 +544,18 @@ export type WSServerEvent =
   | { t: "stage:hands"; channelId?: number; userIds: number[] }
   | { t: "group:update"; conversationId: number }
   | { t: "dm:refresh" }
-  | { t: "friends:refresh" };
+  | { t: "friends:refresh" }
+  | {
+      t: "account:restriction_updated";
+      accountStatus:
+        | "good_standing"
+        | "limited"
+        | "very_limited"
+        | "at_risk"
+        | "suspended"
+        | "permanently_banned";
+      severeStrikes: number;
+      maxSevereStrikes: number;
+      suspendedUntil: Date | string | null;
+      permanentBan: boolean;
+    };

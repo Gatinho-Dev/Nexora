@@ -21,6 +21,21 @@ import {
 } from "./utils/permissions";
 import { broadcastToServer, sendToUsers, setLiveStageSpeaker } from "./realtime";
 import { assertCanInteract } from "./services/accountSafety";
+import { moderatePublicFieldAsync } from "./services/profileModeration";
+import {
+  loadServerRules,
+} from "./services/automod/service";
+import { logSafetyEvent } from "./services/safetyAudit";
+import type { AutomodRuleType } from "./services/automod/engine";
+
+const AUTOMOD_RULE_TYPES: AutomodRuleType[] = [
+  "flood",
+  "repeat",
+  "mass_mention",
+  "blocked_words",
+  "invites",
+  "suspicious_links",
+];
 
 const permissionEnum = z.enum(PERMISSIONS);
 
@@ -94,6 +109,18 @@ export const serverRouter = createRouter({
         serverId,
         userId: ctx.user.id,
       });
+
+      // Segurança: nome/descrição públicos passam por análise assíncrona.
+      moderatePublicFieldAsync("server_name", input.name, ctx.user.id, {
+        targetType: "server",
+        targetId: serverId,
+      });
+      if (input.description) {
+        moderatePublicFieldAsync("server_description", input.description, ctx.user.id, {
+          targetType: "server",
+          targetId: serverId,
+        });
+      }
 
       // Default categories + channels
       const [{ id: textCatId }] = await db
@@ -420,6 +447,18 @@ export const serverRouter = createRouter({
         .update(schema.servers)
         .set(patch)
         .where(eq(schema.servers.id, input.serverId));
+      if (patch.name) {
+        moderatePublicFieldAsync("server_name", patch.name, ctx.user.id, {
+          targetType: "server",
+          targetId: input.serverId,
+        });
+      }
+      if (patch.description) {
+        moderatePublicFieldAsync("server_description", patch.description, ctx.user.id, {
+          targetType: "server",
+          targetId: input.serverId,
+        });
+      }
       await refreshServer(input.serverId);
       return { ok: true };
     }),
@@ -524,6 +563,10 @@ export const serverRouter = createRouter({
           position,
         })
         .$returningId();
+      moderatePublicFieldAsync("channel_name", cleanName, ctx.user.id, {
+        targetType: "channel",
+        targetId: id,
+      });
       await refreshServer(input.serverId);
       const channel = await db.query.channels.findFirst({
         where: eq(schema.channels.id, id),
@@ -1129,6 +1172,76 @@ export const serverRouter = createRouter({
           ),
         );
       await refreshServer(input.serverId);
+      return { ok: true };
+    }),
+
+  // ── AutoMod (Configurações do Servidor → Segurança) ─────────
+  automodGet: authedQuery
+    .input(z.object({ serverId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      await requirePermission(ctx.user.id, input.serverId, "MANAGE_SERVER");
+      const rules = await loadServerRules(input.serverId);
+      return {
+        rules: AUTOMOD_RULE_TYPES.map(type => ({
+          type,
+          enabled: rules[type]?.enabled ?? false,
+          config: rules[type] ?? null,
+        })),
+      };
+    }),
+
+  automodUpdateRule: authedQuery
+    .input(
+      z.object({
+        serverId: z.number(),
+        ruleType: z.enum([
+          "flood",
+          "repeat",
+          "mass_mention",
+          "blocked_words",
+          "invites",
+          "suspicious_links",
+        ]),
+        enabled: z.boolean(),
+        config: z
+          .object({
+            maxMessages: z.number().min(2).max(100).optional(),
+            windowSeconds: z.number().min(1).max(120).optional(),
+            maxRepeats: z.number().min(2).max(10).optional(),
+            maxMentions: z.number().min(1).max(50).optional(),
+            words: z.array(z.string().max(60)).max(200).optional(),
+          })
+          .optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertCanInteract(ctx.user.id);
+      await requirePermission(ctx.user.id, input.serverId, "MANAGE_SERVER");
+      await getDb()
+        .insert(schema.automodRules)
+        .values({
+          serverId: input.serverId,
+          ruleType: input.ruleType,
+          enabled: input.enabled,
+          config: input.config ?? null,
+          updatedByUserId: ctx.user.id,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            enabled: input.enabled,
+            config: input.config ?? null,
+            updatedByUserId: ctx.user.id,
+          },
+        });
+      await logSafetyEvent({
+        event: "automod_rule_updated",
+        actorUserId: ctx.user.id,
+        metadata: {
+          serverId: input.serverId,
+          ruleType: input.ruleType,
+          enabled: input.enabled,
+        },
+      });
       return { ok: true };
     }),
 });

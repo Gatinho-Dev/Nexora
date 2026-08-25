@@ -8,12 +8,16 @@ import {
   MAX_SEVERE_STRIKES,
 } from "../accountSafety";
 import { decideFromVerdict } from "../mediaModeration";
-import type { NormalizedVerdict } from "../nvidiaContentSafety";
+import type { NormalizedVerdict } from "../safety/errors";
 import {
-  analyzeImage,
-  ModerationUnavailableError,
   normalizeVerdict,
-} from "../nvidiaContentSafety";
+  parseSafetyResponse,
+  SafetyParsingError,
+} from "../safety/safetyParser";
+import {
+  openRouterChat,
+  OpenRouterAuthenticationError,
+} from "../safety/openRouterClient";
 import { env } from "../../lib/env";
 
 const HOUR = 3_600_000;
@@ -27,11 +31,8 @@ describe("decideFromVerdict", () => {
     sexualMinor = false
   ): NormalizedVerdict => ({
     decision,
-    confidence: 0.9,
     categories: [],
     sexualMinor,
-    sexualAdult: false,
-    raw: null,
   });
 
   it("test 1: ALLOW → approved e visível normalmente", () => {
@@ -239,18 +240,40 @@ describe("restrictionError", () => {
   });
 });
 
-// ── NVIDIA failures keep media private (spec test 12) ─────────
+// ── Falhas de provedor mantêm mídia privada (spec test 12) ────
 
-describe("analyzeImage availability", () => {
-  it("sem chave configurada lança indisponibilidade (mídia NÃO é aprovada)", async () => {
-    const original = env.nvidiaApiKey;
+describe("provider availability", () => {
+  it("sem OPENROUTER_API_KEY a chamada falha com erro tipado (nada é aprovado)", async () => {
+    const original = env.openrouterApiKey;
     try {
-      (env as unknown as { nvidiaApiKey: string }).nvidiaApiKey = "";
-      await expect(analyzeImage(Buffer.from("x"), "image/png")).rejects.toBeInstanceOf(
-        ModerationUnavailableError
-      );
+      (env as unknown as { openrouterApiKey: string }).openrouterApiKey = "";
+      await expect(
+        openRouterChat({ model: "x", messages: [{ role: "user", content: "t" }] })
+      ).rejects.toBeInstanceOf(OpenRouterAuthenticationError);
     } finally {
-      (env as unknown as { nvidiaApiKey: string }).nvidiaApiKey = original;
+      (env as unknown as { openrouterApiKey: string }).openrouterApiKey = original;
     }
+  });
+
+  it("resposta em formato inesperado lança SafetyParsingError (fail closed)", () => {
+    expect(() => parseSafetyResponse("texto solto sem json", "m")).toThrow(SafetyParsingError);
+    expect(() => parseSafetyResponse('{"foo": 1}', "m")).toThrow(SafetyParsingError);
+  });
+
+  it("formato canônico: safe=true → resultado seguro", () => {
+    const r = parseSafetyResponse('{"safe": true, "categories": []}', "m");
+    expect(r.safe).toBe(true);
+    expect(r.categories).toEqual([]);
+    expect(r.provider).toBe("openrouter");
+  });
+
+  it("Sexual (minor) é mapeado para sexual_minor e vence sexual genérico", () => {
+    const r = parseSafetyResponse(
+      '{"safe": false, "categories": ["Sexual (minor)", "Sexual"]}',
+      "m"
+    );
+    expect(r.categories).toContain("sexual_minor");
+    expect(r.categories.filter(c => c === "sexual_minor")).toHaveLength(1);
+    expect(r.safe).toBe(false);
   });
 });

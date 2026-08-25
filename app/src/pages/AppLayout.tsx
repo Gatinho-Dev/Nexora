@@ -16,6 +16,7 @@ import { IncomingCallToast } from "@/components/voice/IncomingCallToast";
 import { VoiceConnectionBar } from "@/components/mobile/VoiceConnectionBar";
 import { useVoiceCallView } from "@/hooks/useVoiceCallView";
 import { PermanentBanScreen } from "@/components/safety/PermanentBanScreen";
+import { ReportHost } from "@/components/safety/ReportHost";
 import {
   UserSettingsModal,
   type SettingsTab,
@@ -298,6 +299,7 @@ export function AppLayout() {
         onOpenChange={v => useAppStore.getState().setQuickSwitcherOpen(v)}
       />
       <ShortcutsModal open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <ReportHost />
       <UserSettingsModal
         open={settingsOpen}
         onOpenChange={setSettingsOpen}

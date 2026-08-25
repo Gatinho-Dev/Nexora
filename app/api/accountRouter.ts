@@ -13,6 +13,7 @@ import { Session } from "@contracts/constants";
 import { rateLimit } from "./utils/rateLimit";
 import { toPublicUser } from "./utils/permissions";
 import { recordEvent } from "./services/badgeService";
+import { moderatePublicFieldAsync } from "./services/profileModeration";
 import { env } from "./lib/env";
 
 // ── Password hashing (scrypt, no native deps) ─────────────────
@@ -156,6 +157,9 @@ export const accountRouter = createRouter({
       const user = await getDb().query.users.findFirst({
         where: eq(schema.users.id, ctx.user.id),
       });
+      // Segurança: campos públicos passam por análise assíncrona (sem bloquear).
+      if (patch.name) moderatePublicFieldAsync("profile_name", patch.name, ctx.user.id);
+      if (patch.bio) moderatePublicFieldAsync("profile_bio", patch.bio, ctx.user.id);
       return { user: user ? toPublicUser(user) : null };
     }),
 
@@ -173,6 +177,7 @@ export const accountRouter = createRouter({
         .update(schema.users)
         .set({ username: input.username })
         .where(eq(schema.users.id, ctx.user.id));
+      moderatePublicFieldAsync("profile_username", input.username, ctx.user.id);
       return { ok: true };
     }),
 

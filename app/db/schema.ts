@@ -873,14 +873,20 @@ export const violations = mysqlTable(
     id: serial("id").primaryKey(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
     fileId: bigint("fileId", { mode: "number", unsigned: true }),
+    /** Mensagem de texto associada (moderação de texto/denúncias). */
+    messageId: bigint("messageId", { mode: "number", unsigned: true }),
+    /** Tipo do alvo original: message | image | profile | server | channel | user. */
+    targetType: varchar("targetType", { length: 32 }),
     category: varchar("category", { length: 120 }).notNull(),
     severity: mysqlEnum("severity", ["warning", "moderate", "severe"])
       .default("severe")
       .notNull(),
-    source: mysqlEnum("source", ["automatic_ai", "moderator", "user_report"])
+    source: mysqlEnum("source", ["automatic_ai", "moderator", "user_report", "automod"])
       .default("automatic_ai")
       .notNull(),
     moderationModel: varchar("moderationModel", { length: 160 }),
+    /** Versão da política aplicada na detecção (ex.: 2026.08.1). */
+    policyVersion: varchar("policyVersion", { length: 40 }),
     status: mysqlEnum("status", [
       "pending_review",
       "confirmed",
@@ -912,8 +918,10 @@ export const violations = mysqlTable(
   (table) => ({
     userIdx: index("vio_user_idx").on(table.userId, table.id),
     statusIdx: index("vio_status_idx").on(table.status, table.createdAt),
-    /** Idempotency: one violation per file + category. */
+    /** Idempotência: uma violação por arquivo + categoria. */
     fileCatUniq: uniqueIndex("vio_file_cat_uniq").on(table.fileId, table.category),
+    /** Idempotência: uma violação por mensagem + categoria. */
+    msgCatUniq: uniqueIndex("vio_msg_cat_uniq").on(table.messageId, table.category),
   }),
 );
 
@@ -944,6 +952,195 @@ export const mediaModeration = mysqlTable("media_moderation", {
   moderatedAt: timestamp("moderatedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+// ── Denúncias (user reports) ──────────────────────────────────
+export const reports = mysqlTable(
+  "reports",
+  {
+    id: serial("id").primaryKey(),
+    reporterId: bigint("reporterId", { mode: "number", unsigned: true }).notNull(),
+    /** message | user | media | server | channel */
+    targetType: mysqlEnum("targetType", [
+      "message",
+      "user",
+      "media",
+      "server",
+      "channel",
+    ]).notNull(),
+    targetId: bigint("targetId", { mode: "number", unsigned: true }).notNull(),
+    reportedUserId: bigint("reportedUserId", { mode: "number", unsigned: true }),
+    category: varchar("category", { length: 64 }).notNull(),
+    subcategory: varchar("subcategory", { length: 64 }),
+    description: varchar("description", { length: 1000 }),
+    status: mysqlEnum("status", [
+      "submitted",
+      "triaged",
+      "under_review",
+      "action_taken",
+      "no_violation",
+      "closed",
+    ])
+      .default("submitted")
+      .notNull(),
+    priority: mysqlEnum("priority", ["low", "normal", "high", "critical"])
+      .default("normal")
+      .notNull(),
+    caseId: bigint("caseId", { mode: "number", unsigned: true }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    reviewedAt: timestamp("reviewedAt"),
+  },
+  (table) => ({
+    reporterIdx: index("rep_reporter_idx").on(table.reporterId, table.id),
+    targetIdx: index("rep_target_idx").on(table.targetType, table.targetId),
+    reportedUserIdx: index("rep_reported_user_idx").on(table.reportedUserId),
+    caseIdx: index("rep_case_idx").on(table.caseId),
+  }),
+);
+
+// ── Casos de moderação (agregam denúncias + detecções automáticas) ──
+export const moderationCases = mysqlTable(
+  "moderation_cases",
+  {
+    id: serial("id").primaryKey(),
+    /** message | user | media | server | channel | automatic_ai */
+    targetType: varchar("targetType", { length: 32 }).notNull(),
+    targetId: bigint("targetId", { mode: "number", unsigned: true }),
+    reportedUserId: bigint("reportedUserId", { mode: "number", unsigned: true }),
+    category: varchar("category", { length: 64 }).notNull(),
+    priority: mysqlEnum("priority", ["low", "normal", "high", "critical"])
+      .default("normal")
+      .notNull(),
+    status: mysqlEnum("status", [
+      "open",
+      "under_review",
+      "confirmed",
+      "false_positive",
+      "closed",
+    ])
+      .default("open")
+      .notNull(),
+    /** Resultado normalizado da IA (SafetyResult) na triagem — sem conteúdo bruto. */
+    aiAssessment: json("aiAssessment").$type<Record<string, unknown> | null>(),
+    reportsCount: int("reportsCount").default(0).notNull(),
+    /** Contexto interno curto para revisão (nunca exposto ao usuário). */
+    internalContext: varchar("internalContext", { length: 500 }),
+    linkedViolationId: bigint("linkedViolationId", {
+      mode: "number",
+      unsigned: true,
+    }),
+    assignedModeratorId: bigint("assignedModeratorId", {
+      mode: "number",
+      unsigned: true,
+    }),
+    policyVersion: varchar("policyVersion", { length: 40 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    statusIdx: index("mc_status_idx").on(table.status, table.createdAt),
+    priorityIdx: index("mc_priority_idx").on(table.priority),
+    reportedUserIdx: index("mc_reported_user_idx").on(table.reportedUserId),
+    targetIdx: index("mc_target_idx").on(table.targetType, table.targetId),
+  }),
+);
+
+/** N:M entre casos e denúncias relacionadas. */
+export const moderationCaseReports = mysqlTable(
+  "moderation_case_reports",
+  {
+    id: serial("id").primaryKey(),
+    caseId: bigint("caseId", { mode: "number", unsigned: true }).notNull(),
+    reportId: bigint("reportId", { mode: "number", unsigned: true }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    reportUniq: uniqueIndex("mcr_report_uniq").on(table.reportId),
+    caseIdx: index("mcr_case_idx").on(table.caseId),
+  }),
+);
+
+// ── Apelações ─────────────────────────────────────────────────
+export const appeals = mysqlTable(
+  "appeals",
+  {
+    id: serial("id").primaryKey(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    violationId: bigint("violationId", { mode: "number", unsigned: true }).notNull(),
+    reason: varchar("reason", { length: 2000 }),
+    status: mysqlEnum("status", [
+      "submitted",
+      "under_review",
+      "approved",
+      "denied",
+    ])
+      .default("submitted")
+      .notNull(),
+    reviewNote: varchar("reviewNote", { length: 1000 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    reviewedAt: timestamp("reviewedAt"),
+    reviewedByUserId: bigint("reviewedByUserId", {
+      mode: "number",
+      unsigned: true,
+    }),
+  },
+  (table) => ({
+    userIdx: index("app_user_idx").on(table.userId, table.id),
+    violationUniq: uniqueIndex("app_violation_uniq").on(table.violationId),
+  }),
+);
+
+// ── AutoMod por servidor ──────────────────────────────────────
+export const automodRules = mysqlTable(
+  "automod_rules",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    /** flood | repeat | mass_mention | blocked_words | invites | suspicious_links | sensitive_content */
+    ruleType: varchar("ruleType", { length: 32 }).notNull(),
+    enabled: boolean("enabled").default(false).notNull(),
+    /** Configuração livre por regra (palavras, limites etc). */
+    config: json("config").$type<Record<string, unknown> | null>(),
+    updatedByUserId: bigint("updatedByUserId", {
+      mode: "number",
+      unsigned: true,
+    }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    serverTypeUniq: uniqueIndex("amr_server_type_uniq").on(
+      table.serverId,
+      table.ruleType
+    ),
+  }),
+);
+
+// ── Auditoria de segurança ────────────────────────────────────
+export const safetyAuditEvents = mysqlTable(
+  "safety_audit_events",
+  {
+    id: serial("id").primaryKey(),
+    /** ex.: moderation_case_confirmed, appeal_approved, automod_triggered */
+    event: varchar("event", { length: 64 }).notNull(),
+    actorUserId: bigint("actorUserId", { mode: "number", unsigned: true }),
+    targetUserId: bigint("targetUserId", { mode: "number", unsigned: true }),
+    caseId: bigint("caseId", { mode: "number", unsigned: true }),
+    violationId: bigint("violationId", { mode: "number", unsigned: true }),
+    /** Metadados seguros — nunca conteúdo proibido bruto. */
+    metadata: json("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    eventIdx: index("sae_event_idx").on(table.event, table.createdAt),
+    targetIdx: index("sae_target_idx").on(table.targetUserId),
+  }),
+);
 
 // ── Types ─────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
@@ -982,3 +1179,9 @@ export type Webhook = typeof webhooks.$inferSelect;
 export type AccountSafety = typeof accountSafety.$inferSelect;
 export type Violation = typeof violations.$inferSelect;
 export type MediaModeration = typeof mediaModeration.$inferSelect;
+export type Report = typeof reports.$inferSelect;
+export type ModerationCase = typeof moderationCases.$inferSelect;
+export type ModerationCaseReport = typeof moderationCaseReports.$inferSelect;
+export type Appeal = typeof appeals.$inferSelect;
+export type AutomodRule = typeof automodRules.$inferSelect;
+export type SafetyAuditEvent = typeof safetyAuditEvents.$inferSelect;

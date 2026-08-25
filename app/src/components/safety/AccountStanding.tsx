@@ -1,11 +1,23 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { trpc } from "@/providers/trpc";
 import type {
   AccountSafetyDTO,
   AccountStatusDTO,
   SafetyViolationDTO,
 } from "@contracts/types";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Avatar } from "../Avatar";
 
 /**
@@ -330,6 +342,35 @@ const STATUS_LABELS: Record<SafetyViolationDTO["status"], string> = {
 
 export function ViolationCard({ violation }: { violation: SafetyViolationDTO }) {
   const pending = violation.status === "pending_review";
+  const appealEligible =
+    violation.status === "confirmed" || pending;
+  const [appealOpen, setAppealOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+  const utils = trpc.useUtils();
+
+  const createAppeal = trpc.safety.createAppeal.useMutation({
+    onSuccess: () => {
+      toast.success("Apelação enviada. Nossa equipe irá revisar sua solicitação.");
+      setReason("");
+      setConflictMessage(null);
+      setAppealOpen(false);
+      void utils.safety.myAppeals.invalidate();
+    },
+    onError: e => {
+      if (e.data?.code === "CONFLICT") {
+        setConflictMessage(e.message);
+      } else {
+        toast.error(e.message);
+      }
+    },
+  });
+
+  const submitAppeal = () => {
+    if (reason.trim().length < 10) return;
+    createAppeal.mutate({ violationId: violation.id, reason: reason.trim() });
+  };
+
   const severeLabel =
     violation.category === "sexual_minor"
       ? "Conteúdo sexual envolvendo possível menor"
@@ -358,6 +399,74 @@ export function ViolationCard({ violation }: { violation: SafetyViolationDTO }) 
         <dt className="font-semibold text-faint">Status:</dt>
         <dd>{STATUS_LABELS[violation.status]}</dd>
       </dl>
+
+      {appealEligible && (
+        <div className="mt-3 border-t border-white/[0.06] pt-2.5">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={createAppeal.isPending}
+            onClick={() => {
+              setConflictMessage(null);
+              setAppealOpen(true);
+            }}
+            className="h-8 bg-white/[0.06] px-3 text-[11px] font-bold text-white hover:bg-white/[0.12]"
+          >
+            Apelar
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={appealOpen} onOpenChange={setAppealOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Solicitar revisão</DialogTitle>
+            <DialogDescription>
+              Nossa equipe vai reavaliar esta decisão aplicada à sua conta.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label htmlFor={`appeal-reason-${violation.id}`} className="text-xs font-semibold text-muted2">
+              Por que você acredita que esta decisão está incorreta?
+            </label>
+            <Textarea
+              id={`appeal-reason-${violation.id}`}
+              value={reason}
+              onChange={e => {
+                setReason(e.target.value);
+                setConflictMessage(null);
+              }}
+              rows={4}
+              maxLength={2000}
+              autoFocus
+              placeholder="Descreva o contexto e por que a decisão deve ser revista (mínimo de 10 caracteres)."
+              className="bg-sidebar border-white/10 text-white"
+            />
+            {conflictMessage && (
+              <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
+                {conflictMessage}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setAppealOpen(false)}
+              className="text-muted2 hover:bg-white/10 hover:text-white"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={submitAppeal}
+              disabled={reason.trim().length < 10 || createAppeal.isPending}
+              className="bg-[#5865F2] hover:bg-[#4752C4] text-white"
+            >
+              {createAppeal.isPending ? "Enviando..." : "Enviar apelação"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -35,10 +35,13 @@ import {
   MoreHorizontal,
   Copy,
   Play,
+  Flag,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatSize } from "@/lib/formatSize";
 import { SensitiveMedia } from "../safety/SensitiveMedia";
+import { ReportDialog } from "../safety/ReportDialog";
 import { useAppStore } from "@/store/useAppStore";
 import {
   AlertDialog,
@@ -110,6 +113,8 @@ function MessageItemBase({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [emojiBarOpen, setEmojiBarOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportedFileId, setReportedFileId] = useState<number | null>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onTouchStart = () => {
@@ -141,6 +146,9 @@ function MessageItemBase({
   const isMine = message.authorId === myId;
   const isEditing = editing?.id === message.id;
   const isSystem = message.tag === "system";
+  // Mensagem removida pela moderação: conteúdo substituído por aviso e
+  // ações (reagir/responder/editar/excluir) desabilitadas.
+  const isRemoved = message.tag === "removed";
 
   // Eventos administrativos de grupo (item 36): estilo discreto e centralizado.
   if (isSystem) {
@@ -321,6 +329,16 @@ function MessageItemBase({
             </div>
           ) : message.poll ? (
             <PollMessageView message={message} canManage={canManageMessages} myId={myId} />
+          ) : isRemoved ? (
+            <div
+              className="border-l-2 border-red-500/10 py-0.5 pl-3"
+              role="note"
+              aria-label="Mensagem removida pela moderação"
+            >
+              <p className="text-sm italic leading-relaxed text-muted2 select-none">
+                Esta mensagem foi removida por violar as regras do Nexora.
+              </p>
+            </div>
           ) : message.tag === "sticker" ? (
             <img
               src={`/stickers/${message.content}.svg`}
@@ -391,7 +409,13 @@ function MessageItemBase({
               {message.attachments.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-2">
                   {message.attachments.map(att => (
-                    <AttachmentView key={att.id} att={att} />
+                    <AttachmentView
+                      key={att.id}
+                      att={att}
+                      onReportImage={
+                        !isMine ? () => setReportedFileId(att.fileId) : undefined
+                      }
+                    />
                   ))}
                 </div>
               )}
@@ -426,7 +450,7 @@ function MessageItemBase({
       </div>
 
       {/* Floating Hover Action Toolbar */}
-      {!isEditing && (
+      {!isEditing && !isRemoved && (
         <div className="msg-actions absolute -top-3.5 right-4 opacity-0 group-hover:opacity-100 transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-150 flex items-center gap-0.5 bg-sidebar border border-white/10 rounded-lg shadow-xl p-0.5 z-10 select-none">
           <TooltipProvider delayDuration={150}>
             {/* Quick Emoji Reaction button */}
@@ -528,6 +552,14 @@ function MessageItemBase({
                 >
                   <Copy className="h-3.5 w-3.5 mr-2 text-muted2" /> Copiar ID
                 </DropdownMenuItem>
+                {!isMine && (
+                  <DropdownMenuItem
+                    onClick={() => setReportOpen(true)}
+                    className="text-red-400 focus:text-red-300 hover:bg-red-500/10 cursor-pointer"
+                  >
+                    <Flag className="h-3.5 w-3.5 mr-2" /> Denunciar mensagem
+                  </DropdownMenuItem>
+                )}
                 {isMine && (
                   <DropdownMenuItem
                     onClick={() => {
@@ -559,7 +591,7 @@ function MessageItemBase({
 
       {/* Delete confirmation dialog */}
       {/* Mobile long-press action sheet */}
-      {sheetOpen && (
+      {sheetOpen && !isRemoved && (
         <div className="fixed inset-0 z-50 md:hidden" onClick={() => setSheetOpen(false)}>
           <div className="absolute inset-0 bg-black/60" />
           <div
@@ -679,6 +711,16 @@ function MessageItemBase({
                     },
                   ]
                 : []),
+              ...(!isMine
+                ? [
+                    {
+                      label: "Denunciar mensagem",
+                      icon: Flag as LucideIcon,
+                      danger: true,
+                      run: () => setReportOpen(true),
+                    },
+                  ]
+                : []),
               ...((isMine || canManageMessages)
                 ? [
                     {
@@ -696,12 +738,18 @@ function MessageItemBase({
                   setSheetOpen(false);
                 }}
                 className={cn(
-                  "min-h-[44px] w-full rounded-lg px-4 text-left text-sm font-semibold transition-colors",
+                  "flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-4 text-left text-sm font-semibold transition-colors",
                   (item as { danger?: boolean }).danger
                     ? "text-red-400 hover:bg-red-500/10"
                     : "text-bodyx hover:bg-white/5"
                 )}
               >
+                {(item as { icon?: LucideIcon }).icon &&
+                  (() => {
+                    const SheetIcon = (item as { icon?: LucideIcon }).icon;
+                    if (!SheetIcon) return null;
+                    return <SheetIcon className="h-4 w-4 shrink-0" aria-hidden />;
+                  })()}
                 {item.label}
               </button>
             ))}
@@ -722,6 +770,18 @@ function MessageItemBase({
           })
         }
       />
+      <ReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        target={{ type: "message", id: message.id }}
+      />
+      {reportedFileId !== null && (
+        <ReportDialog
+          open
+          onOpenChange={() => setReportedFileId(null)}
+          target={{ type: "media", id: reportedFileId }}
+        />
+      )}
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent className="bg-sidebar border-white/10 text-white">
           <AlertDialogHeader>
@@ -792,9 +852,15 @@ function VideoAttachment({ src, className }: { src: string; className?: string }
   );
 }
 
-function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
+function AttachmentView({
+  att,
+  onReportImage,
+}: {
+  att: MessageDTO["attachments"][number];
+  onReportImage?: () => void;
+}) {
   if (att.mimeType.startsWith("image/")) {
-    return <SpoilerableImage att={att} />;
+    return <SpoilerableImage att={att} onReport={onReportImage} />;
   }
   if (att.mimeType.startsWith("video/")) {
     return (
@@ -832,7 +898,13 @@ function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
   );
 }
 
-function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
+function SpoilerableImage({
+  att,
+  onReport,
+}: {
+  att: MessageDTO["attachments"][number];
+  onReport?: () => void;
+}) {
   const [revealed, setRevealed] = useState(!att.spoiler);
   const [viewerOpen, setViewerOpen] = useState(false);
   const mediaPref = useAppStore(s => s.sensitiveMediaPref);
@@ -860,7 +932,7 @@ function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
 
   if (!att.spoiler || revealed) {
     return (
-      <>
+      <div className="group/media relative inline-block">
         <button
           type="button"
           onClick={() => setViewerOpen(true)}
@@ -875,6 +947,17 @@ function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
             loading="lazy"
           />
         </button>
+        {onReport && (
+          <button
+            type="button"
+            onClick={onReport}
+            title="Denunciar conteúdo"
+            aria-label="Denunciar conteúdo"
+            className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg bg-black/60 text-white opacity-0 transition-opacity group-hover/media:opacity-100 hover:bg-red-500/80 focus-visible:opacity-100"
+          >
+            <Flag className="h-4 w-4" />
+          </button>
+        )}
         {viewerOpen && (
           <ImageViewer
             src={att.url}
@@ -882,7 +965,7 @@ function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
             onClose={() => setViewerOpen(false)}
           />
         )}
-      </>
+      </div>
     );
   }
 
