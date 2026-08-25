@@ -99,6 +99,24 @@ export type MessageDTO = {
     author: PublicUser;
   } | null;
   poll?: PollDTO | null;
+  embeds?: MessageEmbedDTO[];
+};
+
+export type MessageEmbedDTO = {
+  id: number;
+  messageId: number;
+  url: string;
+  provider: string;
+  type: string;
+  title: string | null;
+  description: string | null;
+  authorName: string | null;
+  authorUrl: string | null;
+  providerName: string | null;
+  thumbnailUrl: string | null;
+  playerUrl: string | null;
+  videoId: string | null;
+  status: "processing" | "ready" | "unsupported" | "failed";
 };
 
 export type ChannelDTO = {

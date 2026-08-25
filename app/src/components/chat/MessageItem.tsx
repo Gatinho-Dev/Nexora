@@ -2,6 +2,7 @@ import { memo, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { ImageViewer } from "./ImageViewer";
 import { PollMessage } from "./poll/PollMessage";
+import { EmbedCard } from "./embeds/EmbedCard";
 import {
   Dialog,
   DialogContent,
@@ -339,6 +340,29 @@ function MessageItemBase({
                       (editado)
                     </span>
                   )}
+                </div>
+              )}
+
+              {message.embeds && message.embeds.length > 0 && (
+                <div className="mt-1 space-y-2">
+                  {message.embeds.map(embed => (
+                    <EmbedCard
+                      key={embed.id}
+                      embed={embed}
+                      canRemove={message.authorId === myId}
+                      onRemove={() => {
+                        if (!message.embeds) return;
+                        useAppStore
+                          .getState()
+                          .updateMessage({
+                            ...message,
+                            embeds: message.embeds.filter(
+                              e => e.id !== embed.id,
+                            ),
+                          });
+                      }}
+                    />
+                  ))}
                 </div>
               )}
 

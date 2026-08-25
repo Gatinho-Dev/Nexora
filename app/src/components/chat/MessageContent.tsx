@@ -1,4 +1,5 @@
 import { Fragment, useState, type ReactNode } from "react";
+import { Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -169,36 +170,100 @@ const YOUTUBE_RE =
 const SPOTIFY_RE =
   /https?:\/\/open\.spotify\.com\/(track|album|playlist|episode)\/([A-Za-z0-9]+)[^\s]*/g;
 
+/**
+ * FACADE: thumbnail + botão play; o iframe oficial só monta ao clicar.
+ * Evita dezenas de players pesados em canais longos (performance e
+ * privacidade — nada de scripts de terceiros sem interação).
+ */
 function renderEmbeds(text: string): ReactNode[] {
   const embeds: ReactNode[] = [];
   const yt = [...text.matchAll(YOUTUBE_RE)];
   const sp = [...text.matchAll(SPOTIFY_RE)];
   for (const m of yt.slice(0, 2)) {
     embeds.push(
-      <span key={`yt-${m[1]}`} className="message-embed">
-        <iframe
-          src={`https://www.youtube-nocookie.com/embed/${m[1]}`}
-          title="Vídeo do YouTube"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-        />
-      </span>,
+      <EmbedFacade
+        key={`yt-${m[1]}`}
+        thumbnail={`https://i.ytimg.com/vi/${m[1]}/hqdefault.jpg`}
+        playerUrl={`https://www.youtube-nocookie.com/embed/${m[1]}`}
+        label="YouTube"
+        aspect="aspect-video"
+      />,
     );
   }
   for (const m of sp.slice(0, 2)) {
     embeds.push(
-      <span key={`sp-${m[2]}`} className="message-embed">
-        <iframe
-          src={`https://open.spotify.com/embed/${m[1]}/${m[2]}?utm_source=nexora`}
-          title="Player do Spotify"
-          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-          loading="lazy"
-        />
-      </span>,
+      <EmbedFacade
+        key={`sp-${m[2]}`}
+        playerUrl={`https://open.spotify.com/embed/${m[1]}/${m[2]}?utm_source=nexora`}
+        label="Spotify"
+        aspect="aspect-[21/9]"
+        compact
+      />,
     );
   }
   return embeds;
+}
+
+function EmbedFacade({
+  thumbnail,
+  playerUrl,
+  label,
+  aspect,
+  compact = false,
+}: {
+  thumbnail?: string;
+  playerUrl: string;
+  label: string;
+  aspect: string;
+  compact?: boolean;
+}) {
+  const [playing, setPlaying] = useState(false);
+  return (
+    <span className="message-embed mt-1 block max-w-[544px] overflow-hidden rounded-xl border border-white/10 bg-[#232529] select-none">
+      {playing ? (
+        <span className={cn("relative block w-full", aspect)}>
+          <iframe
+            src={playerUrl}
+            title={`Player de ${label}`}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; web-share"
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            sandbox="allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox"
+            className="absolute inset-0 h-full w-full border-0"
+          />
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setPlaying(true)}
+          className={cn(
+            "group relative block w-full text-left",
+            !compact && aspect,
+            compact ? "h-20" : "",
+          )}
+          aria-label={`Reproduzir de ${label}`}
+        >
+          {thumbnail && (
+            <img
+              src={thumbnail}
+              alt=""
+              loading="lazy"
+              className="absolute inset-0 h-full w-full object-cover opacity-90 transition-opacity group-hover:opacity-100"
+            />
+          )}
+          <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-transform group-hover:scale-110">
+              <Play className="ml-0.5 h-6 w-6" />
+            </span>
+          </span>
+          <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
+            {label}
+          </span>
+        </button>
+      )}
+    </span>
+  );
 }
 
 // ── Inline level ──────────────────────────────────────────────

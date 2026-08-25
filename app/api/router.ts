@@ -12,6 +12,7 @@ import { adminRouter } from "./adminRouter";
 import { safetyRouter } from "./safetyRouter";
 import { threadRouter, announceRouter, webhookRouter } from "./communityRouters";
 import { pollRouter } from "./pollRouter";
+import { embedRouter } from "./embedRouter";
 import { commandRouter } from "./services/commandRouter";
 import { createRouter, publicQuery } from "./middleware";
 
@@ -33,6 +34,7 @@ export const appRouter = createRouter({
   threads: threadRouter,
   poll: pollRouter,
   command: commandRouter,
+  embed: embedRouter,
   announce: announceRouter,
   webhook: webhookRouter,
 });
