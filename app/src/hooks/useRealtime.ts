@@ -1,15 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { trpc } from "@/providers/trpc";
 import { realtime } from "@/lib/ws";
 import { getCurrentView } from "@/lib/currentView";
 import { useAppStore, channelKey, dmKey } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
 import { soundManager } from "@/lib/sound";
+import { toast } from "sonner";
 import type { WSServerEvent } from "@contracts/types";
 
 /** Connects the realtime socket and routes events to stores/queries. */
 export function useRealtime(myUserId: number | undefined) {
   const utils = trpc.useUtils();
+  // Último status de conta conhecido — usado para detectar transições.
+  const lastAccountStatus = useRef<string | null>(null);
 
   useEffect(() => {
     if (!myUserId) return;
@@ -242,6 +245,28 @@ export function useRealtime(myUserId: number | undefined) {
             event.channelId != null ? `c:${event.channelId}` : undefined;
           if (key) {
             useAppStore.getState().setStageHands(key, event.userIds);
+          }
+          break;
+        }
+        case "account:restriction_updated": {
+          // Atualiza o banner do AppLayout e a aba Status da Conta.
+          utils.safety.me.invalidate();
+          const previous = lastAccountStatus.current;
+          lastAccountStatus.current = event.accountStatus;
+          if (event.accountStatus === "suspended") {
+            toast.error("⛔ Sua conta foi temporariamente suspensa. Confira o Status da Conta.");
+          } else if (event.accountStatus === "permanently_banned") {
+            toast.error("🚫 Conta banida permanentemente");
+          } else if (
+            event.accountStatus === "good_standing" &&
+            previous &&
+            previous !== "good_standing"
+          ) {
+            toast.success("✅ A restrição da sua conta foi removida");
+          } else if (event.accountStatus !== "good_standing") {
+            toast.info(
+              "O status da sua conta foi atualizado. Confira o Status da Conta."
+            );
           }
           break;
         }

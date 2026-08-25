@@ -3,6 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "../queries/connection";
 import * as schema from "@db/schema";
 import { sendToUsers } from "../realtime";
+import { env } from "../lib/env";
+import { logSafetyEvent } from "./safetyAudit";
 
 /**
  * Account safety: strikes, suspensions, permanent bans and the account
@@ -22,8 +24,9 @@ export type AccountStatus =
 type DbExecutor = typeof getDb extends () => infer T ? T : never;
 type Tx = Parameters<Parameters<DbExecutor["transaction"]>[0]>[0];
 
-export const MAX_SEVERE_STRIKES = 3;
-export const SUSPENSION_DAYS = 3;
+/** Limite configurável via SEVERE_STRIKE_LIMIT (padrão 3). */
+export const MAX_SEVERE_STRIKES = Math.max(1, env.severeStrikeLimit);
+export const SUSPENSION_DAYS = env.sexualMinorSuspensionDays;
 
 export async function ensureSafetyRow(userId: number): Promise<void> {
   await getDb()
@@ -142,59 +145,99 @@ function notifyUser(userId: number, content: string) {
   });
 }
 
+/** Evento realtime para o cliente atualizar restrições imediatamente. */
+export async function notifyRestrictionChanged(userId: number): Promise<void> {
+  const safety = await getSafety(userId);
+  sendToUsers([userId], {
+    t: "account:restriction_updated",
+    accountStatus: calculateAccountStatus(safety),
+    severeStrikes: safety.severeStrikes,
+    maxSevereStrikes: safety.maxSevereStrikes,
+    suspendedUntil: safety.suspendedUntil,
+    permanentBan: safety.permanentBan,
+  });
+}
+
 /**
- * Severe violation path ("Sexual (minor)"): immediate 3-day suspension with
- * a pending_review occurrence so human review can confirm or revert.
+ * Severe violation path ("Sexual (minor)"): immediate suspension with a
+ * pending_review occurrence so human review can confirm or revert.
+ * Idempotente por (fileId|messageId) + category — duplicatas não re-punem.
  */
 export async function handleSevereViolation(input: {
   userId: number;
   fileId?: number | null;
+  messageId?: number | null;
+  targetType?: string;
   category: string;
   model?: string;
-}): Promise<void> {
+  policyVersion?: string;
+  source?: "automatic_ai" | "automod" | "user_report";
+}): Promise<number | null> {
   const db = getDb();
   await ensureSafetyRow(input.userId);
 
-  const suspendedUntil = new Date(Date.now() + SUSPENSION_DAYS * 86_400_000);
+  const suspendedUntil = new Date(
+    Date.now() + SUSPENSION_DAYS * 86_400_000
+  );
 
-  const inserted = await db
-    .insert(schema.violations)
-    .values({
-      userId: input.userId,
-      fileId: input.fileId ?? null,
-      category: input.category.slice(0, 120),
-      severity: "severe",
-      source: "automatic_ai",
-      moderationModel: input.model ?? null,
-      status: "pending_review",
-      action: "three_day_suspension",
-    })
-    .$returningId();
-  const violationId = Number(Object.values(inserted[0] ?? {})[0] ?? 0);
+  let violationId: number;
+  try {
+    const inserted = await db
+      .insert(schema.violations)
+      .values({
+        userId: input.userId,
+        fileId: input.fileId ?? null,
+        messageId: input.messageId ?? null,
+        targetType: input.targetType ?? null,
+        category: input.category.slice(0, 120),
+        severity: "severe",
+        source: input.source ?? "automatic_ai",
+        moderationModel: input.model ?? null,
+        policyVersion: input.policyVersion ?? env.safetyPolicyVersion,
+        status: "pending_review",
+        action: "three_day_suspension",
+      })
+      .$returningId();
+    violationId = Number(Object.values(inserted[0] ?? {})[0] ?? 0);
+  } catch {
+    // Duplicate entry => mesma mídia/mensagem+categoria já punida. Não pune de novo.
+    return null;
+  }
 
+  // Estende a suspensão apenas se não houver uma ativa mais longa.
   await db.transaction(async tx => {
     await tx
       .update(schema.accountSafety)
       .set({ suspendedUntil, suspendedByViolationId: violationId })
       .where(eq(schema.accountSafety.userId, input.userId));
   });
+  await refreshStatus(input.userId);
 
   // Structured security log — never log image bytes or sensitive payloads.
   console.error(
     JSON.stringify({
-      event: "media_blocked_severe",
+      event: "severe_violation_detected",
       userId: input.userId,
       mediaId: input.fileId ?? null,
+      messageId: input.messageId ?? null,
       category: input.category,
       violationId,
       timestamp: new Date().toISOString(),
     })
   );
+  await logSafetyEvent({
+    event: "severe_violation_auto_suspension",
+    targetUserId: input.userId,
+    violationId,
+    metadata: { category: input.category, source: input.source ?? "automatic_ai" },
+  });
 
   notifyUser(
     input.userId,
     "Uma ação foi aplicada à sua conta: possível violação grave das Diretrizes da Comunidade. Sua conta foi suspensa temporariamente. Consulte Configurações → Status da Conta."
   );
+  void notifyRestrictionChanged(input.userId).catch(() => {});
+  return violationId;
 }
 
 /**
@@ -265,6 +308,14 @@ export async function confirmViolation(
     );
   }
   await refreshStatus(violation.userId);
+  await logSafetyEvent({
+    event: "moderation_case_confirmed",
+    actorUserId: reviewerId,
+    targetUserId: violation.userId,
+    violationId,
+    metadata: { action: "severe_strike", severeStrikes: safety.severeStrikes, banned },
+  });
+  void notifyRestrictionChanged(violation.userId).catch(() => {});
   return { severeStrikes: safety.severeStrikes, banned };
 }
 
@@ -313,10 +364,17 @@ export async function markFalsePositive(
   });
 
   await refreshStatus(violation.userId);
+  await logSafetyEvent({
+    event: "violation_marked_false_positive",
+    actorUserId: reviewerId,
+    targetUserId: violation.userId,
+    violationId,
+  });
   notifyUser(
     violation.userId,
     "A restrição da sua conta foi removida. Após revisão, determinamos que a ocorrência não constituiu uma violação. Nenhuma infração foi adicionada."
   );
+  void notifyRestrictionChanged(violation.userId).catch(() => {});
 }
 
 export async function resolveViolation(
@@ -380,11 +438,26 @@ export async function manualSuspend(
     .set({ suspendedUntil: until, suspendedByViolationId: violationId })
     .where(eq(schema.accountSafety.userId, userId));
   await refreshStatus(userId);
+  await logSafetyEvent({
+    event: "moderator_manual_suspension",
+    actorUserId: reviewerId,
+    targetUserId: userId,
+    violationId,
+    metadata: { days },
+  });
   notifyUser(userId, "Um moderador aplicou uma suspensão temporária na sua conta. Consulte Configurações → Status da Conta.");
+  void notifyRestrictionChanged(userId).catch(() => {});
 }
 
-export async function manualUnban(userId: number): Promise<void> {
+export async function manualUnban(
+  userId: number,
+  reviewerId?: number
+): Promise<void> {
   await ensureSafetyRow(userId);
+  const [before] = await getDb()
+    .select()
+    .from(schema.accountSafety)
+    .where(eq(schema.accountSafety.userId, userId));
   await getDb()
     .update(schema.accountSafety)
     .set({
@@ -395,7 +468,16 @@ export async function manualUnban(userId: number): Promise<void> {
       status: "good_standing",
     })
     .where(eq(schema.accountSafety.userId, userId));
+  if (reviewerId) {
+    await logSafetyEvent({
+      event: "moderator_unban",
+      actorUserId: reviewerId,
+      targetUserId: userId,
+      metadata: { previousStrikes: before?.severeStrikes ?? null },
+    });
+  }
   notifyUser(userId, "As restrições da sua conta foram removidas pela moderação do Nexora.");
+  void notifyRestrictionChanged(userId).catch(() => {});
 }
 
 export type ModerationQueueItem = Awaited<ReturnType<typeof listViolations>>[number];

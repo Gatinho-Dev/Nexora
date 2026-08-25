@@ -25,6 +25,8 @@ import {
   sendToUsers,
 } from "./realtime";
 import { assertCanInteract } from "./services/accountSafety";
+import { runAutomodForMessage } from "./services/automod/service";
+import { moderateTextMessage } from "./services/textModeration";
 
 // ── DTO assembly ──────────────────────────────────────────────
 // ── DTO assembly ──────────────────────────────────────────────
@@ -706,6 +708,27 @@ export const messageRouter = createRouter({
         input.conversationId ?? null,
       ).catch(() => {});
 
+      if (input.channelId) {
+        // AutoMod do servidor roda ANTES de publicar (regras locais rápidas).
+        const channel = await db.query.channels.findFirst({
+          where: eq(schema.channels.id, input.channelId),
+        });
+        if (channel) {
+          const automod = await runAutomodForMessage({
+            serverId: channel.serverId,
+            channelId: input.channelId,
+            authorId: ctx.user.id,
+            content,
+          });
+          if (automod.blocked) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: automod.reason ?? "Mensagem bloqueada pelo AutoMod.",
+            });
+          }
+        }
+      }
+
       const msg = await db.query.messages.findFirst({
         where: eq(schema.messages.id, id),
       });
@@ -733,6 +756,15 @@ export const messageRouter = createRouter({
           { t: "dm:refresh" }
         );
       }
+
+      // Moderação de texto por IA — assíncrona, nunca bloqueia o envio.
+      void moderateTextMessage({
+        id,
+        authorId: ctx.user.id,
+        channelId: input.channelId ?? null,
+        conversationId: input.conversationId ?? null,
+        content,
+      }).catch(() => {});
 
       // Notifications (mentions / dm / reply) - fire and forget
       processMentions(content, ctx.user.id, msg!).catch(() => {});

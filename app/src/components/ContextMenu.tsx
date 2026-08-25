@@ -12,6 +12,7 @@ import {
   CheckCheck,
   BellOff,
   Edit,
+  Flag,
   Trash2,
   Link,
   Settings,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
+import { OPEN_REPORT_EVENT } from "./safety/ReportHost";
 
 export type ContextMenuState = {
   x: number;
@@ -193,6 +195,19 @@ export function ContextMenu({
             danger
             onClick={() => {
               toast.error("Excluir canal acionado.");
+              onClose();
+            }}
+          />
+          <MenuItem
+            icon={<Flag className="h-4 w-4 text-red-400" />}
+            label="Denunciar canal"
+            danger
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent(OPEN_REPORT_EVENT, {
+                  detail: { type: "channel", id: menuState.id },
+                })
+              );
               onClose();
             }}
           />

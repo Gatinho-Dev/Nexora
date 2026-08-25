@@ -7,6 +7,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
 import { SlashCommandMenu } from "./SlashCommandMenu";
+import { OPEN_REPORT_EVENT } from "@/components/safety/ReportHost";
 
 const GifPicker = lazy(() =>
   import("./GifPicker").then(m => ({ default: m.GifPicker })),
@@ -417,6 +418,11 @@ export function MessageInput({
         .map(c => `/${c.name} — ${c.description}`)
         .join("\n");
       toast("Comandos disponíveis:\n" + list, { duration: 8000 });
+      setText("");
+      return;
+    }
+    if (command.name === "report") {
+      window.dispatchEvent(new CustomEvent(OPEN_REPORT_EVENT));
       setText("");
       return;
     }

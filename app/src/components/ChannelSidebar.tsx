@@ -15,6 +15,7 @@ import {
   LogOut,
   Pencil,
   CalendarClock,
+  Flag,
 } from "lucide-react";
 import {
   IconHash,
@@ -30,6 +31,7 @@ import { CreateChannelModal } from "./modals/CreateChannelModal";
 import { InviteModal } from "./modals/InviteModal";
 import { ServerSettingsModal } from "./modals/ServerSettingsModal";
 import { EventsModal } from "./modals/EventsModal";
+import { ReportDialog } from "./safety/ReportDialog";
 import { voiceManager } from "@/lib/rtc";
 import { toast } from "sonner";
 import {
@@ -66,6 +68,7 @@ export function ChannelSidebar({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
+  const [serverReportOpen, setServerReportOpen] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<
     Record<number, boolean>
   >({});
@@ -177,6 +180,13 @@ export function ChannelSidebar({
               <Plus className="h-4 w-4 mr-2 text-muted2" /> Criar canal
             </DropdownMenuItem>
           )}
+          <DropdownMenuSeparator className="bg-white/10" />
+          <DropdownMenuItem
+            onClick={() => setServerReportOpen(true)}
+            className="text-red-400 focus:text-red-300 hover:bg-red-500/10 cursor-pointer"
+          >
+            <Flag className="h-4 w-4 mr-2" /> Denunciar servidor
+          </DropdownMenuItem>
           {!isOwner && (
             <>
               <DropdownMenuSeparator className="bg-white/10" />
@@ -431,6 +441,11 @@ export function ChannelSidebar({
         open={eventsOpen}
         onOpenChange={setEventsOpen}
         details={details}
+      />
+      <ReportDialog
+        open={serverReportOpen}
+        onOpenChange={setServerReportOpen}
+        target={{ type: "server", id: server.id, label: server.name }}
       />
     </aside>
   );

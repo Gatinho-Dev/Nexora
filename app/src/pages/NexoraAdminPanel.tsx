@@ -9,7 +9,6 @@ import {
   LockKeyhole,
   Megaphone,
   Shield,
-  ShieldAlert,
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
@@ -108,7 +107,7 @@ export function NexoraAdminPanel() {
           <p className="px-2 pb-1 pt-2 text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#69717c]">Plataforma</p>
           <AdminNavButton active={section === "broadcasts"} icon={Megaphone} label="Comunicados" description="Mensagens oficiais globais" onClick={() => setSection("broadcasts")} />
           <AdminNavButton active={section === "badges"} icon={BadgeCheck} label="Emblemas" description="Identidade e equipe" onClick={() => setSection("badges")} />
-          <AdminNavButton active={section === "safety"} icon={ShieldAlert} label="Segurança" description="Moderação de conteúdo" onClick={() => setSection("safety")} />
+          <AdminNavButton active={section === "safety"} icon={Shield} label="Segurança" description="Casos, ocorrências e IA" onClick={() => setSection("safety")} />
           <div className="my-3 h-px bg-white/[0.055]" />
           <div className="rounded-lg border border-white/[0.055] bg-[#191b20] p-3">
             <div className="flex items-center gap-2 text-[10px] font-semibold text-[#bdc2ca]">
@@ -150,6 +149,9 @@ export function NexoraAdminPanel() {
           <Button size="sm" variant="ghost" onClick={() => setSection("badges")} className={cn("text-xs", section === "badges" ? "bg-[#5865F2]/15 text-white" : "text-[#9da4ae]")}>
             <BadgeCheck className="h-3.5 w-3.5" />Emblemas
           </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSection("safety")} className={cn("text-xs", section === "safety" ? "bg-[#5865F2]/15 text-white" : "text-[#9da4ae]")}>
+            <Shield className="h-3.5 w-3.5" />Segurança
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => navigate("/channels/@me/official")} className="ml-auto text-xs text-[#9da4ae]">
             <ChevronLeft className="h-3.5 w-3.5" />Sair
           </Button>
@@ -160,7 +162,13 @@ export function NexoraAdminPanel() {
             <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#737b86]">
-                  {section === "broadcasts" ? <BellRing className="h-3 w-3" /> : <UsersRound className="h-3 w-3" />}
+                  {section === "broadcasts" ? (
+                    <BellRing className="h-3 w-3" />
+                  ) : section === "safety" ? (
+                    <Shield className="h-3 w-3" />
+                  ) : (
+                    <UsersRound className="h-3 w-3" />
+                  )}
                   Administração da plataforma
                 </p>
                 <h2 className="mt-1 text-xl font-bold tracking-tight text-[#f4f5f7]">
@@ -173,7 +181,9 @@ export function NexoraAdminPanel() {
                 <p className="mt-1 max-w-2xl text-xs leading-5 text-[#858c96]">
                   {section === "broadcasts"
                     ? "Publique avisos globais em nome da conta verificada Nexora e acompanhe o histórico."
-                    : "Crie emblemas e atribua identidade oficial às contas autorizadas."}
+                    : section === "safety"
+                      ? "Revise casos de moderação, ocorrências, apelações e monitore a IA de segurança."
+                      : "Crie emblemas e atribua identidade oficial às contas autorizadas."}
                 </p>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.065] bg-white/[0.03] px-2.5 py-1.5 text-[10px] text-[#8f96a1]">

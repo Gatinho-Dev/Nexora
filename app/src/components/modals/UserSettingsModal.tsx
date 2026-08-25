@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { AccountStanding } from "../safety/AccountStanding";
+import { SecurityCenter } from "../safety/SecurityCenter";
+import { ReportsList } from "../safety/ReportsList";
+import { AppealsSection } from "../safety/AppealsSection";
 import { toast } from "sonner";
 import { apiUrl } from "@/lib/endpoints";
 import {
@@ -17,6 +20,7 @@ import {
   Sparkles,
   ArrowLeft,
   ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -51,9 +55,12 @@ import { NexoraLogo, NexoraMark } from "@/components/NexoraBrand";
 type Tab =
   | "account"
   | "profile"
+  | "security"
   | "standing"
   | "privacy"
   | "sensitive"
+  | "my-reports"
+  | "appeals"
   | "connections"
   | "appearance"
   | "accessibility"
@@ -72,6 +79,7 @@ const MENU_GROUPS: {
     items: [
       { id: "account", label: "Minha conta" },
       { id: "profile", label: "Perfil" },
+      { id: "security", label: "Central de Segurança", icon: <ShieldCheck /> },
       { id: "standing", label: "Status da Conta" },
       { id: "privacy", label: "Conteúdo e Privacidade" },
       { id: "sensitive", label: "Conteúdo sensível" },
@@ -250,8 +258,13 @@ function SettingsShell({
                 )}
                 {tab === "account" && <AccountTab />}
                 {tab === "profile" && <ProfileTab />}
+                {tab === "security" && (
+                  <SecurityCenter onNavigate={enterTab} />
+                )}
                 {tab === "standing" && <StandingTab />}
                 {tab === "sensitive" && <SensitiveContentTab />}
+                {tab === "my-reports" && <MyReportsTab />}
+                {tab === "appeals" && <AppealsTab />}
                 {tab === "privacy" && <PrivacyTab />}
                 {tab === "connections" && <ConnectionsTab />}
                 {tab === "appearance" && <AppearanceTab />}
@@ -1428,6 +1441,38 @@ function StandingTab() {
       safety={safety.data.safety}
       violations={safety.data.violations}
     />
+  );
+}
+
+// ── Minhas Denúncias ──────────────────────────────────────────
+function MyReportsTab() {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-bold text-white">Minhas Denúncias</h2>
+        <p className="text-xs text-muted2 mt-1">
+          Acompanhe o andamento das denúncias que você enviou para a equipe de
+          segurança.
+        </p>
+      </div>
+      <ReportsList />
+    </div>
+  );
+}
+
+// ── Apelações ─────────────────────────────────────────────────
+function AppealsTab() {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-bold text-white">Apelações</h2>
+        <p className="text-xs text-muted2 mt-1">
+          Discorda de uma decisão? Solicite revisão em Status da Conta e
+          acompanhe o resultado aqui.
+        </p>
+      </div>
+      <AppealsSection />
+    </div>
   );
 }
 

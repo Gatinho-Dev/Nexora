@@ -23,6 +23,7 @@ import {
   CalendarDays,
   Check,
   Clock3,
+  Flag,
   Loader2,
   MessageSquare,
   Pencil,
@@ -30,6 +31,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ReportDialog } from "./safety/ReportDialog";
 
 type ProfileDetails = PublicUser & {
   banner?: string | null;
@@ -86,6 +88,7 @@ export function ProfileCard({
   const navigate = useNavigate();
   const { user: me } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const utils = trpc.useUtils();
   const query = trpc.account.getPublicUser.useQuery(
     { userId: userId ?? 0 },
@@ -262,6 +265,16 @@ export function ProfileCard({
                             Aceitar pedido
                           </Button>
                         )}
+
+                      <Button
+                        variant="secondary"
+                        onClick={() => setReportOpen(true)}
+                        title="Denunciar usuário"
+                        aria-label="Denunciar usuário"
+                        className="h-10 rounded-lg border border-white/10 bg-transparent px-3 text-red-300 hover:bg-red-500/10"
+                      >
+                        <Flag className="h-4 w-4" />
+                      </Button>
                     </>
                   )}
                 </div>
@@ -348,6 +361,14 @@ export function ProfileCard({
         onOpenChange={setSettingsOpen}
         initialTab="profile"
       />
+
+      {userId !== null && !isOwn && (
+        <ReportDialog
+          open={reportOpen}
+          onOpenChange={setReportOpen}
+          target={{ type: "user", id: userId, label: displayName }}
+        />
+      )}
     </>
   );
 }

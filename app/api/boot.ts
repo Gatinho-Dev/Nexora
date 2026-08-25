@@ -31,6 +31,7 @@ import {
 } from "./services/mediaModeration";
 import { isPlatformAdmin } from "./utils/platformAuth";
 import { assertCanInteract } from "./services/accountSafety";
+import { SafetyService, isSafetyKilled } from "./services/safety/safetyService";
 import { ensureCatalog as ensureBadgeCatalog } from "./services/badgeService";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -58,7 +59,18 @@ app.use(
   })
 );
 
-app.get("/api/health", c => c.json({ status: "ok", service: "nexora" }));
+app.get("/api/health", c =>
+  c.json({
+    status: "ok",
+    service: "nexora",
+    safety: {
+      provider: env.openrouterApiKey ? "openrouter" : "disabled",
+      model: env.openrouterSafetyModel,
+      operational: !isSafetyKilled(),
+      shadowMode: SafetyService.isShadowMode(),
+    },
+  })
+);
 
 app.use(bodyLimit({ maxSize: (maxUploadMb + 2) * 1024 * 1024 }));
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
@@ -326,7 +338,11 @@ app.get("/api/moderation/metrics", async c => {
   } catch {
     return c.json({ error: "Não autenticado." }, 401);
   }
-  return c.json(metricsSnapshot());
+  return c.json({
+    ...metricsSnapshot(),
+    safety: SafetyService.metricsSnapshot(),
+    killSwitch: isSafetyKilled(),
+  });
 });
 
 // ── KLIPY GIF proxy (server-side API key, never exposed) ──────

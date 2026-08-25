@@ -73,7 +73,44 @@ export const env = {
   adminUserIds: numericCsv("NEXORA_ADMIN_USER_IDS"),
   appOrigin: process.env.APP_ORIGIN?.replace(/\/$/, "") ?? "",
   publicApiUrl: process.env.PUBLIC_API_URL?.replace(/\/$/, "") ?? "",
-  nvidiaApiKey: process.env.NVIDIA_API_KEY ?? "",
+  // ── OpenRouter (ÚNICO gateway de IA da plataforma) ──────────
+  // Nunca use API direta da NVIDIA: todo tráfego passa por aqui.
+  openrouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
+  openrouterBaseUrl:
+    process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1",
+  /** Modelo principal de classificação de segurança (texto). */
+  openrouterSafetyModel:
+    process.env.OPENROUTER_SAFETY_MODEL ??
+    "nvidia/nemotron-3.5-content-safety:free",
+  /** Modelo de visão para imagens (o safety model pode não aceitar imagem). */
+  openrouterVisionModel:
+    process.env.OPENROUTER_VISION_MODEL ?? "meta/llama-3.2-11b-vision-instruct:free",
+  /** Modelo do chatbot oficial — separado da segurança (nunca usado para moderar). */
+  openrouterChatModel: process.env.OPENROUTER_CHAT_MODEL ?? "",
+  openrouterAppName: process.env.OPENROUTER_APP_NAME ?? "Nexora",
+  openrouterSiteUrl:
+    process.env.OPENROUTER_SITE_URL ?? "https://nexorachat.cloud",
+  openrouterTimeoutMs: Number(process.env.OPENROUTER_SAFETY_TIMEOUT_MS ?? 15_000),
+  safetyMaxRetries: Number(process.env.SAFETY_MAX_RETRIES ?? 3),
+
+  // ── Nexora Safety: flags e kill switch ─────────────────────
+  safetyAiEnabled: process.env.SAFETY_AI_ENABLED !== "false",
+  textModerationEnabled: process.env.TEXT_MODERATION_ENABLED !== "false",
+  imageModerationEnabled: process.env.IMAGE_MODERATION_ENABLED !== "false",
+  reportAiTriageEnabled: process.env.REPORT_AI_TRIAGE_ENABLED !== "false",
+  automaticSevereSuspensionEnabled:
+    process.env.AUTOMATIC_SEVERE_SUSPENSION_ENABLED !== "false",
+  /**
+   * Shadow mode: a IA classifica e registra, mas NENHUMA ação é aplicada.
+   * Use para testar novos modelos/políticas com segurança.
+   */
+  safetyShadowMode: process.env.SAFETY_SHADOW_MODE === "true",
+  severeStrikeLimit: Number(process.env.SEVERE_STRIKE_LIMIT ?? 3),
+  safetyPolicyVersion: process.env.SAFETY_POLICY_VERSION ?? "2026.08.1",
+  sexualMinorSuspensionDays: Number(
+    process.env.SEXUAL_MINOR_INITIAL_SUSPENSION_DAYS ?? 3,
+  ),
+
   allowedOrigins: (process.env.ALLOWED_ORIGINS ?? process.env.APP_ORIGIN ?? "")
     .split(",")
     .map(origin => origin.trim().replace(/\/$/, ""))

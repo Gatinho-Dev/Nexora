@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../queries/connection";
 import * as schema from "@db/schema";
+import { SafetyService } from "./safety/safetyService";
+import { recordSafetyError } from "./safety/safetyMetrics";
 import {
-  analyzeImage,
-  MODERATION_MODEL,
   ModerationUnavailableError,
+  toNormalizedVerdict,
   type ModerationErrorCode,
   type NormalizedVerdict,
-} from "./nvidiaContentSafety";
+} from "./safety/errors";
 import { handleSevereViolation } from "./accountSafety";
 import { env } from "../lib/env";
 
@@ -25,6 +26,7 @@ import { env } from "../lib/env";
  *   auto-approved, and never treated as prohibited content.
  */
 
+export const MODERATION_MODEL = env.openrouterVisionModel;
 const RETRY_DELAYS_MS = [500, 1500];
 const IMAGE_PREFIXES = ["image/"];
 
@@ -74,7 +76,7 @@ export function metricsSnapshot() {
       moderationMetrics.latencyCount > 0
         ? Math.round(moderationMetrics.latencySumMs / moderationMetrics.latencyCount)
         : 0,
-    provider: env.nvidiaApiKey ? "nvidia" : "disabled",
+    provider: env.openrouterApiKey ? "openrouter" : "disabled",
     breakerOpen: breakerOpen(),
     consecutiveFailures,
   };
@@ -107,7 +109,7 @@ export async function enqueueModeration(
 
   // Deployment-level switch: without NVIDIA_API_KEY moderation is disabled —
   // release immediately instead of stranding every upload in processing.
-  if (!env.nvidiaApiKey) {
+  if (!env.openrouterApiKey) {
     await db
       .insert(schema.mediaModeration)
       .values({
@@ -135,6 +137,19 @@ export async function enqueueModeration(
 
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/** Converte erros do OpenRouter/parser em códigos do pipeline. */
+function mapModerationError(e: unknown): ModerationErrorCode {
+  if (e instanceof ModerationUnavailableError) return e.code;
+  const name = (e as Error)?.constructor?.name ?? "";
+  const message = (e as Error)?.message ?? "";
+  if (name === "OpenRouterAuthenticationError") return "NO_API_KEY";
+  if (name === "OpenRouterRateLimitError") return "RATE_LIMITED";
+  if (name === "OpenRouterTimeoutError") return "TIMEOUT";
+  if (name === "SafetyParsingError") return "INVALID_RESPONSE";
+  if (message.includes("Falha ao contatar")) return "NETWORK";
+  return "PROVIDER_ERROR";
 }
 
 async function markFailedAttempt(
@@ -206,7 +221,11 @@ export async function processMedia(fileId: number, requestId?: string): Promise<
 
     const startedAt = Date.now();
     try {
-      const verdict = await analyzeImage(file.data, file.mimeType);
+      const safetyResult = await SafetyService.analyzeImage({
+        data: file.data,
+        mimeType: file.mimeType,
+      });
+      const verdict: NormalizedVerdict = toNormalizedVerdict(safetyResult);
       recordSuccess();
       const latency = Date.now() - startedAt;
       moderationMetrics.latencySumMs += latency;
@@ -222,7 +241,7 @@ export async function processMedia(fileId: number, requestId?: string): Promise<
           mime: file.mimeType,
           size: file.size,
           upload: "success",
-          moderationProvider: "nvidia",
+          moderationProvider: "openrouter",
           moderation: "success",
           decision: verdict.decision,
           durationMs: latency,
@@ -230,9 +249,11 @@ export async function processMedia(fileId: number, requestId?: string): Promise<
       );
       return;
     } catch (e) {
-      const code: ModerationErrorCode =
-        e instanceof ModerationUnavailableError ? e.code : "PROVIDER_ERROR";
+      const code: ModerationErrorCode = mapModerationError(e);
       recordFailure();
+      recordSafetyError(
+        code === "RATE_LIMITED" ? "rate_limited" : code === "TIMEOUT" ? "timeout" : "error"
+      );
       moderationMetrics.unavailable += 1;
       if (code === "TIMEOUT") moderationMetrics.timeouts += 1;
       await markFailedAttempt(fileId, attempt + 1, code);
@@ -394,8 +415,10 @@ export async function applyPolicy(
     await handleSevereViolation({
       userId: uploaderId,
       fileId,
+      targetType: "image",
       category: "sexual_minor",
       model: MODERATION_MODEL,
+      policyVersion: env.safetyPolicyVersion,
     });
     return;
   }
@@ -409,7 +432,7 @@ export async function moderationStatusForUploader(
   fileIds: number[]
 ): Promise<Record<number, string>> {
   if (fileIds.length === 0) return {};
-  if (!env.nvidiaApiKey) {
+  if (!env.openrouterApiKey) {
     await healStuckProcessing(uploaderId);
   }
   const rows = await getDb()
