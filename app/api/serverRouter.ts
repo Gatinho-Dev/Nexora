@@ -162,14 +162,23 @@ export const serverRouter = createRouter({
         });
       }
 
-      const [channelRows, categoryRows, roleRows, memberRows, memberRoleRows] =
+      const [channelRows, categoryRows, roleRows, memberRows, memberRoleRows, memberCountRows] =
         await Promise.all([
           db.select().from(schema.channels).where(eq(schema.channels.serverId, input.serverId)),
           db.select().from(schema.categories).where(eq(schema.categories.serverId, input.serverId)),
           db.select().from(schema.roles).where(eq(schema.roles.serverId, input.serverId)),
-          db.select().from(schema.serverMembers).where(eq(schema.serverMembers.serverId, input.serverId)),
+          db
+            .select()
+            .from(schema.serverMembers)
+            .where(eq(schema.serverMembers.serverId, input.serverId))
+            .limit(1000),
           db.select().from(schema.memberRoles).where(eq(schema.memberRoles.serverId, input.serverId)),
+          db
+            .select({ total: sql<number>`count(*)` })
+            .from(schema.serverMembers)
+            .where(eq(schema.serverMembers.serverId, input.serverId)),
         ]);
+      const membersTruncated = Number(memberCountRows[0]?.total ?? 0) > 1000;
 
       const roles: RoleDTO[] = roleRows
         .map((r) => ({
@@ -217,6 +226,7 @@ export const serverRouter = createRouter({
         channels: visibleChannels,
         categories: categoryRows.sort((a, b) => a.position - b.position),
         members,
+        membersTruncated,
         roles,
         myPermissions: [...myPermissions],
       };

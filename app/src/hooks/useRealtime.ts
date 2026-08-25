@@ -66,7 +66,9 @@ export function useRealtime(myUserId: number | undefined) {
           break;
         }
         case "message:update":
-          store.updateMessage(event.message);
+          // Upsert: se o cliente perdeu o message:new (reconexão etc.),
+          // a versão atualizada entra na lista em vez de ser descartada.
+          store.upsertMessage(event.message);
           break;
         case "message:delete":
           store.removeMessage(

@@ -7,6 +7,8 @@ import { toast } from "sonner";
 
 type TenorGif = { id: string; url: string; preview: string; desc: string };
 
+const gifCache = new Map<string, { url: string; preview: string }[]>();
+
 export function GifPicker({
   onPick,
   children,
@@ -26,17 +28,39 @@ export function GifPicker({
     const timer = setTimeout(async () => {
       setLoading(true);
       setError(null);
+      const endpoint = query.trim()
+        ? apiUrl(`/api/gifs/search?q=${encodeURIComponent(query.trim())}`)
+        : apiUrl("/api/gifs/trending");
+      const cached = gifCache.get(endpoint);
+      if (cached) {
+        setGifs(
+          cached.map((g, i) => ({
+            id: `cached-${i}-${g.url}`,
+            url: g.url,
+            preview: g.preview,
+            desc: "",
+          })),
+        );
+        setLoading(false);
+        return;
+      }
       try {
-        const endpoint = query.trim()
-          ? apiUrl(`/api/gifs/search?q=${encodeURIComponent(query.trim())}`)
-          : apiUrl("/api/gifs/trending");
         const res = await fetch(endpoint, {
           credentials: "include",
           signal: controller.signal,
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Falha ao carregar GIFs.");
-        setGifs(data.results ?? []);
+        const results: TenorGif[] = data.results ?? [];
+        setGifs(results);
+        gifCache.set(
+          endpoint,
+          results.map(g => ({ url: g.url, preview: g.preview })),
+        );
+        if (gifCache.size > 20) {
+          const oldest = gifCache.keys().next().value;
+          if (oldest !== undefined) gifCache.delete(oldest);
+        }
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
         setError(e instanceof Error ? e.message : "Falha ao carregar GIFs.");

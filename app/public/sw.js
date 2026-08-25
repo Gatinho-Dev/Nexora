@@ -1,5 +1,5 @@
 /* Nexora service worker — cache mínimo para instalação PWA confiável. */
-const CACHE = "nexora-static-v1";
+const CACHE = "nexora-static-v2";
 
 self.addEventListener("install", event => {
   self.skipWaiting();

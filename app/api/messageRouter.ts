@@ -10,6 +10,7 @@ import { RateLimits } from "@contracts/constants";
 import type {
   MessageDTO,
   NotificationDTO,
+  PublicUser,
   ReactionDTO,
 } from "@contracts/types";
 import { rateLimit } from "./utils/rateLimit";
@@ -26,18 +27,94 @@ import {
 import { assertCanInteract } from "./services/accountSafety";
 
 // ── DTO assembly ──────────────────────────────────────────────
-export async function buildMessageDTO(
-  msg: typeof schema.messages.$inferSelect
-): Promise<MessageDTO> {
-  const db = getDb();
-  const author = await db.query.users.findFirst({
-    where: eq(schema.users.id, msg.authorId),
-  });
+// ── DTO assembly ──────────────────────────────────────────────
+/** Fallback para autor removido (nunca vaza dados de outra conta). */
+function removedUser(): PublicUser {
+  return {
+    id: 0,
+    username: null,
+    name: "Usuário removido",
+    avatar: null,
+    banner: null,
+    bio: null,
+    status: "offline",
+  };
+}
 
-  const attachmentRows = await db
-    .select()
-    .from(schema.attachments)
-    .where(eq(schema.attachments.messageId, msg.id));
+function groupByMessage<T extends { messageId: number | null }>(
+  rows: T[],
+): Map<number, T[]> {
+  const map = new Map<number, T[]>();
+  for (const row of rows) {
+    if (row.messageId == null) continue;
+    const list = map.get(row.messageId) ?? [];
+    list.push(row);
+    map.set(row.messageId, list);
+  }
+  return map;
+}
+
+/**
+ * Monta DTOs de MÚLTIPLAS mensagens com queries em lote (~8 queries
+ * totais em vez de ~7 por mensagem). Usado por message.list e pelo
+ * wrapper single abaixo.
+ */
+export async function buildMessageDTOs(
+  rows: (typeof schema.messages.$inferSelect)[]
+): Promise<MessageDTO[]> {
+  if (rows.length === 0) return [];
+  const db = getDb();
+  const messageIds = rows.map(r => r.id);
+  const authorIds = [...new Set(rows.map(r => r.authorId))];
+  const replyToIds = [
+    ...new Set(
+      rows.filter(r => r.replyToId != null).map(r => r.replyToId as number),
+    ),
+  ];
+  const threadIds = [
+    ...new Set(
+      rows.filter(r => r.threadId != null).map(r => r.threadId as number),
+    ),
+  ];
+
+  const [userRows, attachmentRows, reactionRows, replyRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(schema.users)
+        .where(inArray(schema.users.id, authorIds)),
+      db
+        .select()
+        .from(schema.attachments)
+        .where(inArray(schema.attachments.messageId, messageIds)),
+      db
+        .select()
+        .from(schema.messageReactions)
+        .where(inArray(schema.messageReactions.messageId, messageIds)),
+      replyToIds.length > 0
+        ? db
+            .select()
+            .from(schema.messages)
+            .where(inArray(schema.messages.id, replyToIds))
+        : Promise.resolve([] as (typeof schema.messages.$inferSelect)[]),
+    ]);
+
+  // Autores das mensagens respondidas (segunda passada só se faltar).
+  const replyAuthorIds = [
+    ...new Set(
+      replyRows.map(r => r.authorId).filter(id => !authorIds.includes(id)),
+    ),
+  ];
+  const replyAuthorRows =
+    replyAuthorIds.length > 0
+      ? await db
+          .select()
+          .from(schema.users)
+          .where(inArray(schema.users.id, replyAuthorIds))
+      : [];
+  const usersById = new Map(
+    [...userRows, ...replyAuthorRows].map(u => [u.id, u]),
+  );
 
   const moderationRows =
     attachmentRows.length > 0
@@ -47,117 +124,116 @@ export async function buildMessageDTO(
           .where(
             inArray(
               schema.mediaModeration.fileId,
-              attachmentRows.map(a => a.fileId)
-            )
+              attachmentRows.map(a => a.fileId),
+            ),
           )
       : [];
   const moderationByFile = new Map(moderationRows.map(m => [m.fileId, m]));
+  const attachmentsByMessage = groupByMessage(attachmentRows);
+  const reactionsByMessage = groupByMessage(reactionRows);
+  const replyById = new Map(replyRows.map(r => [r.id, r]));
 
-  const reactionRows = await db
-    .select()
-    .from(schema.messageReactions)
-    .where(eq(schema.messageReactions.messageId, msg.id));
-  const reactionMap = new Map<string, ReactionDTO>();
-  for (const r of reactionRows) {
-    const entry = reactionMap.get(r.emoji) ?? {
-      emoji: r.emoji,
-      count: 0,
-      userIds: [],
-    };
-    entry.count += 1;
-    entry.userIds.push(r.userId);
-    reactionMap.set(r.emoji, entry);
-  }
-
-  let replyTo: MessageDTO["replyTo"] = null;
-  if (msg.replyToId) {
-    const original = await db.query.messages.findFirst({
-      where: eq(schema.messages.id, msg.replyToId),
-    });
-    if (original) {
-      const originalAuthor = await db.query.users.findFirst({
-        where: eq(schema.users.id, original.authorId),
-      });
-      replyTo = {
-        id: original.id,
-        content: original.content.slice(0, 200),
-        author: originalAuthor
-          ? toPublicUser(originalAuthor)
-          : {
-              id: 0,
-              username: null,
-              name: "Usuário removido",
-              avatar: null,
-              banner: null,
-              bio: null,
-              status: "offline",
-            },
-      };
-    }
-  }
-
-  const dto: MessageDTO = {
-    id: msg.id,
-    channelId: msg.channelId,
-    conversationId: msg.conversationId,
-    authorId: msg.authorId,
-    content: msg.content,
-    replyToId: msg.replyToId,
-    tag: msg.tag ?? null,
-    createdAt: msg.createdAt,
-    editedAt: msg.editedAt,
-    author: author
-      ? toPublicUser(author)
-      : {
-          id: 0,
-          username: null,
-          name: "Usuário removido",
-          avatar: null,
-          banner: null,
-          bio: null,
-          status: "offline",
-        },
-    attachments: attachmentRows.map(a => {
-      const moderation = moderationByFile.get(a.fileId);
-      return {
-        id: a.id,
-        fileId: a.fileId,
-        filename: a.filename,
-        mimeType: a.mimeType,
-        size: a.size,
-        url: publicFileUrl(a.fileId),
-        spoiler: a.spoiler,
-        moderationStatus:
-          moderation?.status === "processing" ||
-          moderation?.status === "approved" ||
-          moderation?.status === "sensitive" ||
-          moderation?.status === "blocked"
-            ? moderation.status
-            : ("approved" as const),
-        sensitive: moderation?.sensitive ?? false,
-        adultOnly: moderation?.adultOnly ?? false,
-        allowReveal: moderation?.allowReveal ?? true,
-      };
-    }),
-    reactions: [...reactionMap.values()],
-    replyTo,
-  };
-
-  if (msg.threadId != null) {
-    const [threadRow] = await db
+  // Contagem de respostas de threads: UMA query agrupada.
+  const countByThread = new Map<number, number>();
+  if (threadIds.length > 0) {
+    const counts = await db
       .select({
         threadId: schema.messages.threadId,
         count: sql<number>`count(*)`,
       })
       .from(schema.messages)
-      .where(eq(schema.messages.threadId, msg.threadId))
+      .where(inArray(schema.messages.threadId, threadIds))
       .groupBy(schema.messages.threadId);
-    dto.threadReplyCount = threadRow ? Number(threadRow.count) : 0;
+    for (const c of counts) {
+      if (c.threadId != null) countByThread.set(c.threadId, Number(c.count));
+    }
   }
 
-  const [withPoll] = await attachPolls([dto], null);
-  const [withEmbeds] = await attachEmbeds([withPoll]);
-  return withEmbeds;
+  const buildReplyTo = (
+    msg: typeof schema.messages.$inferSelect
+  ): MessageDTO["replyTo"] => {
+    if (!msg.replyToId) return null;
+    const original = replyById.get(msg.replyToId);
+    if (!original) return null;
+    const originalAuthor = usersById.get(original.authorId);
+    return {
+      id: original.id,
+      content: original.content.slice(0, 200),
+      author: originalAuthor
+        ? toPublicUser(originalAuthor)
+        : removedUser(),
+    };
+  };
+
+  const dtos: MessageDTO[] = rows.map(msg => {
+    const author = usersById.get(msg.authorId);
+    const attachmentList = attachmentsByMessage.get(msg.id) ?? [];
+    const reactionList = reactionsByMessage.get(msg.id) ?? [];
+    const reactionMap = new Map<string, ReactionDTO>();
+    for (const r of reactionList) {
+      const entry = reactionMap.get(r.emoji) ?? {
+        emoji: r.emoji,
+        count: 0,
+        userIds: [],
+      };
+      entry.count += 1;
+      entry.userIds.push(r.userId);
+      reactionMap.set(r.emoji, entry);
+    }
+    const dto: MessageDTO = {
+      id: msg.id,
+      channelId: msg.channelId,
+      conversationId: msg.conversationId,
+      authorId: msg.authorId,
+      content: msg.content,
+      replyToId: msg.replyToId,
+      tag: msg.tag ?? null,
+      createdAt: msg.createdAt,
+      editedAt: msg.editedAt,
+      author: author ? toPublicUser(author) : removedUser(),
+      attachments: attachmentList.map(a => {
+        const moderation = moderationByFile.get(a.fileId);
+        return {
+          id: a.id,
+          fileId: a.fileId,
+          filename: a.filename,
+          mimeType: a.mimeType,
+          size: a.size,
+          url: publicFileUrl(a.fileId),
+          spoiler: a.spoiler,
+          moderationStatus:
+            moderation?.status === "processing" ||
+            moderation?.status === "approved" ||
+            moderation?.status === "sensitive" ||
+            moderation?.status === "blocked"
+              ? moderation.status
+              : ("approved" as const),
+          sensitive: moderation?.sensitive ?? false,
+          adultOnly: moderation?.adultOnly ?? false,
+          allowReveal: moderation?.allowReveal ?? true,
+        };
+      }),
+      reactions: [...reactionMap.values()],
+      replyTo: buildReplyTo(msg),
+    };
+    if (msg.threadId != null) {
+      dto.threadReplyCount = countByThread.get(msg.threadId) ?? 0;
+    }
+    return dto;
+  });
+
+  // Enquetes e embeds em lote (helpers já existentes).
+  await attachPolls(dtos, null);
+  await attachEmbeds(dtos);
+  return dtos;
+}
+
+/** Wrapper single-message (send, edits, forum, background jobs). */
+export async function buildMessageDTO(
+  msg: typeof schema.messages.$inferSelect
+): Promise<MessageDTO> {
+  const [dto] = await buildMessageDTOs([msg]);
+  return dto;
 }
 
 async function notifyUsers(
@@ -494,10 +570,8 @@ export const messageRouter = createRouter({
         .orderBy(desc(schema.messages.id))
         .limit(input.limit);
 
-      const messages: MessageDTO[] = [];
-      for (const row of rows) {
-        messages.push(await buildMessageDTO(row));
-      }
+      // Batch: ~8 queries totais em vez de ~7 por mensagem (N+1 eliminado).
+      const messages = await buildMessageDTOs(rows);
       return {
         messages: messages.reverse(),
         hasMore: rows.length === input.limit,
@@ -624,8 +698,8 @@ export const messageRouter = createRouter({
       });
 
       // Embeds de links: cria as linhas processing ANTES do DTO (skeleton
-      // aparece de cara) e resolve em background.
-      enqueueEmbedsForMessage(
+      // aparece para TODOS no message:new) e resolve em background.
+      await enqueueEmbedsForMessage(
         id,
         content,
         input.channelId ?? null,

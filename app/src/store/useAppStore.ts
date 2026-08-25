@@ -66,6 +66,7 @@ type AppState = {
   prependMessages: (key: string, older: MessageDTO[], hasMore: boolean) => void;
   addMessage: (msg: MessageDTO) => void;
   updateMessage: (msg: MessageDTO) => void;
+  upsertMessage: (msg: MessageDTO) => void;
   removeMessage: (key: string, id: number) => void;
   setReactions: (
     key: string,
@@ -170,7 +171,15 @@ export const useAppStore = create<AppState>(set => ({
       const key = keyOfMessage(msg);
       const list = s.messages[key] ?? [];
       if (list.some(m => m.id === msg.id)) return s;
-      return { messages: { ...s.messages, [key]: [...list, msg] } };
+      // Cap de memória: mantém no máx. as 200 mais recentes por canal
+      // (histórico completo continua no banco e paginável por scroll).
+      const next = [...list, msg];
+      return {
+        messages: {
+          ...s.messages,
+          [key]: next.length > 200 ? next.slice(next.length - 200) : next,
+        },
+      };
     }),
 
   updateMessage: msg =>
@@ -184,6 +193,23 @@ export const useAppStore = create<AppState>(set => ({
           [key]: list.map(m => (m.id === msg.id ? msg : m)),
         },
       };
+    }),
+
+  /** Como updateMessage, mas insere se a mensagem ainda não existe locally. */
+  upsertMessage: msg =>
+    set(s => {
+      const key = keyOfMessage(msg);
+      const list = s.messages[key];
+      if (!list) return s;
+      if (list.some(m => m.id === msg.id)) {
+        return {
+          messages: {
+            ...s.messages,
+            [key]: list.map(m => (m.id === msg.id ? msg : m)),
+          },
+        };
+      }
+      return { messages: { ...s.messages, [key]: [...list, msg] } };
     }),
 
   removeMessage: (key, id) =>

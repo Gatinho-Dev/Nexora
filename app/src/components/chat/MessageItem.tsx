@@ -34,6 +34,7 @@ import {
   X,
   MoreHorizontal,
   Copy,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatSize } from "@/lib/formatSize";
@@ -753,15 +754,52 @@ function MessageItemBase({
   );
 }
 
+/** Video facade: só monta o <video> real após o clique (evita baixar o vídeo ao abrir o canal). */
+function VideoAttachment({ src, className }: { src: string; className?: string }) {
+  const [playing, setPlaying] = useState(false);
+
+  if (playing) {
+    return (
+      <video
+        src={src}
+        controls
+        autoPlay
+        playsInline
+        className={className}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setPlaying(true)}
+      aria-label="Reproduzir vídeo"
+      className={cn("group/video relative block overflow-hidden", className)}
+    >
+      <video
+        src={src}
+        preload="metadata"
+        muted
+        className="pointer-events-none h-full w-full object-contain"
+      />
+      <span className="absolute inset-0 flex items-center justify-center bg-black/30 transition-colors group-hover/video:bg-black/40">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/70 text-white shadow-lg transition-transform group-hover/video:scale-110">
+          <Play className="ml-1 h-7 w-7 fill-current" />
+        </span>
+      </span>
+    </button>
+  );
+}
+
 function AttachmentView({ att }: { att: MessageDTO["attachments"][number] }) {
   if (att.mimeType.startsWith("image/")) {
     return <SpoilerableImage att={att} />;
   }
   if (att.mimeType.startsWith("video/")) {
     return (
-      <video
+      <VideoAttachment
         src={att.url}
-        controls
         className="max-h-72 max-w-full sm:max-w-md rounded-xl border border-white/10 bg-black"
       />
     );
@@ -833,6 +871,7 @@ function SpoilerableImage({ att }: { att: MessageDTO["attachments"][number] }) {
             src={att.url}
             alt={att.filename}
             className="max-h-72 max-w-full sm:max-w-md rounded-xl object-contain bg-sidebar transition-transform duration-200 group-hover/img:scale-[1.02]"
+            style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
             loading="lazy"
           />
         </button>
