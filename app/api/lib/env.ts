@@ -84,7 +84,7 @@ export const env = {
     "nvidia/nemotron-3.5-content-safety:free",
   /** Modelo de visão para imagens (o safety model pode não aceitar imagem). */
   openrouterVisionModel:
-    process.env.OPENROUTER_VISION_MODEL ?? "meta/llama-3.2-11b-vision-instruct:free",
+    process.env.OPENROUTER_VISION_MODEL ?? "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
   /** Modelo do chatbot oficial — separado da segurança (nunca usado para moderar). */
   openrouterChatModel: process.env.OPENROUTER_CHAT_MODEL ?? "",
   openrouterAppName: process.env.OPENROUTER_APP_NAME ?? "Nexora",
