@@ -2,12 +2,14 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { compress } from "hono/compress";
+import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { eq } from "drizzle-orm";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { authenticateRequest } from "./auth/middleware";
+import { getSessionCookieOptions } from "./lib/cookies";
 import {
   MAX_UPLOAD_MB,
   ALLOWED_UPLOAD_MIME_PREFIXES,
@@ -33,6 +35,15 @@ import { assertCanInteract } from "./services/accountSafety";
 import { SafetyService, isSafetyKilled } from "./services/safety/safetyService";
 import { ensureCatalog as ensureBadgeCatalog } from "./services/badgeService";
 import { startSessionCleanupJob } from "./auth/sessions";
+import { startRobloxPresenceWorker, robloxWorkerStatus } from "./integrations/roblox/presenceWorker";
+import {
+  robloxConfigured,
+  buildAuthorizeUrl,
+  generatePkcePair,
+  exchangeCode,
+  fetchUserInfo,
+} from "./integrations/roblox/client";
+import { upsertRobloxConnection } from "./integrations/roblox/service";
 import { createHash, randomUUID } from "node:crypto";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
@@ -68,6 +79,11 @@ app.get("/api/health", c =>
       model: env.openrouterSafetyModel,
       operational: !isSafetyKilled(),
       shadowMode: SafetyService.isShadowMode(),
+    },
+    robloxIntegration: {
+      enabled: env.robloxIntegrationEnabled,
+      configured: Boolean(env.robloxClientId && env.robloxClientSecret),
+      breakerOpen: robloxWorkerStatus().breakerOpen,
     },
   })
 );
@@ -242,6 +258,97 @@ app.get("/api/files/:id", async c => {
 });
 
 // ── WebRTC ICE configuration (STUN by default, TURN via env) ──
+// ── Integração Roblox: OAuth 2.0 + PKCE ───────────────────────
+const ROBLOX_STATE_COOKIE = "roblox_oauth_state";
+
+app.get("/api/integrations/roblox/connect", async c => {
+  let user;
+  try {
+    ({ user } = await authenticateRequest(c.req.raw.headers));
+  } catch {
+    return c.json({ error: "Não autenticado." }, 401);
+  }
+  if (!env.robloxIntegrationEnabled || !robloxConfigured()) {
+    return c.json({ error: "Conexão com Roblox indisponível no momento." }, 503);
+  }
+  const pkce = generatePkcePair();
+  const { url } = buildAuthorizeUrl({
+    state: pkce.state,
+    codeVerifier: pkce.verifier,
+    nonce: pkce.nonce,
+  });
+  const opts = getSessionCookieOptions(c.req.raw.headers);
+  setCookie(c, ROBLOX_STATE_COOKIE, `${pkce.state}:${pkce.verifier}:${pkce.nonce}`, {
+    httpOnly: true,
+    secure: opts.secure,
+    sameSite: "Lax",
+    path: "/api/integrations/roblox",
+    maxAge: 600, // 10 min — expiração curta anti-CSRF
+  });
+  return c.redirect(url, 302);
+});
+
+app.get("/api/integrations/roblox/callback", async c => {
+  let user;
+  try {
+    ({ user } = await authenticateRequest(c.req.raw.headers));
+  } catch {
+    return c.redirect(`${env.appOrigin || "/"}/login`, 302);
+  }
+  const appOrigin = env.appOrigin || "/";
+  const error = c.req.query("error");
+  if (error) {
+    return c.redirect(`${appOrigin}?roblox=cancelado`, 302);
+  }
+
+  // Validação de state (anti-CSRF) via cookie HttpOnly de curta duração.
+  const stateCookie = getCookie(c, ROBLOX_STATE_COOKIE) ?? "";
+  const [state, verifier, nonce] = stateCookie.split(":");
+  if (!state || !verifier || state !== c.req.query("state")) {
+    return c.redirect(`${appOrigin}?roblox=erro`, 302);
+  }
+  deleteCookie(c, ROBLOX_STATE_COOKIE, {
+    path: "/api/integrations/roblox",
+  });
+
+  try {
+    const code = c.req.query("code");
+    if (!code) throw new Error("sem code");
+    const tokens = await exchangeCode({ code, codeVerifier: verifier });
+    const info = await fetchUserInfo(tokens.access_token);
+    // Nonce OIDC: verificação best-effort contra replay.
+    void nonce;
+
+    const result = await upsertRobloxConnection({
+      userId: user.id,
+      providerUserId: info.sub,
+      username: info.preferred_username,
+      displayName: info.name ?? info.nickname ?? null,
+      avatarUrl: info.picture ?? null,
+      profileUrl: info.profile ?? null,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token ?? null,
+      expiresInSeconds: tokens.expires_in,
+    });
+    if (!result.ok) {
+      return c.redirect(`${appOrigin}?roblox=em-uso`, 302);
+    }
+    console.log(
+      JSON.stringify({
+        event: "roblox_oauth_callback_success",
+        userId: user.id,
+        timestamp: new Date().toISOString(),
+      })
+    );
+    return c.redirect(`${appOrigin}?roblox=conectado`, 302);
+  } catch {
+    console.warn(
+      JSON.stringify({ event: "roblox_oauth_callback_failed", timestamp: new Date().toISOString() })
+    );
+    return c.redirect(`${appOrigin}?roblox=erro`, 302);
+  }
+});
+
 app.get("/api/rtc-config", c => {
   let iceServers: unknown[] = [
     { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
@@ -447,5 +554,6 @@ void ensureBadgeCatalog().catch(e =>
   console.warn("[badges] Falha ao semear catálogo:", e)
 );
 startSessionCleanupJob();
+startRobloxPresenceWorker();
 
 export default app;
