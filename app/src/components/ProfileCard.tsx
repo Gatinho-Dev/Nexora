@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ReportDialog } from "./safety/ReportDialog";
+import { RobloxActivityCard } from "./roblox/RobloxActivityCard";
 
 type ProfileDetails = PublicUser & {
   banner?: string | null;
@@ -307,6 +308,12 @@ export function ProfileCard({
                   </span>
                 </div>
               </div>
+
+              {userId !== null && (
+                <div className="mt-4">
+                  <RobloxActivityCard userId={userId} />
+                </div>
+              )}
 
               <div className="mt-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.72fr)]">
                 <section className="rounded-xl border border-white/[0.08] bg-[#171920] p-4 sm:p-5">

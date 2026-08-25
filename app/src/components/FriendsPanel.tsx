@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { FriendDTO } from "@contracts/types";
+import { RobloxActivityInline } from "./roblox/RobloxActivityCard";
 
 type Tab = "all" | "online" | "pending" | "blocked" | "add";
 
@@ -170,6 +171,7 @@ export function FriendsPanel({
                         ? " · pedido recebido"
                         : " · pedido enviado")}
                   </p>
+                  <RobloxActivityInline userId={f.user.id} />
                 </div>
                 <div className="flex gap-1">
                   {f.status === "ACCEPTED" && (

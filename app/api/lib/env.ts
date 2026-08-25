@@ -118,4 +118,17 @@ export const env = {
     .split(",")
     .map(origin => origin.trim().replace(/\/$/, ""))
     .filter(Boolean),
+
+  // ── Integração Roblox (OAuth 2.0/OIDC + presença) ──────────
+  robloxClientId: process.env.ROBLOX_CLIENT_ID ?? "",
+  robloxClientSecret: process.env.ROBLOX_CLIENT_SECRET ?? "",
+  robloxRedirectUri:
+    process.env.ROBLOX_REDIRECT_URI ??
+    "https://nexorachat.cloud/api/integrations/roblox/callback",
+  robloxOpenCloudKey: process.env.ROBLOX_OPEN_CLOUD_API_KEY ?? "",
+  robloxIntegrationEnabled: process.env.ROBLOX_INTEGRATION_ENABLED !== "false",
+  robloxPresenceIntervalMs: Math.max(
+    30_000,
+    Number(process.env.ROBLOX_PRESENCE_INTERVAL_MS ?? 60_000)
+  ),
 };

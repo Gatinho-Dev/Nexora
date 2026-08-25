@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   MessageDTO,
   ReactionDTO,
+  RobloxActivityDTO,
   VoiceParticipant,
 } from "@contracts/types";
 
@@ -31,6 +32,9 @@ type AppState = {
   setQuickSwitcherOpen: (v: boolean) => void;
   // presence & unread
   presence: Record<number, string>;
+  // atividade Roblox em tempo real (WS activity:update vence a query inicial)
+  robloxActivity: Record<number, RobloxActivityDTO | null>;
+  setRobloxActivity: (userId: number, activity: RobloxActivityDTO | null) => void;
   unreadChannels: Record<number, number>;
   unreadConversations: Record<number, number>;
   // voice
@@ -124,6 +128,7 @@ export const useAppStore = create<AppState>(set => ({
   hasMore: {},
   typing: {},
   presence: {},
+  robloxActivity: {},
   sensitiveMediaPref: "warn",
   serverUnread: {},
   stageHandsByRoom: {},
@@ -246,6 +251,9 @@ export const useAppStore = create<AppState>(set => ({
 
   setPresence: (userId, status) =>
     set(s => ({ presence: { ...s.presence, [userId]: status } })),
+
+  setRobloxActivity: (userId, activity) =>
+    set(s => ({ robloxActivity: { ...s.robloxActivity, [userId]: activity } })),
 
   setPresenceBulk: entries =>
     set(s => ({ presence: { ...s.presence, ...entries } })),

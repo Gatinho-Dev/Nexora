@@ -127,6 +127,13 @@
       "when": 1788140400000,
       "tag": "0017_account_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1788226800000,
+      "tag": "0018_user_connections",
+      "breakpoints": true
     }
   ]
 }
