@@ -369,6 +369,7 @@ export const notifications = mysqlTable(
   },
   (table) => ({
     userIdx: index("notif_user_idx").on(table.userId, table.isRead),
+    userIdIdIdx: index("notifications_user_id_id_idx").on(table.userId, table.id),
   }),
 );
 

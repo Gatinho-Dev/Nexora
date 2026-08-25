@@ -171,7 +171,15 @@ export const useAppStore = create<AppState>(set => ({
       const key = keyOfMessage(msg);
       const list = s.messages[key] ?? [];
       if (list.some(m => m.id === msg.id)) return s;
-      return { messages: { ...s.messages, [key]: [...list, msg] } };
+      // Cap de memória: mantém no máx. as 200 mais recentes por canal
+      // (histórico completo continua no banco e paginável por scroll).
+      const next = [...list, msg];
+      return {
+        messages: {
+          ...s.messages,
+          [key]: next.length > 200 ? next.slice(next.length - 200) : next,
+        },
+      };
     }),
 
   updateMessage: msg =>

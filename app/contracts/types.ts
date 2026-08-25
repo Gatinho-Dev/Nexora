@@ -174,6 +174,8 @@ export type ServerDetailsDTO = {
   channels: ChannelDTO[];
   categories: CategoryDTO[];
   members: MemberDTO[];
+  /** True quando o servidor tem mais de 1000 membros e a lista foi cortada. */
+  membersTruncated?: boolean;
   roles: RoleDTO[];
   myPermissions: Permission[];
 };

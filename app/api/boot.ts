@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
+import { compress } from "hono/compress";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { eq } from "drizzle-orm";
@@ -38,6 +39,9 @@ const app = new Hono<{ Bindings: HttpBindings }>();
 const maxUploadMb = parseInt(
   process.env.MAX_UPLOAD_MB || String(MAX_UPLOAD_MB)
 );
+
+// gzip das respostas (JSON de mensagens/lists comprime ~80%).
+app.use("/api/*", compress());
 
 app.use(
   "/api/*",

@@ -9,6 +9,24 @@ type App = Hono<{ Bindings: HttpBindings }>;
 export function serveStaticFiles(app: App) {
   const distPath = path.resolve(import.meta.dirname, "../dist/public");
 
+  // Assets com hash no nome são imutáveis — cache de 1 ano.
+  app.use("/assets/*", async (c, next) => {
+    await next();
+    if (c.res.status === 200) {
+      c.res.headers.set(
+        "Cache-Control",
+        "public, max-age=31536000, immutable",
+      );
+    }
+  });
+  // HTML/ícones/sw: sempre revalida.
+  app.use("*", async (c, next) => {
+    await next();
+    if (c.res.status === 200 && !c.req.path.startsWith("/assets/")) {
+      c.res.headers.set("Cache-Control", "no-cache");
+    }
+  });
+
   app.use("*", serveStatic({ root: "./dist/public" }));
 
   app.notFound((c) => {

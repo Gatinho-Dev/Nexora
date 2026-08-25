@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
 import { realtime } from "@/lib/ws";
@@ -6,11 +6,24 @@ import { useChatUIStore } from "@/store/useChatUIStore";
 import { useAppStore } from "@/store/useAppStore";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
-import { EmojiPickerPro } from "./pickers/EmojiPickerPro";
-import { StickerPicker } from "./pickers/StickerPicker";
-import { GifPicker } from "./GifPicker";
 import { SlashCommandMenu } from "./SlashCommandMenu";
-import { PollCreator } from "./poll/PollCreator";
+
+const GifPicker = lazy(() =>
+  import("./GifPicker").then(m => ({ default: m.GifPicker })),
+);
+const EmojiPickerPro = lazy(() =>
+  import("./pickers/EmojiPickerPro").then(m => ({ default: m.EmojiPickerPro })),
+);
+const StickerPicker = lazy(() =>
+  import("./pickers/StickerPicker").then(m => ({ default: m.StickerPicker })),
+);
+const PollCreator = lazy(() =>
+  import("./poll/PollCreator").then(m => ({ default: m.PollCreator })),
+);
+
+function PickerFallback() {
+  return <div className="h-72 w-80 rounded-xl bg-[#24262c] animate-pulse" />;
+}
 import {
   applyTextCommand,
   computeFunCommand,
@@ -1516,60 +1529,66 @@ export function MessageInput({
           />
 
           {!disabled && (
-            <StickerPicker
-              onPick={slug => {
-                send.mutate(
-                  {
-                    channelId,
-                    conversationId,
-                    content: slug,
-                    threadId,
-                    tag: "sticker",
-                  },
-                  {
-                    onError: e => toast.error(e.message),
-                  },
-                );
-              }}
-            >
-              <button
-                className="hidden sm:block p-1.5 text-muted2 hover:text-white transition-colors disabled:opacity-40"
-                title="Stickers"
-                type="button"
-                aria-label="Stickers"
-                aria-haspopup="true"
-                disabled={disabled}
+            <Suspense fallback={<PickerFallback />}>
+              <StickerPicker
+                onPick={slug => {
+                  send.mutate(
+                    {
+                      channelId,
+                      conversationId,
+                      content: slug,
+                      threadId,
+                      tag: "sticker",
+                    },
+                    {
+                      onError: e => toast.error(e.message),
+                    },
+                  );
+                }}
               >
-                <Sticker className="h-5 w-5" />
-              </button>
-            </StickerPicker>
+                <button
+                  className="hidden sm:block p-1.5 text-muted2 hover:text-white transition-colors disabled:opacity-40"
+                  title="Stickers"
+                  type="button"
+                  aria-label="Stickers"
+                  aria-haspopup="true"
+                  disabled={disabled}
+                >
+                  <Sticker className="h-5 w-5" />
+                </button>
+              </StickerPicker>
+            </Suspense>
           )}
 
-          <EmojiPickerPro onPick={emoji => setText(t => t + emoji)}>
-            <button
-              className="p-1.5 text-muted2 hover:text-white transition-colors"
-              title="Emojis"
-              type="button"
-              aria-label="Emojis"
-              aria-haspopup="true"
-            >
-              <Smile className="h-5 w-5" />
-            </button>
-          </EmojiPickerPro>
+          <Suspense fallback={<PickerFallback />}>
+            <EmojiPickerPro onPick={emoji => setText(t => t + emoji)}>
+              <button
+                className="p-1.5 text-muted2 hover:text-white transition-colors"
+                title="Emojis"
+                type="button"
+                aria-label="Emojis"
+                aria-haspopup="true"
+              >
+                <Smile className="h-5 w-5" />
+              </button>
+            </EmojiPickerPro>
+          </Suspense>
 
           {!disabled && (
-            <GifPicker onPick={url => setText(t => `${t}${t ? " " : ""}${url} `)}>
-              <button
-                className="hidden sm:block p-0.5 text-[10px] font-extrabold tracking-wider rounded bg-white/5 hover:bg-white/15 border border-[#B5BAC1]/40 text-muted2 hover:text-white transition-colors disabled:opacity-40"
-                title="GIFs"
-                type="button"
-                aria-label="GIFs"
-                aria-haspopup="true"
-                disabled={disabled}
-              >
-                GIF
-              </button>
-            </GifPicker>
+            <Suspense fallback={<PickerFallback />}>
+              <GifPicker onPick={url => setText(t => `${t}${t ? " " : ""}${url} `)}>
+                <button
+                  className="hidden sm:block p-0.5 text-[10px] font-extrabold tracking-wider rounded bg-white/5 hover:bg-white/15 border border-[#B5BAC1]/40 text-muted2 hover:text-white transition-colors disabled:opacity-40"
+                  title="GIFs"
+                  type="button"
+                  aria-label="GIFs"
+                  aria-haspopup="true"
+                  disabled={disabled}
+                >
+                  GIF
+                </button>
+              </GifPicker>
+            </Suspense>
           )}
 
           {!disabled && (
@@ -1634,21 +1653,23 @@ export function MessageInput({
       )}
 
       {/* Criar enquete (/poll ou + menu) */}
-      <PollCreator
-        open={pollOpen}
-        onOpenChange={setPollOpen}
-        busy={createPoll.isPending}
-        onSubmit={data => {
-          createPoll.mutate({
-            channelId,
-            conversationId,
-            question: data.question,
-            options: data.options,
-            allowMultiple: data.allowMultiple,
-            durationHours: data.durationHours,
-          });
-        }}
-      />
+      <Suspense fallback={<div className="h-64 w-full animate-pulse" />}>
+        <PollCreator
+          open={pollOpen}
+          onOpenChange={setPollOpen}
+          busy={createPoll.isPending}
+          onSubmit={data => {
+            createPoll.mutate({
+              channelId,
+              conversationId,
+              question: data.question,
+              options: data.options,
+              allowMultiple: data.allowMultiple,
+              durationHours: data.durationHours,
+            });
+          }}
+        />
+      </Suspense>
 
       {/* Criar tópico (/topic ou + menu) */}
       <Dialog
