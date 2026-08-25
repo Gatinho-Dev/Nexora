@@ -624,8 +624,8 @@ export const messageRouter = createRouter({
       });
 
       // Embeds de links: cria as linhas processing ANTES do DTO (skeleton
-      // aparece de cara) e resolve em background.
-      enqueueEmbedsForMessage(
+      // aparece para TODOS no message:new) e resolve em background.
+      await enqueueEmbedsForMessage(
         id,
         content,
         input.channelId ?? null,
