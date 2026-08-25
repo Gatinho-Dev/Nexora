@@ -429,8 +429,20 @@ export type ModerationCaseDTO = {
   updatedAt: string | Date;
 };
 
-export type SafetyAiStatusDTO = {
-  provider: string;
+export type AccountSessionDTO = {
+  id: string;
+  friendlyName: string;
+  browser: string;
+  os: string;
+  deviceType: "desktop" | "mobile" | "tablet" | "unknown";
+  ipAddress: string | null;
+  createdAt: string | Date;
+  lastSeenAt: string | Date;
+  /** True para a sessão que fez esta requisição. */
+  isCurrent?: boolean;
+};
+
+export type SafetyAiStatusDTO = {  provider: string;
   model: string;
   visionModel: string;
   policyVersion: string;
@@ -545,6 +557,7 @@ export type WSServerEvent =
   | { t: "group:update"; conversationId: number }
   | { t: "dm:refresh" }
   | { t: "friends:refresh" }
+  | { t: "session:revoked" }
   | {
       t: "account:restriction_updated";
       accountStatus:

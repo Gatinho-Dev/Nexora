@@ -6,6 +6,7 @@ import { useAppStore, channelKey, dmKey } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
 import { soundManager } from "@/lib/sound";
 import { toast } from "sonner";
+import { queryClient } from "@/providers/trpc";
 import type { WSServerEvent } from "@contracts/types";
 
 /** Connects the realtime socket and routes events to stores/queries. */
@@ -268,6 +269,15 @@ export function useRealtime(myUserId: number | undefined) {
               "O status da sua conta foi atualizado. Confira o Status da Conta."
             );
           }
+          break;
+        }
+        case "session:revoked": {
+          // Esta sessão foi encerrada remotamente: derruba queries em
+          // voo, limpa todo o cache/credenciais do cliente e sinaliza o
+          // AppLayout para exibir a tela de sessão encerrada.
+          void queryClient.cancelQueries();
+          queryClient.clear();
+          window.dispatchEvent(new CustomEvent("nexora:session-revoked"));
           break;
         }
       }

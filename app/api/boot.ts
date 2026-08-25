@@ -7,9 +7,8 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { eq } from "drizzle-orm";
 import { appRouter } from "./router";
 import { createContext } from "./context";
-import { createOAuthCallbackHandler, authenticateRequest } from "./kimi/auth";
+import { authenticateRequest } from "./auth/middleware";
 import {
-  Paths,
   MAX_UPLOAD_MB,
   ALLOWED_UPLOAD_MIME_PREFIXES,
   RateLimits,
@@ -33,6 +32,7 @@ import { isPlatformAdmin } from "./utils/platformAuth";
 import { assertCanInteract } from "./services/accountSafety";
 import { SafetyService, isSafetyKilled } from "./services/safety/safetyService";
 import { ensureCatalog as ensureBadgeCatalog } from "./services/badgeService";
+import { startSessionCleanupJob } from "./auth/sessions";
 import { createHash, randomUUID } from "node:crypto";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
@@ -73,13 +73,12 @@ app.get("/api/health", c =>
 );
 
 app.use(bodyLimit({ maxSize: (maxUploadMb + 2) * 1024 * 1024 }));
-app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 
 // ── File upload (multipart) ───────────────────────────────────
 app.post("/api/upload", async c => {
   let user;
   try {
-    user = await authenticateRequest(c.req.raw.headers);
+    ({ user } = await authenticateRequest(c.req.raw.headers));
   } catch {
     return c.json({ error: "Não autenticado." }, 401);
   }
@@ -176,7 +175,7 @@ app.post("/api/upload", async c => {
 app.get("/api/moderation/status", async c => {
   let user;
   try {
-    user = await authenticateRequest(c.req.raw.headers);
+    ({ user } = await authenticateRequest(c.req.raw.headers));
   } catch {
     return c.json({ error: "Não autenticado." }, 401);
   }
@@ -218,7 +217,7 @@ app.get("/api/files/:id", async c => {
       // While unverified, only the uploader may fetch the bytes.
       let viewer;
       try {
-        viewer = await authenticateRequest(c.req.raw.headers);
+        ({ user: viewer } = await authenticateRequest(c.req.raw.headers));
       } catch {
         return c.json({ error: "Não autenticado." }, 401);
       }
@@ -318,7 +317,7 @@ app.post("/api/webhooks/:id/:token", async c => {
 app.post("/api/moderation/retry/:fileId", async c => {
   let user;
   try {
-    user = await authenticateRequest(c.req.raw.headers);
+    ({ user } = await authenticateRequest(c.req.raw.headers));
   } catch {
     return c.json({ error: "Não autenticado." }, 401);
   }
@@ -333,7 +332,7 @@ app.post("/api/moderation/retry/:fileId", async c => {
 // Technical moderation metrics — platform admins only, no private media.
 app.get("/api/moderation/metrics", async c => {
   try {
-    const user = await authenticateRequest(c.req.raw.headers);
+    const { user } = await authenticateRequest(c.req.raw.headers);
     if (!isPlatformAdmin(user)) return c.json({ error: "Sem permissão." }, 403);
   } catch {
     return c.json({ error: "Não autenticado." }, 401);
@@ -445,7 +444,8 @@ app.all("/api/*", c => c.json({ error: "Not Found" }, 404));
 
 // Semeia o catálogo de badges + Staff para Lobo_2033 (idempotente).
 void ensureBadgeCatalog().catch(e =>
-  console.error("[badges]Falha ao semear catálogo:", e),
+  console.warn("[badges] Falha ao semear catálogo:", e)
 );
+startSessionCleanupJob();
 
 export default app;

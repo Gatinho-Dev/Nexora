@@ -59,12 +59,11 @@ function numericCsv(name: string): number[] {
 const databaseUrl = validateDatabaseUrl(required("DATABASE_URL"));
 
 export const env = {
-  appId: required("APP_ID"),
+  /** Identificador do app embutido no JWT de sessão (não é mais OAuth). */
+  appId: process.env.APP_ID ?? "nexora",
   appSecret: required("APP_SECRET"),
   isProduction: process.env.NODE_ENV === "production",
   databaseUrl,
-  kimiAuthUrl: required("KIMI_AUTH_URL"),
-  kimiOpenUrl: required("KIMI_OPEN_URL"),
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
   ownerUnionIds: [process.env.OWNER_UNION_ID ?? "", ...csv("NEXORA_OWNER_UNION_IDS")]
     .filter(Boolean),
@@ -85,6 +84,10 @@ export const env = {
   /** Modelo de visão para imagens (o safety model pode não aceitar imagem). */
   openrouterVisionModel:
     process.env.OPENROUTER_VISION_MODEL ?? "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+  /** Fallbacks se o modelo de visão principal deixar de existir (404). */
+  openrouterVisionFallbacks: csv("OPENROUTER_VISION_FALLBACK_MODELS").length
+    ? csv("OPENROUTER_VISION_FALLBACK_MODELS")
+    : ["google/gemma-4-31b-it:free"],
   /** Modelo do chatbot oficial — separado da segurança (nunca usado para moderar). */
   openrouterChatModel: process.env.OPENROUTER_CHAT_MODEL ?? "",
   openrouterAppName: process.env.OPENROUTER_APP_NAME ?? "Nexora",

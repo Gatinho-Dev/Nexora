@@ -10,7 +10,8 @@ import type {
   WSClientEvent,
   WSServerEvent,
 } from "@contracts/types";
-import { verifySessionToken } from "./kimi/session";
+import { verifySessionToken } from "./auth/token";
+import { resolveActiveSession } from "./auth/sessions";
 import { findUserByUnionId } from "./queries/users";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
@@ -22,6 +23,8 @@ import { randomUUID } from "node:crypto";
 type Client = {
   ws: WebSocket;
   userId: number;
+  /** Id da sessão (account_sessions) que criou este socket. */
+  sid: string | null;
   alive: boolean;
 };
 
@@ -75,6 +78,25 @@ function removeClient(client: Client) {
 
 export function isUserOnline(userId: number): boolean {
   return byUser.has(userId);
+}
+
+/**
+ * Logout remoto: encerra todos os WebSockets de uma sessão específica.
+ * Envia `session:revoked` antes de fechar para o cliente mostrar
+ * "Sua sessão foi encerrada" e voltar ao login.
+ */
+export function kickSession(sessionId: string): void {
+  for (const client of clients) {
+    if (client.sid === sessionId) {
+      try {
+        client.ws.send(JSON.stringify({ t: "session:revoked" }));
+      } catch {
+        // socket já fechado
+      }
+      client.ws.close(4001, "session-revoked");
+      removeClient(client);
+    }
+  }
 }
 
 function effectiveStatus(userId: number): string {
@@ -654,14 +676,16 @@ export function attachRealtime(server: HttpServer) {
         const cookies = cookie.parse(req.headers.cookie ?? "");
         const token = cookies[Session.cookieName];
         const claim = token ? await verifySessionToken(token) : null;
-        const user = claim ? await findUserByUnionId(claim.unionId) : null;
-        if (!user) {
+        // Sessão deve existir e estar ativa (revogação remota funciona aqui).
+        const session = claim ? await resolveActiveSession(claim.sid) : null;
+        const user = claim && session ? await findUserByUnionId(claim.unionId) : null;
+        if (!user || !session) {
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
           socket.destroy();
           return;
         }
         wss.handleUpgrade(req, socket, head, ws => {
-          wss.emit("connection", ws, req, user.id);
+          wss.emit("connection", ws, req, user.id, session.id);
         });
       } catch {
         socket.destroy();
@@ -683,8 +707,8 @@ export function attachRealtime(server: HttpServer) {
 
   wss.on(
     "connection",
-    async (ws: WebSocket, _req: IncomingMessage, userId: number) => {
-      const client: Client = { ws, userId, alive: true };
+    async (ws: WebSocket, _req: IncomingMessage, userId: number, sid: string | null) => {
+      const client: Client = { ws, userId, sid: sid ?? null, alive: true };
       addClient(client);
       send(client, { t: "ready", userId });
       await broadcastPresence(userId);

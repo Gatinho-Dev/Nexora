@@ -120,6 +120,13 @@
       "when": 1788054000000,
       "tag": "0016_safety_reports_appeals_automod",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1788140400000,
+      "tag": "0017_account_sessions",
+      "breakpoints": true
     }
   ]
 }

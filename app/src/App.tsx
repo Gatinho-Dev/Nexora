@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route, useParams } from "react-router";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 
-const Home = lazy(() => import("./pages/Home"));
+const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -91,7 +91,7 @@ export default function App() {
         path="/"
         element={
           <Deferred>
-            <Home />
+            <Landing />
           </Deferred>
         }
       />
