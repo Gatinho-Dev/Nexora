@@ -16,6 +16,7 @@ import { IncomingCallToast } from "@/components/voice/IncomingCallToast";
 import { VoiceConnectionBar } from "@/components/mobile/VoiceConnectionBar";
 import { useVoiceCallView } from "@/hooks/useVoiceCallView";
 import { PermanentBanScreen } from "@/components/safety/PermanentBanScreen";
+import { SessionRevokedScreen } from "@/components/settings/SessionRevokedScreen";
 import { ReportHost } from "@/components/safety/ReportHost";
 import {
   UserSettingsModal,
@@ -65,6 +66,14 @@ export function AppLayout() {
     const open = () => setMobileTab("servers");
     window.addEventListener("nexora:open-servers", open);
     return () => window.removeEventListener("nexora:open-servers", open);
+  }, []);
+
+  // Esta sessão foi revogada remotamente (evento `session:revoked`).
+  const [sessionRevoked, setSessionRevoked] = useState(false);
+  useEffect(() => {
+    const show = () => setSessionRevoked(true);
+    window.addEventListener("nexora:session-revoked", show);
+    return () => window.removeEventListener("nexora:session-revoked", show);
   }, []);
 
   // Notificações do PC: pergunta UMA vez (clicável = gesto do usuário).
@@ -307,6 +316,7 @@ export function AppLayout() {
       />
       <IncomingCallToast />
       <VoiceMediaRenderer myUserId={user.id} />
+      {sessionRevoked && <SessionRevokedScreen />}
       </div>
     </div>
   );

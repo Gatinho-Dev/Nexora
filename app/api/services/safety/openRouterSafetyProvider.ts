@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { env } from "../../lib/env";
+import { OpenRouterProviderError } from "./openRouterClient";
 import {
   classifyWithRetry,
   SAFETY_SYSTEM_PROMPT,
@@ -66,13 +67,28 @@ export const OpenRouterSafetyProvider = {
     });
   },
 
+  /**
+   * Análise de imagem com cadeia de fallback: provedores gratuitos removem
+   * modelos sem aviso. Se o modelo principal não existir mais (404),
+   * tenta os próximos da lista — mídia nunca fica presa por causa disso.
+   */
   async analyzeImage(input: SafetyImageInput): Promise<SafetyResult> {
-    // Modelo de visão configurável (o safety model de texto pode não
-    // aceitar imagens — a env permite trocar sem refactor).
-    return classifyWithRetry(imageMessages(input), {
-      model: env.openrouterVisionModel,
-      vision: true,
-    });
+    const chain = [
+      env.openrouterVisionModel,
+      ...env.openrouterVisionFallbacks.filter(m => m !== env.openrouterVisionModel),
+    ];
+    let lastError: unknown = null;
+    for (const model of chain) {
+      try {
+        return await classifyWithRetry(imageMessages(input), { model, vision: true });
+      } catch (e) {
+        lastError = e;
+        // Só faz fallback quando o modelo não está disponível.
+        if (e instanceof OpenRouterProviderError && e.status === 404) continue;
+        throw e;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("Visão indisponível.");
   },
 
   /** Hash do conteúdo (dedup de análises por policyVersion+model). */

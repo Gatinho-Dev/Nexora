@@ -7,14 +7,23 @@ import { nanoid } from "nanoid";
 import { createRouter, publicQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
-import { signSessionToken } from "./kimi/session";
+import { signSessionToken } from "./auth/token";
+import {
+  createSession,
+  currentSessionIdFromCookie,
+  listActiveSessions,
+  revokeAllOthers,
+  revokeSession,
+} from "./auth/sessions";
+import { getClientIp } from "./lib/ip";
 import { getSessionCookieOptions } from "./lib/cookies";
 import { Session } from "@contracts/constants";
 import { rateLimit } from "./utils/rateLimit";
 import { toPublicUser } from "./utils/permissions";
 import { recordEvent } from "./services/badgeService";
 import { moderatePublicFieldAsync } from "./services/profileModeration";
-import { env } from "./lib/env";
+import { logSafetyEvent } from "./services/safetyAudit";
+import { kickSession } from "./realtime";
 
 // ── Password hashing (scrypt, no native deps) ─────────────────
 function hashPassword(password: string): string {
@@ -39,9 +48,28 @@ const usernameSchema = z
 
 async function issueSession(
   ctx: { req: Request; resHeaders: Headers },
-  unionId: string,
+  user: { id: number; unionId: string },
 ) {
-  const token = await signSessionToken({ unionId, clientId: env.appId });
+  const sid = nanoid(24);
+  const token = await signSessionToken({
+    unionId: user.unionId,
+    clientId: "nexora",
+    sid,
+  });
+  const created = await createSession({
+    userId: user.id,
+    sid,
+    token,
+    userAgent: ctx.req.headers.get("user-agent"),
+    secChUa: ctx.req.headers.get("sec-ch-ua"),
+    ip: getClientIp(ctx.req.headers),
+  });
+  void logSafetyEvent({
+    event: "login_success",
+    actorUserId: user.id,
+    targetUserId: user.id,
+    metadata: { sessionId: created.sid },
+  }).catch(() => {});
   const opts = getSessionCookieOptions(ctx.req.headers);
   ctx.resHeaders.append(
     "set-cookie",
@@ -95,7 +123,7 @@ export const accountRouter = createRouter({
         })
         .$returningId();
 
-      await issueSession(ctx, unionId);
+      await issueSession(ctx, { id, unionId });
       const user = await getDb().query.users.findFirst({
         where: eq(schema.users.id, id),
       });
@@ -114,10 +142,18 @@ export const accountRouter = createRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const ip = getClientIp(ctx.req.headers) ?? "unknown";
+      // Anti brute-force: por usuário e por IP.
       rateLimit(`login:${input.username.toLowerCase()}`, 10, 60_000);
+      rateLimit(`login-ip:${ip}`, 20, 60_000);
 
       const user = await findByUsername(input.username);
       if (!user || !user.passwordHash || !verifyPassword(input.password, user.passwordHash)) {
+        void logSafetyEvent({
+          event: "login_failed",
+          targetUserId: user?.id ?? null,
+          metadata: { ip },
+        }).catch(() => {});
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Usuário ou senha incorretos.",
@@ -129,9 +165,66 @@ export const accountRouter = createRouter({
         .set({ lastSignInAt: new Date(), status: "online" })
         .where(eq(schema.users.id, user.id));
 
-      await issueSession(ctx, user.unionId);
+      await issueSession(ctx, user);
       return { user: toPublicUser(user) };
     }),
+
+  /** Disponibilidade de username para o cadastro (feedback em tempo real). */
+  checkUsername: publicQuery
+    .input(z.object({ username: usernameSchema }))
+    .query(async ({ input }) => {
+      rateLimit(`checkUsername:${input.username.toLowerCase()}`, 30, 60_000);
+      const RESERVED = new Set([
+        "admin", "nexora", "suporte", "support", "moderacao", "moderation",
+        "oficial", "official", "staff", "sistema", "system", "login", "register",
+      ]);
+      if (RESERVED.has(input.username.toLowerCase())) {
+        return { available: false, reason: "Este nome é reservado." };
+      }
+      const existing = await findByUsername(input.username);
+      return existing
+        ? { available: false, reason: "Este nome já está em uso." }
+        : { available: true, reason: null };
+    }),
+
+  // ── Dispositivos e sessões ───────────────────────────────────
+  sessionsList: authedQuery.query(async ({ ctx }) => {
+    const rows = await listActiveSessions(ctx.user.id);
+    const current = await currentSessionIdFromCookie(
+      ctx.req.headers.get("cookie")
+    );
+    return rows.map(r => ({ ...r, isCurrent: r.id === current }));
+  }),
+
+  sessionRevoke: authedQuery
+    .input(z.object({ sessionId: z.string().min(1).max(32) }))
+    .mutation(async ({ ctx, input }) => {
+      rateLimit(`sessionRevoke:${ctx.user.id}`, 10, 60_000);
+      // Ownership validado dentro de revokeSession (userId na cláusula).
+      const ok = await revokeSession(input.sessionId, ctx.user.id);
+      if (!ok) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Sessão não encontrada ou já encerrada.",
+        });
+      }
+      kickSession(input.sessionId);
+      return { ok: true };
+    }),
+
+  sessionRevokeOthers: authedQuery.mutation(async ({ ctx }) => {
+    rateLimit(`sessionRevokeAll:${ctx.user.id}`, 5, 60_000);
+    const current = await currentSessionIdFromCookie(ctx.req.headers.get("cookie"));
+    if (!current) {
+      throw new TRPCError({
+        code: "UNAUTHORIZED",
+        message: "Sessão atual inválida.",
+      });
+    }
+    const revokedIds = await revokeAllOthers(ctx.user.id, current);
+    for (const sid of revokedIds) kickSession(sid);
+    return { ok: true, revoked: revokedIds.length };
+  }),
 
   updateProfile: authedQuery
     .input(
@@ -186,6 +279,7 @@ export const accountRouter = createRouter({
       z.object({
         currentPassword: z.string().min(1, "Informe a senha atual."),
         newPassword: z.string().min(6, "A nova senha precisa de pelo menos 6 caracteres.").max(128),
+        disconnectOthers: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -205,7 +299,24 @@ export const accountRouter = createRouter({
         .update(schema.users)
         .set({ passwordHash: hashPassword(input.newPassword) })
         .where(eq(schema.users.id, ctx.user.id));
-      return { ok: true };
+      void logSafetyEvent({
+        event: "password_changed",
+        actorUserId: ctx.user.id,
+        targetUserId: ctx.user.id,
+      }).catch(() => {});
+
+      let revokedOthers = 0;
+      if (input.disconnectOthers) {
+        const current = await currentSessionIdFromCookie(
+          ctx.req.headers.get("cookie")
+        );
+        if (current) {
+          const revokedIds = await revokeAllOthers(ctx.user.id, current);
+          for (const sid of revokedIds) kickSession(sid);
+          revokedOthers = revokedIds.length;
+        }
+      }
+      return { ok: true, revokedOthers };
     }),
 
   getPublicUser: authedQuery

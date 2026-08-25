@@ -3,6 +3,7 @@ import {
   mysqlEnum,
   serial,
   varchar,
+  char,
   text,
   timestamp,
   bigint,
@@ -1142,6 +1143,34 @@ export const safetyAuditEvents = mysqlTable(
   }),
 );
 
+// ── Sessões de dispositivo (Dispositivos conectados) ──────────
+// O banco guarda apenas sha256(token) — nunca o JWT bruto.
+export const accountSessions = mysqlTable(
+  "account_sessions",
+  {
+    id: varchar("id", { length: 32 }).primaryKey(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    tokenHash: char("tokenHash", { length: 64 }).notNull(),
+    userAgent: varchar("userAgent", { length: 250 }),
+    browser: varchar("browser", { length: 40 }).notNull(),
+    os: varchar("os", { length: 40 }).notNull(),
+    /** desktop | mobile | tablet | unknown */
+    deviceType: varchar("deviceType", { length: 20 }).notNull(),
+    friendlyName: varchar("friendlyName", { length: 80 }).notNull(),
+    /** IPv4 ou IPv6. */
+    ipAddress: varchar("ipAddress", { length: 64 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    lastSeenAt: timestamp("lastSeenAt").defaultNow().notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    revokedAt: timestamp("revokedAt"),
+  },
+  (table) => ({
+    tokenHashIdx: uniqueIndex("as_token_hash_uniq").on(table.tokenHash),
+    userSeenIdx: index("as_user_seen_idx").on(table.userId, table.lastSeenAt),
+    expiresIdx: index("as_expires_idx").on(table.expiresAt),
+  }),
+);
+
 // ── Types ─────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -1185,3 +1214,4 @@ export type ModerationCaseReport = typeof moderationCaseReports.$inferSelect;
 export type Appeal = typeof appeals.$inferSelect;
 export type AutomodRule = typeof automodRules.$inferSelect;
 export type SafetyAuditEvent = typeof safetyAuditEvents.$inferSelect;
+export type AccountSession = typeof accountSessions.$inferSelect;

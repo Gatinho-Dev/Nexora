@@ -5,6 +5,7 @@ import { AccountStanding } from "../safety/AccountStanding";
 import { SecurityCenter } from "../safety/SecurityCenter";
 import { ReportsList } from "../safety/ReportsList";
 import { AppealsSection } from "../safety/AppealsSection";
+import { DevicesSection } from "../settings/DevicesSection";
 import { toast } from "sonner";
 import { apiUrl } from "@/lib/endpoints";
 import {
@@ -55,6 +56,7 @@ import { NexoraLogo, NexoraMark } from "@/components/NexoraBrand";
 type Tab =
   | "account"
   | "profile"
+  | "devices"
   | "security"
   | "standing"
   | "privacy"
@@ -79,6 +81,7 @@ const MENU_GROUPS: {
     items: [
       { id: "account", label: "Minha conta" },
       { id: "profile", label: "Perfil" },
+      { id: "devices", label: "Dispositivos conectados" },
       { id: "security", label: "Central de Segurança", icon: <ShieldCheck /> },
       { id: "standing", label: "Status da Conta" },
       { id: "privacy", label: "Conteúdo e Privacidade" },
@@ -258,6 +261,7 @@ function SettingsShell({
                 )}
                 {tab === "account" && <AccountTab />}
                 {tab === "profile" && <ProfileTab />}
+                {tab === "devices" && <DevicesSection />}
                 {tab === "security" && (
                   <SecurityCenter onNavigate={enterTab} />
                 )}

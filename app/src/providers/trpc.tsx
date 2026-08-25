@@ -10,7 +10,8 @@ export const trpc = createTRPCReact<AppRouter>();
 
 // Performance defaults: avoid refetch storms on window focus and duplicate
 // retries; data stays fresh for 20s and is kept cached for instant back-nav.
-const queryClient = new QueryClient({
+// Exportado para rotinas globais (ex.: limpeza total em session:revoked).
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 20_000,
