@@ -1,11 +1,20 @@
 -- Nova camada de segurança: denúncias, casos de moderação, apelações,
 -- AutoMod por servidor e auditoria de segurança.
 -- Também estende `violations` para cobrir mensagens de texto e política.
+--
+-- NOTA: sem cláusulas AFTER posicionais — servidores MySQL/MariaDB
+-- diferentes rejeitam referenciar coluna adicionada na mesma instrução
+-- ("Unknown column 'messageid'"). A posição física das colunas é
+-- irrelevante para a aplicação.
 
 ALTER TABLE `violations`
-  ADD COLUMN `messageId` bigint unsigned AFTER `fileId`,
-  ADD COLUMN `targetType` varchar(32) AFTER `messageId`,
-  ADD COLUMN `policyVersion` varchar(40) AFTER `moderationModel`;
+  ADD COLUMN `messageId` bigint unsigned;
+--> statement-breakpoint
+ALTER TABLE `violations`
+  ADD COLUMN `targetType` varchar(32);
+--> statement-breakpoint
+ALTER TABLE `violations`
+  ADD COLUMN `policyVersion` varchar(40);
 --> statement-breakpoint
 ALTER TABLE `violations`
   MODIFY COLUMN `source` enum('automatic_ai','moderator','user_report','automod') NOT NULL DEFAULT 'automatic_ai';
