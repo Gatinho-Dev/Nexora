@@ -727,6 +727,41 @@ export const threads = mysqlTable(
 );
 
 
+
+// ── Embeds de links ───────────────────────────────────────────
+export const messageEmbeds = mysqlTable(
+  "message_embeds",
+  {
+    id: serial("id").primaryKey(),
+    messageId: bigint("messageId", { mode: "number", unsigned: true }).notNull(),
+    url: varchar("url", { length: 1000 }).notNull(),
+    provider: varchar("provider", { length: 24 }).notNull(),
+    type: varchar("type", { length: 16 }).default("unknown").notNull(),
+    title: varchar("title", { length: 300 }),
+    description: varchar("description", { length: 600 }),
+    authorName: varchar("authorName", { length: 120 }),
+    authorUrl: varchar("authorUrl", { length: 500 }),
+    providerName: varchar("providerName", { length: 80 }),
+    thumbnailUrl: varchar("thumbnailUrl", { length: 800 }),
+    playerUrl: varchar("playerUrl", { length: 800 }),
+    videoId: varchar("videoId", { length: 120 }),
+    position: int("position").default(0).notNull(),
+    status: mysqlEnum("status", ["processing", "ready", "unsupported", "failed"])
+      .default("processing")
+      .notNull(),
+    fetchedAt: timestamp("fetchedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    messageIdx: index("embed_message_idx").on(table.messageId),
+    urlIdx: index("embed_url_idx").on(table.url),
+  }),
+);
+
 // ── Enquetes ──────────────────────────────────────────────────
 export const polls = mysqlTable("polls", {
   id: serial("id").primaryKey(),

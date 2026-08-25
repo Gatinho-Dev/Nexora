@@ -5,6 +5,7 @@ import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
 import { publicFileUrl } from "./lib/urls";
 import { attachPolls } from "./services/pollService";
+import { attachEmbeds, enqueueEmbedsForMessage } from "./services/embeds/embedService";
 import { RateLimits } from "@contracts/constants";
 import type {
   MessageDTO,
@@ -155,7 +156,8 @@ export async function buildMessageDTO(
   }
 
   const [withPoll] = await attachPolls([dto], null);
-  return withPoll;
+  const [withEmbeds] = await attachEmbeds([withPoll]);
+  return withEmbeds;
 }
 
 async function notifyUsers(
@@ -620,6 +622,15 @@ export const messageRouter = createRouter({
         conversationId: input.conversationId ?? null,
         lastReadMessageId: id,
       });
+
+      // Embeds de links: cria as linhas processing ANTES do DTO (skeleton
+      // aparece de cara) e resolve em background.
+      enqueueEmbedsForMessage(
+        id,
+        content,
+        input.channelId ?? null,
+        input.conversationId ?? null,
+      ).catch(() => {});
 
       const msg = await db.query.messages.findFirst({
         where: eq(schema.messages.id, id),
