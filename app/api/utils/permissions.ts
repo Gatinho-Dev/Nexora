@@ -103,20 +103,30 @@ export async function getEffectiveChannelPermissions(
   userId: number,
   channel: typeof schema.channels.$inferSelect
 ): Promise<Set<Permission> | null> {
-  const base = await getMemberPermissions(userId, channel.serverId);
+  const db = getDb();
+  const serverId = channel.serverId;
+  const base = await getMemberPermissions(userId, serverId);
   if (!base) return null;
   const perms = new Set<Permission>(base);
 
-  const db = getDb();
+  // Get user's role IDs for this server
+  const myRoleRows = await db
+    .select({ roleId: schema.memberRoles.roleId })
+    .from(schema.memberRoles)
+    .where(
+      and(
+        eq(schema.memberRoles.serverId, serverId),
+        eq(schema.memberRoles.userId, userId),
+      ),
+    );
+  const myRoleIds = new Set(myRoleRows.map(r => r.roleId));
+
   const targets: Array<"category" | "channel"> = [];
-  // Order matters: category first (inherited), then channel-specific.
-  if (channel.categoryId && channel.syncedWithCategory)
-    targets.push("category");
+  if (channel.categoryId && channel.syncedWithCategory) targets.push("category");
   if (!channel.syncedWithCategory) targets.push("channel");
 
   for (const targetType of targets) {
-    const targetId =
-      targetType === "category" ? channel.categoryId! : channel.id;
+    const targetId = targetType === "category" ? channel.categoryId! : channel.id;
     const overrides = await db
       .select()
       .from(schema.permissionOverrides)
@@ -127,20 +137,13 @@ export async function getEffectiveChannelPermissions(
         ),
       );
     for (const ov of overrides) {
-      // null roleId = @everyone tier; role must match one of the user's roles.
-      let applies = ov.roleId === null;
-      if (!applies && ov.roleId !== null) {
-        const [mr] = await db
-          .select({ id: schema.memberRoles.id })
-          .from(schema.memberRoles)
-          .where(
-            and(
-              eq(schema.memberRoles.userId, userId),
-              eq(schema.memberRoles.roleId, ov.roleId),
-            ),
-          )
-          .limit(1);
-        applies = !!mr;
+      let applies = false;
+      if (ov.roleId === null && ov.memberId === null) {
+        applies = true; // @everyone
+      } else if (ov.roleId !== null) {
+        applies = myRoleIds.has(ov.roleId);
+      } else if (ov.memberId !== null) {
+        applies = ov.memberId === userId;
       }
       if (!applies) continue;
       for (const d of ov.deny ?? []) perms.delete(d as Permission);
