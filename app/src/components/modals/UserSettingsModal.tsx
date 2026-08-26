@@ -23,6 +23,7 @@ import {
   ArrowLeft,
   ChevronRight,
   ShieldCheck,
+  Keyboard,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -1221,8 +1222,143 @@ function VoiceTab() {
               }}
             />
           </div>
-        )}
+)}
       </div>
+    </div>
+  );
+
+  // Push-to-talk keybind section
+  const [recordingKey, setRecordingKey] = useState(false);
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (recordingKey) {
+      e.preventDefault();
+      const key = e.key === " " ? "Space" : e.key;
+      const modifiers = [];
+      if (e.ctrlKey) modifiers.push("Ctrl");
+      if (e.shiftKey) modifiers.push("Shift");
+      if (e.altKey) modifiers.push("Alt");
+      if (e.metaKey) modifiers.push("Meta");
+      const keybind = [...modifiers, key].join("+");
+      updatePref({ pushToTalkKeybind: keybind });
+      setRecordingKey(false);
+    }
+  };
+
+  useEffect(() => {
+    if (recordingKey) {
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [recordingKey]);
+
+  return (
+    <div className="space-y-5">
+      {/* Existing content... */}
+      {/* Push-to-talk keybind section */}
+      <section
+        className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 space-y-3"
+        aria-labelledby="ptt-heading"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#5865F2] text-white">
+            <Keyboard className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <p id="ptt-heading" className="text-sm font-bold text-white">
+              Push-to-talk (Push-to-talk)
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted2">
+              Pressione e segure a tecla para falar. Solte para silenciar.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <button
+            type="button"
+            role="button"
+            onClick={() => setRecordingKey(true)}
+            className={cn(
+              "flex-1 min-h-12 rounded-lg border px-4 py-2 text-left transition-colors font-mono text-sm",
+              recordingKey
+                ? "border-[#5865F2] bg-[#5865F2]/20 text-[#5865F2] animate-pulse"
+                : "border-white/[0.08] bg-[#24252b] text-[#aeb1bd] hover:border-white/20 hover:text-white"
+            )}
+            aria-pressed={recordingKey}
+          >
+            {recordingKey
+              ? "Pressione a combinação de teclas..."
+              : prefs.pushToTalkKeybind
+                ? prefs.pushToTalkKeybind
+                : "Não configurado"}
+          </button>
+          {prefs.pushToTalkKeybind && (
+            <button
+              type="button"
+              onClick={() => updatePref({ pushToTalkKeybind: undefined })}
+              className="text-xs text-red-400 hover:text-red-300 font-medium"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+        <p className="text-[11px] text-[#8f93a1]">
+          Pressione a combinação de teclas desejada. Use Ctrl, Shift, Alt ou Meta
+          (Cmd/Win) como modificadores.
+        </p>
+      </section>
+
+      {/* Stream quality selector section */}
+      <section
+        className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 space-y-3"
+        aria-labelledby="stream-quality-heading"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#5865F2] text-white">
+            <Monitor className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <div>
+            <p id="stream-quality-heading" className="text-sm font-bold text-white">
+              Qualidade do Stream (Screen Share)
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted2">
+              Qualidade maior consome mais banda. Ajuste conforme sua conexão.
+            </p>
+          </div>
+        </div>
+        <div
+          className="grid grid-cols-1 gap-2 sm:grid-cols-3"
+          role="radiogroup"
+          aria-label="Qualidade do stream"
+        >
+          {(
+            [
+              ["720p30", "720p 30fps", "Baixa banda (recomendado para conexões lentas)"],
+              ["1080p30", "1080p 30fps", "Qualidade padrão (HD)"],
+              ["1080p60", "1080p 60fps", "Alta qualidade (requer banda alta)"],
+            ] as const
+          ).map(([value, label, description]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={prefs.streamQuality === value}
+              onClick={() => updatePref({ streamQuality: value })}
+              className={cn(
+                "min-h-16 rounded-lg border px-3 py-2 text-left transition-colors",
+                prefs.streamQuality === value
+                  ? "border-[#7383FF] bg-[#5865F2]/25 text-white"
+                  : "border-white/[0.08] bg-[#24252b] text-[#aeb1bd] hover:border-white/20 hover:text-white"
+              )}
+            >
+              <span className="block text-xs font-bold">{label}</span>
+              <span className="mt-1 block text-[10px] leading-snug opacity-75">
+                {description}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

@@ -8,6 +8,8 @@ export type DevicePrefs = {
   inputSensitivityMode?: "automatic" | "manual";
   inputSensitivity?: number;
   audioProcessing?: "off" | "standard" | "clearvoice";
+  pushToTalkKeybind?: string;
+  streamQuality?: "720p30" | "1080p30" | "1080p60";
 };
 
 export const DEFAULT_DEVICE_PREFS: Required<
@@ -20,6 +22,9 @@ export const DEFAULT_DEVICE_PREFS: Required<
   inputSensitivity: 28,
   audioProcessing: "standard",
 };
+
+export const DEFAULT_PUSH_TO_TALK_KEYBIND: undefined = undefined;
+export const DEFAULT_STREAM_QUALITY = "720p30" as const;
 
 export function getDevicePrefs(): DevicePrefs {
   try {
