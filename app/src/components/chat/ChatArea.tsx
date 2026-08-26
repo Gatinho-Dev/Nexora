@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
+import { TRPCError } from "@trpc/server";
 import { useAppStore, channelKey, dmKey } from "@/store/useAppStore";
 import { setCurrentView } from "@/lib/currentView";
 import { MessageItem } from "./MessageItem";
@@ -55,7 +56,7 @@ export function ChatArea({
   const hasMore = useAppStore(s => s.hasMore[key] ?? false);
   const typingMap = useAppStore(s => s.typing[key]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<Error | TRPCError | false>(false);
   const [reloadTick, setReloadTick] = useState(0);
   const [newBelowCount, setNewBelowCount] = useState(0);
   const seenCountRef = useRef(0);
@@ -112,9 +113,9 @@ export function ChatArea({
           useAppStore.getState().clearUnreadConversation(conversationId);
         requestAnimationFrame(() => scrollToBottom(true));
       })
-      .catch(() => {
+      .catch(err => {
         if (!cancelled) {
-          setLoadError(true);
+          setLoadError(err);
           setLoading(false);
         }
       });
@@ -227,7 +228,7 @@ export function ChatArea({
                 Não foi possível carregar as mensagens
               </h3>
               <p className="text-sm text-muted2 mb-4">
-                Verifique sua conexão e tente novamente.
+                {loadError instanceof TRPCError ? loadError.message : loadError instanceof Error ? loadError.message : "Verifique sua conexão e tente novamente."}
               </p>
               <button
                 onClick={() => {
