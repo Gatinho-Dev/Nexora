@@ -491,6 +491,18 @@ export type WSClientEvent =
       data: unknown;
     };
 
+/** Atividade de jogo (Roblox) transmitida em tempo real e retornada por query. */
+export type RobloxActivityDTO = {
+  status?: string;
+  name: string | null;
+  creatorName: string | null;
+  thumbnailUrl: string | null;
+  startedAt: string | Date | null;
+  universeId?: number | null;
+  placeId?: number | null;
+  playUrl: string | null;
+};
+
 // Server → Client
 export type WSServerEvent =
   | { t: "ready"; userId: number }
@@ -558,6 +570,11 @@ export type WSServerEvent =
   | { t: "dm:refresh" }
   | { t: "friends:refresh" }
   | { t: "session:revoked" }
+  | {
+      t: "activity:update";
+      userId: number;
+      activity: RobloxActivityDTO | null;
+    }
   | {
       t: "account:restriction_updated";
       accountStatus:

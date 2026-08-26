@@ -10,6 +10,7 @@ import { officialRouter } from "./officialRouter";
 import { badgeRouter } from "./badgeRouter";
 import { adminRouter } from "./adminRouter";
 import { safetyRouter } from "./safetyRouter";
+import { integrationsRouter } from "./integrationsRouter";
 import { threadRouter, announceRouter, webhookRouter } from "./communityRouters";
 import { pollRouter } from "./pollRouter";
 import { embedRouter } from "./embedRouter";
@@ -31,6 +32,7 @@ export const appRouter = createRouter({
   badge: badgeRouter,
   admin: adminRouter,
   safety: safetyRouter,
+  integrations: integrationsRouter,
   threads: threadRouter,
   poll: pollRouter,
   command: commandRouter,

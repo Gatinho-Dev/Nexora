@@ -6,6 +6,7 @@ import { SecurityCenter } from "../safety/SecurityCenter";
 import { ReportsList } from "../safety/ReportsList";
 import { AppealsSection } from "../safety/AppealsSection";
 import { DevicesSection } from "../settings/DevicesSection";
+import { ConnectionsSection } from "../settings/ConnectionsSection";
 import { toast } from "sonner";
 import { apiUrl } from "@/lib/endpoints";
 import {
@@ -270,7 +271,7 @@ function SettingsShell({
                 {tab === "my-reports" && <MyReportsTab />}
                 {tab === "appeals" && <AppealsTab />}
                 {tab === "privacy" && <PrivacyTab />}
-                {tab === "connections" && <ConnectionsTab />}
+                {tab === "connections" && <ConnectionsSection />}
                 {tab === "appearance" && <AppearanceTab />}
                 {tab === "accessibility" && <AccessibilityTab />}
                 {tab === "voice" && <VoiceTab />}
@@ -686,20 +687,6 @@ function PrivacyTab() {
           <span>Filtro de mensagens diretas de desconhecidos</span>
           <Switch defaultChecked />
         </div>
-      </div>
-    </div>
-  );
-}
-
-function ConnectionsTab() {
-  return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold text-white">Conexões</h2>
-      <p className="text-xs text-muted2">
-        Conecte suas contas para exibir no perfil da Nexora.
-      </p>
-      <div className="rounded-xl bg-sidebar border border-white/10 p-6 text-center text-xs text-muted2">
-        Nenhuma integração externa vinculada ainda.
       </div>
     </div>
   );

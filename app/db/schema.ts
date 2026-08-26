@@ -1171,6 +1171,62 @@ export const accountSessions = mysqlTable(
   }),
 );
 
+// ── Conexões externas (integrações: Roblox etc.) ─────────────
+export const userConnections = mysqlTable(
+  "user_connections",
+  {
+    id: serial("id").primaryKey(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    /** ROBLOX (único provider por enquanto; estrutura genérica). */
+    provider: varchar("provider", { length: 32 }).notNull(),
+    /** Identificador permanente na plataforma externa (sub do OIDC). */
+    providerUserId: varchar("providerUserId", { length: 64 }).notNull(),
+    username: varchar("username", { length: 100 }),
+    displayName: varchar("displayName", { length: 100 }),
+    avatarUrl: varchar("avatarUrl", { length: 500 }),
+    profileUrl: varchar("profileUrl", { length: 300 }),
+    accessTokenEnc: varchar("accessTokenEnc", { length: 600 }),
+    refreshTokenEnc: varchar("refreshTokenEnc", { length: 600 }),
+    tokenExpiresAt: timestamp("tokenExpiresAt"),
+    needsReauth: boolean("needsReauth").default(false).notNull(),
+    showOnProfile: boolean("showOnProfile").default(true).notNull(),
+    showActivity: boolean("showActivity").default(true).notNull(),
+    allowJoin: boolean("allowJoin").default(true).notNull(),
+    connectedAt: timestamp("connectedAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    providerUserUniq: uniqueIndex("uc_provider_user_uniq").on(
+      table.provider,
+      table.providerUserId
+    ),
+    userIdx: index("uc_user_idx").on(table.userId, table.provider),
+  }),
+);
+
+// ── Atividade Rich Presence derivada do worker ───────────────
+export const robloxActivity = mysqlTable("roblox_activity", {
+  userId: bigint("userId", { mode: "number", unsigned: true }).primaryKey(),
+  /** OFFLINE | ONLINE | IN_GAME | IN_STUDIO */
+  status: varchar("status", { length: 20 }).notNull(),
+  universeId: bigint("universeId", { mode: "number" }),
+  placeId: bigint("placeId", { mode: "number" }),
+  name: varchar("name", { length: 200 }),
+  creatorName: varchar("creatorName", { length: 100 }),
+  thumbnailUrl: varchar("thumbnailUrl", { length: 600 }),
+  playUrl: varchar("playUrl", { length: 300 }),
+  /** Estimado pela Nexora no primeiro IN_GAME detectado. */
+  startedAt: timestamp("startedAt"),
+  stale: boolean("stale").default(false).notNull(),
+  updatedAt: timestamp("updatedAt")
+    .defaultNow()
+    .notNull()
+    .$onUpdate(() => new Date()),
+});
+
 // ── Types ─────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -1215,3 +1271,5 @@ export type Appeal = typeof appeals.$inferSelect;
 export type AutomodRule = typeof automodRules.$inferSelect;
 export type SafetyAuditEvent = typeof safetyAuditEvents.$inferSelect;
 export type AccountSession = typeof accountSessions.$inferSelect;
+export type UserConnection = typeof userConnections.$inferSelect;
+export type RobloxActivity = typeof robloxActivity.$inferSelect;

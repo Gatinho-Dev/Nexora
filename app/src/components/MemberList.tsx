@@ -3,6 +3,7 @@ import { Avatar } from "./Avatar";
 import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
 import { Crown } from "lucide-react";
+import { RobloxActivityInline } from "./roblox/RobloxActivityCard";
 
 export function MemberList({
   details,
@@ -156,6 +157,7 @@ function MemberRow({
             {topRole.name}
           </div>
         )}
+        <RobloxActivityInline userId={member.user.id} />
       </div>
     </button>
   );
