@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useNavigate } from "react-router";
 import { useAppStore } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
 import { useVoiceCallView } from "@/hooks/useVoiceCallView";
@@ -19,14 +18,13 @@ import {
  * conectado a uma chamada e NÃO está na tela dela — garante retorno rápido
  * e controles essenciais enquanto navega pelo app.
  */
-export function VoiceConnectionBar() {
-  const navigate = useNavigate();
+export function VoiceConnectionBar({ onOpenSheet }: { onOpenSheet?: () => void }) {
   const voiceChannelId = useAppStore(s => s.voiceChannelId);
   const voiceConversationId = useAppStore(s => s.voiceConversationId);
   const muted = useAppStore(s => s.muted);
   const connectionStatus = useAppStore(s => s.voiceConnectionStatus);
   const participantsMap = useAppStore(s => s.voiceParticipants);
-  const { inCall, callPath, viewingCall } = useVoiceCallView();
+  const { inCall, viewingCall } = useVoiceCallView();
 
   const roomKey =
     voiceChannelId != null
@@ -45,8 +43,8 @@ export function VoiceConnectionBar() {
     <div className="fixed inset-x-0 bottom-0 z-40 md:hidden animate-in slide-in-from-bottom fade-in duration-200">
       <div className="flex items-center gap-2.5 border-t border-black/20 bg-rail px-3 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
         <button
-          onClick={() => navigate(callPath)}
-          aria-label="Voltar para a chamada"
+          onClick={() => onOpenSheet?.()}
+          aria-label="Abrir painel da chamada"
           className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl py-1 text-left transition-colors active:bg-white/[0.06]"
         >
           <span
