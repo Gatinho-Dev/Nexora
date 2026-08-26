@@ -85,13 +85,10 @@ export function ChatArea({
     // Nova conversa: começa colada no presente, sem contador herdado.
     stickToBottom.current = true;
     seenCountRef.current = 0;
-    const timeout = setTimeout(() => {
-      if (!cancelled) {
-        setLoading(true);
-        setLoadError(false);
-        setNewBelowCount(0);
-      }
-    }, 0);
+    // Clear error immediately when starting new load
+    setLoadError(false);
+    setLoading(true);
+    setNewBelowCount(0);
     setCurrentView({ channelId, conversationId });
     setReplyingTo(null);
     setEditing(null);
@@ -101,6 +98,8 @@ export function ChatArea({
       .then(res => {
         if (cancelled) return;
         useAppStore.getState().setMessages(key, res.messages, res.hasMore);
+        // Clear error on successful load
+        setLoadError(false);
         setLoading(false);
         const last = res.messages.at(-1);
         if (last) {
@@ -121,7 +120,6 @@ export function ChatArea({
       });
 
     return () => {
-      clearTimeout(timeout);
       cancelled = true;
       setCurrentView({});
     };
