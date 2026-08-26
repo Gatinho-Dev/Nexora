@@ -75,6 +75,8 @@ export const serverMembers = mysqlTable(
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
     nickname: varchar("nickname", { length: 64 }),
     joinedAt: timestamp("joinedAt").defaultNow().notNull(),
+    timeoutUntil: timestamp("timeoutUntil"),
+    timeoutReason: varchar("timeoutReason", { length: 200 }),
   },
   (table) => ({
     serverUserIdx: uniqueIndex("sm_server_user_idx").on(table.serverId, table.userId),
@@ -112,6 +114,7 @@ export const channels = mysqlTable(
     syncedWithCategory: boolean("syncedWithCategory").default(true).notNull(),
     tags: json("tags").$type<string[]>(),
     forcedTags: boolean("forcedTags").default(false).notNull(),
+    slowmodeSeconds: int("slowmodeSeconds").default(0).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({ serverIdx: index("ch_server_idx").on(table.serverId) }),
@@ -125,12 +128,14 @@ export const permissionOverrides = mysqlTable(
     targetType: mysqlEnum("targetType", ["category", "channel"]).notNull(),
     targetId: bigint("targetId", { mode: "number", unsigned: true }).notNull(),
     roleId: bigint("roleId", { mode: "number", unsigned: true }),
+    memberId: bigint("memberId", { mode: "number", unsigned: true }),
     allow: json("allow").$type<string[]>().notNull(),
     deny: json("deny").$type<string[]>().notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({
     targetIdx: index("po_target_idx").on(table.targetType, table.targetId),
+    memberIdx: index("po_member_idx").on(table.memberId),
   }),
 );
 
@@ -205,6 +210,8 @@ export const roles = mysqlTable(
     position: int("position").default(0).notNull(),
     permissions: json("permissions").$type<string[]>().notNull(),
     isDefault: boolean("isDefault").default(false).notNull(),
+    hoist: boolean("hoist").default(false).notNull(),
+    mentionable: boolean("mentionable").default(true).notNull(),
   },
   (table) => ({ serverIdx: index("role_server_idx").on(table.serverId) }),
 );
@@ -336,9 +343,13 @@ export const invites = mysqlTable(
     expiresAt: timestamp("expiresAt"),
     maxUses: int("maxUses"),
     uses: int("uses").default(0).notNull(),
+    revokedAt: timestamp("revokedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
-  (table) => ({ serverIdx: index("inv_server_idx").on(table.serverId) }),
+  (table) => ({
+    serverIdx: index("inv_server_idx").on(table.serverId),
+    revokedIdx: index("inv_revoked_idx").on(table.revokedAt),
+  }),
 );
 
 export const bans = mysqlTable(
@@ -829,6 +840,27 @@ export const channelFollows = mysqlTable(
   }),
 );
 
+// ── Logs de auditoria por servidor ───────────────────────────
+export const serverAuditLogs = mysqlTable(
+  "server_audit_logs",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    actorUserId: bigint("actorUserId", { mode: "number", unsigned: true }).notNull(),
+    /** ex.: channel_create, role_update, member_kick, member_ban, timeout_apply */
+    action: varchar("action", { length: 48 }).notNull(),
+    targetType: varchar("targetType", { length: 24 }),
+    targetId: bigint("targetId", { mode: "number", unsigned: true }),
+    /** Metadados seguros — nunca segredos. */
+    metadata: json("metadata").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    serverIdx: index("sal_server_idx").on(table.serverId, table.id),
+    actionIdx: index("sal_action_idx").on(table.serverId, table.action),
+  }),
+);
+
 // ── Account safety & moderation ───────────────────────────────
 // Server-side source of truth for account standing. The frontend may display
 // this data but never decides punishments.
@@ -1104,6 +1136,9 @@ export const automodRules = mysqlTable(
     enabled: boolean("enabled").default(false).notNull(),
     /** Configuração livre por regra (palavras, limites etc). */
     config: json("config").$type<Record<string, unknown> | null>(),
+    /** IDs de cargos e canais que devem ser ignorados por esta regra */
+    ignoredRoleIds: json("ignoredRoleIds").$type<string[] | null>(),
+    ignoredChannelIds: json("ignoredChannelIds").$type<string[] | null>(),
     updatedByUserId: bigint("updatedByUserId", {
       mode: "number",
       unsigned: true,
@@ -1227,6 +1262,74 @@ export const robloxActivity = mysqlTable("roblox_activity", {
     .$onUpdate(() => new Date()),
 });
 
+// ── Servidor: Onboarding ─────────────────────────────────────
+export const serverOnboarding = mysqlTable(
+  "server_onboarding",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    enabled: boolean("enabled").default(false).notNull(),
+    rules: text("rules"),
+    updatedByUserId: bigint("updatedByUserId", { mode: "number", unsigned: true }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    serverIdx: index("onb_server_idx").on(table.serverId),
+  }),
+);
+
+// ── Servidor: Emojis personalizados ─────────────────────────
+export const serverEmojis = mysqlTable(
+  "server_emojis",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    name: varchar("name", { length: 64 }).notNull(),
+    url: text("url").notNull(),
+    createdBy: bigint("createdBy", { mode: "number", unsigned: true }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    serverIdx: index("emoji_server_idx").on(table.serverId),
+    uniq: uniqueIndex("emoji_server_name_unique").on(table.serverId, table.name),
+  }),
+);
+
+// ── Servidor: Stickers personalizados ───────────────────────
+export const serverStickers = mysqlTable(
+  "server_stickers",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    name: varchar("name", { length: 64 }).notNull(),
+    url: text("url").notNull(),
+    createdBy: bigint("createdBy", { mode: "number", unsigned: true }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    serverIdx: index("sticker_server_idx").on(table.serverId),
+    uniq: uniqueIndex("sticker_server_name_unique").on(table.serverId, table.name),
+  }),
+);
+
+// ── Servidor: Apps instalados ───────────────────────────────
+export const serverApps = mysqlTable(
+  "server_apps",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    appId: varchar("appId", { length: 64 }).notNull(),
+    installedBy: bigint("installedBy", { mode: "number", unsigned: true }).notNull(),
+    installedAt: timestamp("installedAt").defaultNow().notNull(),
+    settings: json("settings").$type<Record<string, unknown> | null>(),
+  },
+  (table) => ({
+    serverIdx: index("app_server_idx").on(table.serverId),
+    uniq: uniqueIndex("app_server_unique").on(table.serverId, table.appId),
+  }));
+
+
 // ── Types ─────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -1270,6 +1373,11 @@ export type ModerationCaseReport = typeof moderationCaseReports.$inferSelect;
 export type Appeal = typeof appeals.$inferSelect;
 export type AutomodRule = typeof automodRules.$inferSelect;
 export type SafetyAuditEvent = typeof safetyAuditEvents.$inferSelect;
+export type ServerAuditLog = typeof serverAuditLogs.$inferSelect;
 export type AccountSession = typeof accountSessions.$inferSelect;
 export type UserConnection = typeof userConnections.$inferSelect;
 export type RobloxActivity = typeof robloxActivity.$inferSelect;
+export type ServerOnboarding = typeof serverOnboarding.$inferSelect;
+export type ServerEmoji = typeof serverEmojis.$inferSelect;
+export type ServerSticker = typeof serverStickers.$inferSelect;
+export type ServerApp = typeof serverApps.$inferSelect;
