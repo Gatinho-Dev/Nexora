@@ -56,6 +56,12 @@ const ThreadViewPage = lazy(() =>
 const LegalPage = lazy(() =>
   import("./pages/LegalPage").then(module => ({ default: module.LegalPage }))
 );
+const PrivacyPage = lazy(() =>
+  import("./pages/LegalDocs").then(module => ({ default: module.PrivacyPage }))
+);
+const TermsPage = lazy(() =>
+  import("./pages/LegalDocs").then(module => ({ default: module.TermsPage }))
+);
 
 function PageLoader() {
   return (
@@ -124,6 +130,22 @@ export default function App() {
         element={
           <Deferred>
             <GroupInvitePage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/privacy"
+        element={
+          <Deferred>
+            <PrivacyPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/terms"
+        element={
+          <Deferred>
+            <TermsPage />
           </Deferred>
         }
       />

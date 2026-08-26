@@ -868,6 +868,7 @@ export default function Landing() {
             aria-label="Links do rodapé"
             className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted2"
           >
+            <Link to="/privacy" className="hover:text-white">Privacidade</Link>
             <Link to="/legal/terms" className="hover:text-foreground">
               Termos
             </Link>
