@@ -134,13 +134,6 @@
       "when": 1788226800000,
       "tag": "0018_user_connections",
       "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "5",
-      "when": 1788313200000,
-      "tag": "0019_server_upgrade",
-      "breakpoints": true
     }
   ]
 }
