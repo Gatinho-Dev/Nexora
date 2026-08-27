@@ -969,7 +969,6 @@ function PermissionsTab({ details }: { details: ServerDetailsDTO }) {
             targetType: target.type,
             targetId: target.id,
             roleId,
-            memberId: null,
             allow: Object.entries(states)
               .filter(([, v]) => v === "allow")
               .map(([k]) => k as Permission),

@@ -285,7 +285,6 @@ export const serverRouter = createRouter({
         targetType: z.enum(["category", "channel"]),
         targetId: z.number(),
         roleId: z.number().nullable(),
-        memberId: z.number().nullable(),
         allow: z.array(permissionEnum).max(20),
         deny: z.array(permissionEnum).max(20),
       }),
@@ -311,41 +310,33 @@ export const serverRouter = createRouter({
         serverId = cat.serverId;
       }
       await requirePermission(ctx.user.id, serverId, "MANAGE_CHANNELS");
-const db = getDb();
-       // Find existing override matching roleId and memberId (null handling)
-       const allOverrides = await db
-         .select()
-         .from(schema.permissionOverrides)
-         .where(
-           and(
-             eq(schema.permissionOverrides.targetType, input.targetType),
-             eq(schema.permissionOverrides.targetId, input.targetId),
-           ),
-         );
-       const existing = allOverrides.find(ov => {
-         const roleMatch =
-           (ov.roleId === null && input.roleId === null) ||
-           (ov.roleId !== null && ov.roleId === input.roleId);
-         const memberMatch =
-           (ov.memberId === null && input.memberId === null) ||
-           (ov.memberId !== null && ov.memberId === input.memberId);
-         return roleMatch && memberMatch;
-       });
-       if (existing) {
-         await db
-           .update(schema.permissionOverrides)
-           .set({ allow: input.allow, deny: input.deny })
-           .where(eq(schema.permissionOverrides.id, existing.id));
-       } else {
-         await db.insert(schema.permissionOverrides).values({
-           targetType: input.targetType,
-           targetId: input.targetId,
-           roleId: input.roleId,
-           memberId: input.memberId,
-           allow: input.allow,
-           deny: input.deny,
-         });
-       }
+      const db = getDb();
+      const [existing] = await db
+        .select()
+        .from(schema.permissionOverrides)
+        .where(
+          and(
+            eq(schema.permissionOverrides.targetType, input.targetType),
+            eq(schema.permissionOverrides.targetId, input.targetId),
+            input.roleId === null
+              ? sql`${schema.permissionOverrides.roleId} IS NULL`
+              : eq(schema.permissionOverrides.roleId, input.roleId),
+          ),
+        );
+      if (existing) {
+        await db
+          .update(schema.permissionOverrides)
+          .set({ allow: input.allow, deny: input.deny })
+          .where(eq(schema.permissionOverrides.id, existing.id));
+      } else {
+        await db.insert(schema.permissionOverrides).values({
+          targetType: input.targetType,
+          targetId: input.targetId,
+          roleId: input.roleId,
+          allow: input.allow,
+          deny: input.deny,
+        });
+      }
       // Synced channels inherit instantly.
       if (input.targetType === "category") {
         await db
@@ -1251,42 +1242,6 @@ const db = getDb();
           enabled: input.enabled,
         },
       });
-      return { ok: true };
-    }),
-
-  // ── Onboarding ────────────────────────────────────────────────
-  onboardingGet: authedQuery
-    .input(z.object({ serverId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      await requirePermission(ctx.user.id, input.serverId, "MANAGE_SERVER");
-      const row = await getDb().query.serverOnboarding.findFirst({
-        where: eq(schema.serverOnboarding.serverId, input.serverId),
-      });
-      return row ?? { enabled: false, rules: null };
-    }),
-
-  onboardingUpdate: authedQuery
-    .input(
-      z.object({
-        serverId: z.number(),
-        enabled: z.boolean(),
-        rules: z.string().max(5000).nullable(),
-        questions: z.array(z.object({ id: z.string(), label: z.string(), type: z.enum(["checkbox", "radio"]), options: z.array(z.string()) })).optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await requirePermission(ctx.user.id, input.serverId, "MANAGE_SERVER");
-      await getDb()
-        .insert(schema.serverOnboarding)
-        .values({
-          serverId: input.serverId,
-          enabled: input.enabled,
-          rules: input.rules,
-          updatedByUserId: ctx.user.id,
-        })
-        .onDuplicateKeyUpdate({
-          set: { enabled: input.enabled, rules: input.rules, updatedByUserId: ctx.user.id },
-        });
       return { ok: true };
     }),
 });

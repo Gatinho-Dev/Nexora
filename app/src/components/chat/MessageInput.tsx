@@ -230,7 +230,7 @@ export function MessageInput({
       }
     }, 0);
     return () => clearTimeout(timeout);
-     
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey]);
 
   const saveDraft = (value: string) => {
