@@ -112,6 +112,53 @@ function recordResult(result: SafetyResult): void {
   }
 }
 
+/** Pure consensus used by the reported-media deep review pipeline. */
+export function aggregateImageSafetyResults(
+  results: SafetyResult[]
+): SafetyResult {
+  if (results.length === 0)
+    throw new Error("Nenhum resultado visual disponível.");
+  const categories = Array.from(
+    new Set(results.flatMap(result => result.categories))
+  );
+  const signals: Record<string, number> = {};
+  for (const result of results) {
+    for (const [key, value] of Object.entries(result.signals ?? {})) {
+      signals[key] = Math.max(signals[key] ?? 0, value);
+    }
+  }
+  const safeVotes = results.filter(
+    result => result.safe && !result.reviewRecommended
+  ).length;
+  const unsafeVotes = results.length - safeVotes;
+  const disagreement = safeVotes > 0 && unsafeVotes > 0;
+  const reviewRecommended =
+    disagreement || results.some(result => result.reviewRecommended === true);
+  const safe = unsafeVotes === 0 && !reviewRecommended;
+  if (!safe && categories.length === 0) categories.push("other");
+  const confidence = Math.max(
+    0,
+    ...results.map(result => result.confidence ?? 0)
+  );
+  return {
+    safe,
+    categories,
+    confidence,
+    signals: Object.keys(signals).length > 0 ? signals : undefined,
+    reviewRecommended,
+    provider: "openrouter",
+    model: results
+      .map(result => result.model)
+      .join(" + ")
+      .slice(0, 160),
+    analyzedAt: new Date(),
+    latencyMs: results.reduce(
+      (sum, result) => sum + (result.latencyMs ?? 0),
+      0
+    ),
+  };
+}
+
 export const SafetyService = {
   /** Análise de texto (modelo OPENROUTER_SAFETY_MODEL). */
   async analyzeText(
@@ -129,6 +176,16 @@ export const SafetyService = {
     return cachedAnalyze(input.data, env.openrouterVisionModel, () =>
       OpenRouterSafetyProvider.analyzeImage(input)
     );
+  },
+
+  /** Bypasses the fast cache and combines independent model passes for reports. */
+  async analyzeImageDeep(
+    input: SafetyImageInput & { requestId?: string }
+  ): Promise<SafetyResult> {
+    if (isSafetyKilled()) throw new Error("SAFETY_DISABLED");
+    const results = await OpenRouterSafetyProvider.analyzeReportedImage(input);
+    for (const result of results) recordResult(result);
+    return aggregateImageSafetyResults(results);
   },
 
   hash: contentHash,

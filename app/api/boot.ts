@@ -23,10 +23,8 @@ import { publicFileUrl } from "./lib/urls";
 import {
   enqueueModeration,
   isRealImage,
-  moderationMetrics,
   moderationStatusForUploader,
   metricsSnapshot,
-  processMedia,
   retryModeration,
   shouldModerate,
 } from "./services/mediaModeration";
@@ -35,7 +33,10 @@ import { assertCanInteract } from "./services/accountSafety";
 import { SafetyService, isSafetyKilled } from "./services/safety/safetyService";
 import { ensureCatalog as ensureBadgeCatalog } from "./services/badgeService";
 import { startSessionCleanupJob } from "./auth/sessions";
-import { startRobloxPresenceWorker, robloxWorkerStatus } from "./integrations/roblox/presenceWorker";
+import {
+  startRobloxPresenceWorker,
+  robloxWorkerStatus,
+} from "./integrations/roblox/presenceWorker";
 import {
   robloxConfigured,
   buildAuthorizeUrl,
@@ -77,7 +78,10 @@ app.get("/api/health", c =>
     safety: {
       provider: env.openrouterApiKey ? "openrouter" : "disabled",
       model: env.openrouterSafetyModel,
+      visionModel: env.openrouterVisionModel,
       operational: !isSafetyKilled(),
+      imageModeration: env.imageModerationEnabled,
+      failClosed: true,
       shadowMode: SafetyService.isShadowMode(),
     },
     robloxIntegration: {
@@ -102,7 +106,10 @@ app.post("/api/upload", async c => {
   try {
     await assertCanInteract(user.id);
   } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : "Conta restrita." }, 403);
+    return c.json(
+      { error: e instanceof Error ? e.message : "Conta restrita." },
+      403
+    );
   }
   try {
     rateLimit(
@@ -160,9 +167,7 @@ app.post("/api/upload", async c => {
       );
     }
     const requestId = randomUUID();
-    await enqueueModeration(id, user.id);
-    void processMedia(id, requestId).catch(() => {});
-    moderationMetrics.uploadsTotal += 1;
+    await enqueueModeration(id, user.id, requestId);
     console.log(
       JSON.stringify({
         event: "image_upload",
@@ -227,9 +232,15 @@ app.get("/api/files/:id", async c => {
     .where(eq(schema.mediaModeration.fileId, id));
   if (moderation) {
     if (moderation.status === "blocked") {
-      return c.json({ error: "Esta mídia foi bloqueada pela segurança do Nexora." }, 403);
+      return c.json(
+        { error: "Esta mídia foi bloqueada pela segurança do Nexora." },
+        403
+      );
     }
-    if (moderation.status === "processing" || moderation.status === "review_required") {
+    if (
+      moderation.status === "processing" ||
+      moderation.status === "review_required"
+    ) {
       // While unverified, only the uploader may fetch the bytes.
       let viewer;
       try {
@@ -262,14 +273,16 @@ app.get("/api/files/:id", async c => {
 const ROBLOX_STATE_COOKIE = "roblox_oauth_state";
 
 app.get("/api/integrations/roblox/connect", async c => {
-  let user;
   try {
-    ({ user } = await authenticateRequest(c.req.raw.headers));
+    await authenticateRequest(c.req.raw.headers);
   } catch {
     return c.json({ error: "Não autenticado." }, 401);
   }
   if (!env.robloxIntegrationEnabled || !robloxConfigured()) {
-    return c.json({ error: "Conexão com Roblox indisponível no momento." }, 503);
+    return c.json(
+      { error: "Conexão com Roblox indisponível no momento." },
+      503
+    );
   }
   const pkce = generatePkcePair();
   const { url } = buildAuthorizeUrl({
@@ -278,13 +291,18 @@ app.get("/api/integrations/roblox/connect", async c => {
     nonce: pkce.nonce,
   });
   const opts = getSessionCookieOptions(c.req.raw.headers);
-  setCookie(c, ROBLOX_STATE_COOKIE, `${pkce.state}:${pkce.verifier}:${pkce.nonce}`, {
-    httpOnly: true,
-    secure: opts.secure,
-    sameSite: "Lax",
-    path: "/api/integrations/roblox",
-    maxAge: 600, // 10 min — expiração curta anti-CSRF
-  });
+  setCookie(
+    c,
+    ROBLOX_STATE_COOKIE,
+    `${pkce.state}:${pkce.verifier}:${pkce.nonce}`,
+    {
+      httpOnly: true,
+      secure: opts.secure,
+      sameSite: "Lax",
+      path: "/api/integrations/roblox",
+      maxAge: 600, // 10 min — expiração curta anti-CSRF
+    }
+  );
   return c.redirect(url, 302);
 });
 
@@ -343,7 +361,10 @@ app.get("/api/integrations/roblox/callback", async c => {
     return c.redirect(`${appOrigin}?roblox=conectado`, 302);
   } catch {
     console.warn(
-      JSON.stringify({ event: "roblox_oauth_callback_failed", timestamp: new Date().toISOString() })
+      JSON.stringify({
+        event: "roblox_oauth_callback_failed",
+        timestamp: new Date().toISOString(),
+      })
     );
     return c.redirect(`${appOrigin}?roblox=erro`, 302);
   }
@@ -382,7 +403,10 @@ app.post("/api/webhooks/:id/:token", async c => {
       where: eq(schema.webhooks.id, id),
     }),
   ];
-  if (!wh || wh.tokenHash !== createHash("sha256").update(token).digest("hex")) {
+  if (
+    !wh ||
+    wh.tokenHash !== createHash("sha256").update(token).digest("hex")
+  ) {
     return c.json({ error: "Não autorizado." }, 401);
   }
 
@@ -393,9 +417,12 @@ app.post("/api/webhooks/:id/:token", async c => {
     imageUrl?: unknown;
   };
   const content =
-    typeof payload?.content === "string" ? payload.content.trim().slice(0, 2000) : "";
+    typeof payload?.content === "string"
+      ? payload.content.trim().slice(0, 2000)
+      : "";
   const imageUrl =
-    typeof payload?.imageUrl === "string" && /^https?:\/\//.test(payload.imageUrl)
+    typeof payload?.imageUrl === "string" &&
+    /^https?:\/\//.test(payload.imageUrl)
       ? payload.imageUrl
       : "";
   if (!content && !imageUrl) {
@@ -406,7 +433,9 @@ app.post("/api/webhooks/:id/:token", async c => {
       ? payload.username.trim().slice(0, 80)
       : wh.name;
   void name;
-  const full = imageUrl ? `${content}${content ? "\n" : ""}${imageUrl}` : content;
+  const full = imageUrl
+    ? `${content}${content ? "\n" : ""}${imageUrl}`
+    : content;
   const [{ id: messageId }] = await getDb()
     .insert(schema.messages)
     .values({
@@ -433,7 +462,10 @@ app.post("/api/moderation/retry/:fileId", async c => {
   const ok = await retryModeration(fileId, user.id);
   return ok
     ? c.json({ ok: true })
-    : c.json({ error: "Mídia não encontrada ou fora do estado de retry." }, 404);
+    : c.json(
+        { error: "Mídia não encontrada ou fora do estado de retry." },
+        404
+      );
 });
 
 // Technical moderation metrics — platform admins only, no private media.

@@ -10,6 +10,7 @@ import {
   priorityForCategory,
   type CasePriority,
 } from "./moderationCaseService";
+import { enqueueDeepMediaReviews } from "./deepMediaReview";
 
 /**
  * ReportService — denúncias de usuários.
@@ -55,38 +56,69 @@ export function reportPriority(category: string): CasePriority {
 async function resolveTarget(
   targetType: "message" | "user" | "media" | "server" | "channel",
   targetId: number
-): Promise<{ reportedUserId: number | null; exists: boolean; context?: string }> {
+): Promise<{
+  reportedUserId: number | null;
+  exists: boolean;
+  context?: string;
+  mediaFileIds?: number[];
+}> {
   const db = getDb();
   switch (targetType) {
     case "message": {
       const [msg] = await db
-        .select({ authorId: schema.messages.authorId, content: schema.messages.content })
+        .select({
+          authorId: schema.messages.authorId,
+          content: schema.messages.content,
+        })
         .from(schema.messages)
         .where(eq(schema.messages.id, targetId))
         .limit(1);
       if (!msg) return { reportedUserId: null, exists: false };
+      const imageAttachments = await db
+        .select({ fileId: schema.attachments.fileId })
+        .from(schema.attachments)
+        .where(
+          and(
+            eq(schema.attachments.messageId, targetId),
+            sql`${schema.attachments.mimeType} LIKE 'image/%'`
+          )
+        );
       return {
         reportedUserId: msg.authorId,
         exists: true,
         context: msg.content.slice(0, 400),
+        mediaFileIds: imageAttachments.map(attachment => attachment.fileId),
       };
     }
     case "user":
     case "media": {
       if (targetType === "media") {
         const [file] = await db
-          .select({ uploaderId: schema.files.uploaderId })
+          .select({
+            uploaderId: schema.files.uploaderId,
+            mimeType: schema.files.mimeType,
+          })
           .from(schema.files)
           .where(eq(schema.files.id, targetId))
           .limit(1);
-        return file ? { reportedUserId: file.uploaderId, exists: true } : { reportedUserId: null, exists: false };
+        return file
+          ? {
+              reportedUserId: file.uploaderId,
+              exists: true,
+              mediaFileIds: file.mimeType.startsWith("image/")
+                ? [targetId]
+                : [],
+            }
+          : { reportedUserId: null, exists: false };
       }
       const [user] = await db
         .select({ id: schema.users.id })
         .from(schema.users)
         .where(eq(schema.users.id, targetId))
         .limit(1);
-      return user ? { reportedUserId: user.id, exists: true } : { reportedUserId: null, exists: false };
+      return user
+        ? { reportedUserId: user.id, exists: true }
+        : { reportedUserId: null, exists: false };
     }
     case "server": {
       const [server] = await db
@@ -100,7 +132,10 @@ async function resolveTarget(
     }
     case "channel": {
       const [channel] = await db
-        .select({ name: schema.channels.name, serverId: schema.channels.serverId })
+        .select({
+          name: schema.channels.name,
+          serverId: schema.channels.serverId,
+        })
         .from(schema.channels)
         .where(eq(schema.channels.id, targetId))
         .limit(1);
@@ -136,7 +171,10 @@ export async function createReport(input: {
       message: "Conteúdo denunciado não foi encontrado.",
     });
   }
-  if (target.reportedUserId === input.reporterId && input.targetType !== "message") {
+  if (
+    target.reportedUserId === input.reporterId &&
+    input.targetType !== "message"
+  ) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Você não pode denunciar seu próprio conteúdo.",
@@ -157,7 +195,8 @@ export async function createReport(input: {
   if (Number(recentCount?.count ?? 0) >= 5) {
     throw new TRPCError({
       code: "TOO_MANY_REQUESTS",
-      message: "Você enviou muitas denúncias em pouco tempo. Tente novamente mais tarde.",
+      message:
+        "Você enviou muitas denúncias em pouco tempo. Tente novamente mais tarde.",
     });
   }
 
@@ -190,7 +229,9 @@ export async function createReport(input: {
   ) {
     try {
       const { SafetyService } = await import("../safety/safetyService");
-      const result = await SafetyService.analyzeText({ content: target.context });
+      const result = await SafetyService.analyzeText({
+        content: target.context,
+      });
       aiAssessment = {
         safe: result.safe,
         categories: result.categories,
@@ -213,12 +254,23 @@ export async function createReport(input: {
     targetId: input.targetId,
     reportedUserId: target.reportedUserId!,
     category: categoryForCase,
-    priority: priorityForCategory(categoryForCase, aiPriority ?? reportPriority(input.category)),
+    priority: priorityForCategory(
+      categoryForCase,
+      aiPriority ?? reportPriority(input.category)
+    ),
     internalContext: target.context ?? input.description?.slice(0, 400),
     aiAssessment,
   });
 
   await attachReportToCase(caseId, reportId);
+
+  // A reported image receives a slower multi-pass visual review. Enqueueing is
+  // durable and fast; the worker continues asynchronously after this response.
+  const deepMediaCount = await enqueueDeepMediaReviews({
+    fileIds: target.mediaFileIds ?? [],
+    caseId,
+    reportId,
+  });
 
   // Brigading: muitas denúncias recentes do mesmo alvo elevam a prioridade
   // (sinal — não prova).
@@ -229,13 +281,20 @@ export async function createReport(input: {
       and(
         eq(schema.reports.targetType, input.targetType),
         eq(schema.reports.targetId, input.targetId),
-        gte(schema.reports.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000))
+        gte(
+          schema.reports.createdAt,
+          new Date(Date.now() - 24 * 60 * 60 * 1000)
+        )
       )
     );
   const count = Number(brigadeCount?.count ?? 0);
   if (count >= 10) {
     const { escalateCasePriority } = await import("./moderationCaseService");
-    await escalateCasePriority(caseId, count >= 50 ? "critical" : "high", count);
+    await escalateCasePriority(
+      caseId,
+      count >= 50 ? "critical" : "high",
+      count
+    );
   }
 
   await logSafetyEvent({
@@ -243,7 +302,12 @@ export async function createReport(input: {
     actorUserId: input.reporterId,
     targetUserId: target.reportedUserId,
     caseId,
-    metadata: { reportId, targetType: input.targetType, category: input.category },
+    metadata: {
+      reportId,
+      targetType: input.targetType,
+      category: input.category,
+      deepMediaCount,
+    },
   });
 
   return { reportId, caseId };
