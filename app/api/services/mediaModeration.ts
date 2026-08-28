@@ -464,7 +464,12 @@ export async function applyPolicy(
 export async function moderationStatusForUploader(
   uploaderId: number,
   fileIds: number[]
-): Promise<Record<number, string>> {
+): Promise<Record<number, {
+  status: typeof schema.mediaModeration.$inferSelect.status;
+  sensitive: boolean;
+  adultOnly: boolean;
+  allowReveal: boolean;
+}>> {
   if (fileIds.length === 0) return {};
   if (!env.imageModerationEnabled || isSafetyKilled()) {
     await holdStuckProcessing(uploaderId);
@@ -473,6 +478,9 @@ export async function moderationStatusForUploader(
     .select({
       fileId: schema.mediaModeration.fileId,
       status: schema.mediaModeration.status,
+      sensitive: schema.mediaModeration.sensitive,
+      adultOnly: schema.mediaModeration.adultOnly,
+      allowReveal: schema.mediaModeration.allowReveal,
     })
     .from(schema.mediaModeration)
     .where(
@@ -481,7 +489,12 @@ export async function moderationStatusForUploader(
         inArray(schema.mediaModeration.fileId, fileIds)
       )
     );
-  return Object.fromEntries(rows.map(r => [r.fileId, r.status]));
+  return Object.fromEntries(rows.map(r => [r.fileId, {
+    status: r.status,
+    sensitive: r.sensitive,
+    adultOnly: r.adultOnly,
+    allowReveal: r.allowReveal,
+  }]));
 }
 
 async function holdStuckProcessing(uploaderId: number) {

@@ -152,6 +152,16 @@ export const messages = mysqlTable(
   (table) => ({
     channelIdx: index("msg_channel_idx").on(table.channelId, table.id),
     conversationIdx: index("msg_conversation_idx").on(table.conversationId, table.id),
+    channelAuthorIdx: index("msg_channel_author_idx").on(
+      table.channelId,
+      table.authorId,
+      table.id,
+    ),
+    conversationAuthorIdx: index("msg_conversation_author_idx").on(
+      table.conversationId,
+      table.authorId,
+      table.id,
+    ),
   }),
 );
 
@@ -937,6 +947,12 @@ export const violations = mysqlTable(
     ])
       .default("none")
       .notNull(),
+    /** Motivo sanitizado exibido ao titular na Central de Segurança. */
+    publicReason: varchar("publicReason", { length: 500 }),
+    /** Quantos conteúdos foram afetados pela decisão agrupada. */
+    affectedContentCount: int("affectedContentCount").default(1).notNull(),
+    /** Duração escolhida pela política automática, quando houver suspensão. */
+    suspensionDays: int("suspensionDays"),
     strikeApplied: boolean("strikeApplied").default(false).notNull(),
     internalNote: text("internalNote"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -1113,6 +1129,71 @@ export const mediaDeepReviews = mysqlTable(
     reportFileUniq: uniqueIndex("mdr_report_file_uniq").on(table.reportId, table.fileId),
     statusIdx: index("mdr_status_created_idx").on(table.status, table.createdAt),
     caseIdx: index("mdr_case_idx").on(table.caseId),
+  }),
+);
+
+/**
+ * Revisão durável do histórico textual iniciada por uma denúncia. O escopo é
+ * congelado no momento da denúncia e processado por cursor, evitando que uma
+ * requisição HTTP fique presa ou que um restart do Render perca a análise.
+ */
+export const textHistoryReviews = mysqlTable(
+  "text_history_reviews",
+  {
+    id: serial("id").primaryKey(),
+    reportId: bigint("reportId", { mode: "number", unsigned: true }).notNull(),
+    caseId: bigint("caseId", { mode: "number", unsigned: true }).notNull(),
+    anchorMessageId: bigint("anchorMessageId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    reportedUserId: bigint("reportedUserId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    scopeType: mysqlEnum("scopeType", ["channel", "conversation"]).notNull(),
+    scopeId: bigint("scopeId", { mode: "number", unsigned: true }).notNull(),
+    status: mysqlEnum("status", ["queued", "processing", "completed", "failed"])
+      .default("queued")
+      .notNull(),
+    attempts: int("attempts").default(0).notNull(),
+    snapshotMaxMessageId: bigint("snapshotMaxMessageId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    cursorMessageId: bigint("cursorMessageId", {
+      mode: "number",
+      unsigned: true,
+    })
+      .default(0)
+      .notNull(),
+    scannedCount: int("scannedCount").default(0).notNull(),
+    removedCount: int("removedCount").default(0).notNull(),
+    categories: json("categories").$type<string[]>().notNull(),
+    violationIds: json("violationIds").$type<number[]>().notNull(),
+    enforcementViolationId: bigint("enforcementViolationId", {
+      mode: "number",
+      unsigned: true,
+    }),
+    sanction: mysqlEnum("sanction", ["none", "warning", "temporary_suspension"])
+      .default("none")
+      .notNull(),
+    suspensionDays: int("suspensionDays"),
+    publicReason: varchar("publicReason", { length: 500 }),
+    model: varchar("model", { length: 160 }),
+    lastError: varchar("lastError", { length: 500 }),
+    startedAt: timestamp("startedAt"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    reportUniq: uniqueIndex("thr_report_uniq").on(table.reportId),
+    statusIdx: index("thr_status_created_idx").on(table.status, table.createdAt),
+    scopeIdx: index("thr_scope_author_idx").on(
+      table.scopeType,
+      table.scopeId,
+      table.reportedUserId,
+    ),
   }),
 );
 

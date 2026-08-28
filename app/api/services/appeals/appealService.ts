@@ -217,10 +217,17 @@ export async function reviewAppeal(input: {
     }
     void strikesRemoved;
   });
-  const [reversed] = await db.select({ messageId: schema.violations.messageId }).from(schema.violations).where(eq(schema.violations.id, appeal.violationId)).limit(1);
+  const [reversed] = await db.select({
+    messageId: schema.violations.messageId,
+    targetType: schema.violations.targetType,
+  }).from(schema.violations).where(eq(schema.violations.id, appeal.violationId)).limit(1);
   if (reversed?.messageId) {
     const { restoreMessageAfterFalsePositive } = await import("../textModeration");
     await restoreMessageAfterFalsePositive(reversed.messageId, appeal.violationId);
+  }
+  if (reversed?.targetType === "message_history") {
+    const { restoreHistoryReviewAfterFalsePositive } = await import("../reports/textHistoryReview");
+    await restoreHistoryReviewAfterFalsePositive(appeal.violationId, input.reviewerId);
   }
 
   await logSafetyEvent({
