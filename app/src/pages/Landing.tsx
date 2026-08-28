@@ -30,10 +30,35 @@ import {
 } from "lucide-react";
 import { NexoraAppIcon, NexoraMark } from "@/components/NexoraBrand";
 import { useAuth } from "@/hooks/useAuth";
+import { Seo } from "@/lib/seo";
 import heroImage from "@/assets/landing/nexora-hero.webp";
 import communityImage from "@/assets/landing/nexora-community.webp";
 import voiceImage from "@/assets/landing/nexora-voice.webp";
 import "./Landing.css";
+
+/** FAQ real da plataforma — renderizada na landing e usada no JSON-LD (FAQPage). */
+const FAQ_ITEMS = [
+  {
+    q: "O que é a Nexora?",
+    a: "Uma plataforma de comunicação com mensagens em tempo real, comunidades com canais de texto e voz, chamadas de vídeo e compartilhamento de arquivos.",
+  },
+  {
+    q: "A Nexora é gratuita?",
+    a: "Sim. Criar uma conta, conversar e participar de comunidades é gratuito.",
+  },
+  {
+    q: "Posso criar minha própria comunidade?",
+    a: "Pode. Em poucos cliques você cria um servidor com canais, cargos e convites para chamar quem quiser.",
+  },
+  {
+    q: "A Nexora funciona no celular?",
+    a: "Funciona no navegador do computador e do celular, com layout adaptado para telas pequenas.",
+  },
+  {
+    q: "Como a Nexora cuida da segurança?",
+    a: "Há denúncias, bloqueios, moderação de conteúdo e ferramentas de controle da sua conta. Os detalhes estão nas Diretrizes da Comunidade e na Política de Privacidade.",
+  },
+];
 
 const NAV_LINKS = [
   { id: "recursos", label: "Recursos" },
@@ -322,6 +347,10 @@ export default function Landing() {
 
   return (
     <div className="nexora-landing">
+      <Seo
+        canonicalPath="/"
+        description="Nexora é uma plataforma de comunicação para conversar com amigos, criar comunidades, participar de chamadas de voz e vídeo e compartilhar momentos em um só lugar."
+      />
       <a className="landing-skip-link" href="#conteudo">
         Pular para o conteúdo
       </a>
@@ -540,6 +569,38 @@ export default function Landing() {
                     <h3>{point.title}</h3>
                     <p>{point.description}</p>
                   </div>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="faq" className="landing-section">
+          <div className="landing-shell">
+            <SectionIntro title="Perguntas frequentes">
+              O essencial sobre a Nexora, direto ao ponto.
+            </SectionIntro>
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{
+                __html: JSON.stringify({
+                  "@context": "https://schema.org",
+                  "@type": "FAQPage",
+                  mainEntity: FAQ_ITEMS.map(item => ({
+                    "@type": "Question",
+                    name: item.q,
+                    acceptedAnswer: { "@type": "Answer", text: item.a },
+                  })),
+                }),
+              }}
+            />
+            <div className="landing-faq">
+              {FAQ_ITEMS.map(item => (
+                <Reveal key={item.q}>
+                  <details className="landing-faq__item">
+                    <summary>{item.q}</summary>
+                    <p>{item.a}</p>
+                  </details>
                 </Reveal>
               ))}
             </div>

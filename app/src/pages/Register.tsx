@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 import { MigrationBanner } from "@/components/MigrationBanner";
+import { Seo } from "@/lib/seo";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]+$/;
 const GENERIC_ERROR =
@@ -127,6 +128,7 @@ export default function Register() {
 
   return (
     <>
+      <Seo noindex canonicalPath="/register" />
       <MigrationBanner fixed />
       <main className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-chat p-4 pt-20 text-white sm:p-6 sm:pt-24">
         <div aria-hidden className="pointer-events-none absolute inset-0">

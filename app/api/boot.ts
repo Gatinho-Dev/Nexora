@@ -48,6 +48,47 @@ import { createHash, randomUUID } from "node:crypto";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
+// ── SEO: domínio canônico ─────────────────────────────────────
+// Em produção, tudo que não chegar pelo domínio oficial (*.onrender.com,
+// www, etc.) é redirecionado com 301 para https://nexorachat.cloud —
+// evita conteúdo duplicado indexável. /api e health checks passam direto
+// (o health check do Render chega pelo hostname interno). Desative com
+// SEO_CANONICAL_REDIRECT=0 se o domínio ainda não estiver configurado.
+const CANONICAL_HOST = (process.env.CANONICAL_HOST || "nexorachat.cloud").toLowerCase();
+app.use("*", async (c, next) => {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.SEO_CANONICAL_REDIRECT !== "0"
+  ) {
+    const host = (
+      c.req.header("x-forwarded-host") ??
+      c.req.header("host") ??
+      ""
+    )
+      .split(",")[0]
+      .trim()
+      .toLowerCase();
+    const path = new URL(c.req.url).pathname;
+    const offCanonical =
+      host && host !== CANONICAL_HOST && host !== `www.${CANONICAL_HOST}`;
+    const insecure =
+      (host === CANONICAL_HOST || host === `www.${CANONICAL_HOST}`) &&
+      (c.req.header("x-forwarded-proto") ?? "https") === "http";
+    if ((offCanonical || insecure) && !path.startsWith("/api/")) {
+      const target = new URL(c.req.url);
+      target.protocol = "https:";
+      target.host = CANONICAL_HOST;
+      return c.redirect(target.toString(), 301);
+    }
+  }
+  await next();
+});
+// Respostas da API nunca devem ser indexadas.
+app.use("/api/*", async (c, next) => {
+  await next();
+  c.res.headers.set("X-Robots-Tag", "noindex");
+});
+
 const maxUploadMb = parseInt(
   process.env.MAX_UPLOAD_MB || String(MAX_UPLOAD_MB)
 );

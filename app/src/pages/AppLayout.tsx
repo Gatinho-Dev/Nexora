@@ -33,6 +33,7 @@ import { useKeyboardOffset } from "@/hooks/useKeyboardOffset";
 import { toast } from "sonner";
 import { TriangleAlert } from "lucide-react";
 import { NexoraAppIcon, NexoraLogo } from "@/components/NexoraBrand";
+import { Seo } from "@/lib/seo";
 
 export function AppLayout() {
   const { user, isLoading } = useAuth({ redirectOnUnauthenticated: true });
@@ -189,6 +190,7 @@ export function AppLayout() {
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-rail select-none text-[#F2F3F5]">
+      <Seo noindex canonicalPath="/channels/@me" />
       <MigrationBanner />
       <GlobalMessageBanner />
 
