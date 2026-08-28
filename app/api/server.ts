@@ -4,6 +4,7 @@ import { attachRealtime } from "./realtime";
 import app from "./boot";
 import { resumePendingModeration } from "./services/mediaModeration";
 import { resumePendingDeepReviews } from "./services/reports/deepMediaReview";
+import { resumePendingTextHistoryReviews } from "./services/reports/textHistoryReview";
 
 if (process.env.NODE_ENV === "production") {
   serveStaticFiles(app);
@@ -15,6 +16,7 @@ const server = serve({ fetch: app.fetch, port, hostname: "0.0.0.0" }, () => {
   void Promise.allSettled([
     resumePendingModeration(),
     resumePendingDeepReviews(),
+    resumePendingTextHistoryReviews(),
   ]).then(results => {
     for (const result of results) {
       if (result.status === "rejected") {

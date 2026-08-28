@@ -58,6 +58,11 @@ export type SafetyViolationDTO = {
     | "temporary_suspension"
     | "permanent_ban";
   strikeApplied: boolean;
+  targetType?: string | null;
+  messageId?: number | null;
+  publicReason?: string | null;
+  affectedContentCount?: number;
+  suspensionDays?: number | null;
   internalNote?: string | null;
   createdAt: string | Date;
   reviewedAt?: string | Date | null;

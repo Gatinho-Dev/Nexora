@@ -9,6 +9,7 @@ type Props = {
   moderationStatus: "processing" | "approved" | "sensitive" | "blocked";
   /** Reserved for future age-gated variants of the overlay copy. */
   adultOnly?: boolean;
+  allowReveal?: boolean;
   /** User preference: hide always / warn / auto-reveal. */
   pref?: "hide" | "warn" | "auto";
 };
@@ -25,18 +26,20 @@ export function SensitiveMedia({
   alt,
   className,
   moderationStatus,
+  adultOnly = false,
+  allowReveal = false,
   pref = "warn",
 }: Props) {
   const [revealed, setRevealed] = useState(
-    moderationStatus === "sensitive" && pref === "auto"
+    moderationStatus === "sensitive" && allowReveal && pref === "auto"
   );
   const [broken, setBroken] = useState(false);
-  const [lastKey, setLastKey] = useState(`${pref}:${moderationStatus}`);
-  const key = `${pref}:${moderationStatus}`;
+  const [lastKey, setLastKey] = useState(`${pref}:${moderationStatus}:${allowReveal}`);
+  const key = `${pref}:${moderationStatus}:${allowReveal}`;
   if (key !== lastKey) {
     // Adjust state during render when the preference/status changes.
     setLastKey(key);
-    setRevealed(moderationStatus === "sensitive" && pref === "auto");
+    setRevealed(moderationStatus === "sensitive" && allowReveal && pref === "auto");
   }
 
   if (moderationStatus === "blocked") {
@@ -98,9 +101,9 @@ export function SensitiveMedia({
             />
           )}
           <div className="relative z-10 flex flex-col items-center gap-1.5 rounded-xl bg-black/75 px-4 py-3 text-center">
-            <span className="text-lg" aria-hidden>🔞</span>
+            <span className="text-lg" aria-hidden>{adultOnly ? "🔞" : "⚠️"}</span>
             <span className="text-xs font-extrabold tracking-widest text-white">
-              CONTEÚDO +18
+              {adultOnly ? "CONTEÚDO +18" : "CONTEÚDO SENSÍVEL"}
             </span>
             <span className="max-w-56 text-[11px] leading-snug text-bodyx">
               Esta mídia pode conter conteúdo adulto.
@@ -120,7 +123,7 @@ export function SensitiveMedia({
         />
       )}
 
-      {needsBlur && (
+      {needsBlur && allowReveal && (
         <button
           type="button"
           onClick={() => setRevealed(r => !r)}
@@ -143,6 +146,11 @@ export function SensitiveMedia({
             </>
           )}
         </button>
+      )}
+      {needsBlur && revealed && adultOnly && (
+        <span className="absolute left-2 top-2 rounded-md bg-black/75 px-2 py-1 text-[10px] font-extrabold text-white">
+          🔞 +18
+        </span>
       )}
     </div>
   );
