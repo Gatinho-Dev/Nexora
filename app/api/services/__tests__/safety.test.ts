@@ -20,6 +20,7 @@ import {
 } from "../safety/openRouterClient";
 import { env } from "../../lib/env";
 import { aggregateImageSafetyResults } from "../safety/safetyService";
+import { decideReportedTextAction } from "../textModeration";
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -153,6 +154,25 @@ describe("normalizeVerdict", () => {
   it("violência explícita nunca recebe rótulo sexual +18", () => {
     const verdict = normalizeVerdict({ safe: 0.05, violence: 0.9 });
     expect(verdict.decision).toBe("UNCERTAIN");
+  });
+});
+
+describe("Nemotron native safety output", () => {
+  it("classifica nudez adulta e categorias compostas", () => {
+    const sexual = parseSafetyResponse("User Safety: unsafe\nSafety Categories: Sexual", "guard");
+    expect(toNormalizedVerdict(sexual).decision).toBe("SENSITIVE_ADULT");
+    expect(parseSafetyResponse("User Safety: unsafe\nSafety Categories: Criminal Planning/Confessions", "guard").categories).toContain("criminal");
+    expect(parseSafetyResponse("User Safety: unsafe\nSafety Categories: Controlled/Regulated Substances", "guard").categories).toContain("regulated_goods");
+    expect(parseSafetyResponse("User Safety: unsafe\nSafety Categories: Fraud/Deception", "guard").categories).toContain("scam");
+  });
+  it("bloqueia sexual envolvendo menor", () => {
+    const result = parseSafetyResponse("User Safety: unsafe\nSafety Categories: Sexual (minor)", "guard");
+    expect(toNormalizedVerdict(result).decision).toBe("BLOCK");
+  });
+  it("política de denúncia é limitada e determinística", () => {
+    const base = { provider: "openrouter" as const, model: "guard", analyzedAt: new Date() };
+    expect(decideReportedTextAction({ ...base, safe: false, categories: ["threat"] })).toEqual({ action: "remove_and_warn", category: "threat" });
+    expect(decideReportedTextAction({ ...base, safe: false, categories: ["harassment"] })).toEqual({ action: "remove_and_warn", category: "harassment" });
   });
 });
 

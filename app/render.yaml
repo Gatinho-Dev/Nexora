@@ -30,3 +30,21 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_SAFETY_MODEL
+        value: nvidia/nemotron-3.5-content-safety:free
+      - key: OPENROUTER_VISION_MODEL
+        value: nvidia/nemotron-3.5-content-safety:free
+      - key: SAFETY_AI_ENABLED
+        value: true
+      - key: TEXT_MODERATION_ENABLED
+        value: true
+      - key: IMAGE_MODERATION_ENABLED
+        value: true
+      - key: REPORT_AI_TRIAGE_ENABLED
+        value: true
+      - key: AUTOMATIC_SEVERE_SUSPENSION_ENABLED
+        value: true
+      - key: SAFETY_SHADOW_MODE
+        value: false

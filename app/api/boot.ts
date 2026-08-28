@@ -145,6 +145,9 @@ app.post("/api/upload", async c => {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const filename = (file.name || "arquivo").slice(0, 255);
+  if (shouldModerate(mimeType) && !isRealImage(buffer)) {
+    return c.json({ error: "Arquivo inválido: o conteúdo não corresponde a uma imagem." }, 400);
+  }
   const [{ id }] = await getDb()
     .insert(schema.files)
     .values({
@@ -159,13 +162,6 @@ app.post("/api/upload", async c => {
   // Images go through content-safety analysis before becoming public.
   let moderationStatus: string | null = null;
   if (shouldModerate(mimeType)) {
-    // Magic-byte validation: a renamed .txt is not an image.
-    if (!isRealImage(buffer)) {
-      return c.json(
-        { error: "Arquivo inválido: o conteúdo não corresponde a uma imagem." },
-        400
-      );
-    }
     const requestId = randomUUID();
     await enqueueModeration(id, user.id, requestId);
     console.log(
@@ -253,6 +249,11 @@ app.get("/api/files/:id", async c => {
       if (!privileged) {
         return c.json({ error: "Verificando mídia..." }, 403);
       }
+    }
+  } else if (shouldModerate(file.mimeType)) {
+    const { user: viewer } = await authenticateRequest(c.req.raw.headers);
+    if (viewer.id !== file.uploaderId && !isPlatformAdmin(viewer)) {
+      return c.json({ error: "Mídia ainda não verificada." }, 403);
     }
   }
 

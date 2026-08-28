@@ -257,6 +257,11 @@ export async function confirmViolation(
   if (!violation) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Ocorrência não encontrada." });
   }
+  if (violation.severity !== "severe") {
+    await db.update(schema.violations).set({ status: "confirmed", reviewedAt: new Date(), reviewedByUserId: reviewerId }).where(eq(schema.violations.id, violationId));
+    const safety = await getSafety(violation.userId);
+    return { severeStrikes: safety.severeStrikes, banned: safety.permanentBan };
+  }
 
   if (violation.status === "confirmed" && violation.strikeApplied) {
     const safety = await getSafety(violation.userId);
@@ -364,6 +369,10 @@ export async function markFalsePositive(
   });
 
   await refreshStatus(violation.userId);
+  if (violation.messageId) {
+    const { restoreMessageAfterFalsePositive } = await import("./textModeration");
+    await restoreMessageAfterFalsePositive(violation.messageId, violationId);
+  }
   await logSafetyEvent({
     event: "violation_marked_false_positive",
     actorUserId: reviewerId,

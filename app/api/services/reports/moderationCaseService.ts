@@ -70,7 +70,12 @@ export async function createAutomaticCase(input: {
     .orderBy(desc(schema.moderationCases.createdAt))
     .limit(1);
 
-  if (openCase) return openCase.id;
+  if (openCase) {
+    if (input.linkedViolationId || input.aiAssessment) {
+      await db.update(schema.moderationCases).set({ linkedViolationId: input.linkedViolationId ?? undefined, aiAssessment: input.aiAssessment ?? undefined }).where(eq(schema.moderationCases.id, openCase.id));
+    }
+    return openCase.id;
+  }
 
   const inserted = await db
     .insert(schema.moderationCases)

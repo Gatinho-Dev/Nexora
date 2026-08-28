@@ -86,7 +86,7 @@ async function resolveTarget(
       return {
         reportedUserId: msg.authorId,
         exists: true,
-        context: msg.content.slice(0, 400),
+        context: msg.content.slice(0, 2000),
         mediaFileIds: imageAttachments.map(attachment => attachment.fileId),
       };
     }
@@ -216,9 +216,11 @@ export async function createReport(input: {
     .$returningId();
   const reportId = Number(Object.values(inserted[0] ?? {})[0] ?? 0);
 
-  // Triagem IA opcional (nunca decide punição — só prioriza).
+  // Classificação aprofundada para texto denunciado + política limitada e auditável.
   let aiPriority: CasePriority | undefined;
   let aiAssessment: Record<string, unknown> | null = null;
+  let linkedViolationId: number | null = null;
+  let automaticAction: string | null = null;
   if (
     env.reportAiTriageEnabled &&
     input.targetType === "message" &&
@@ -237,10 +239,14 @@ export async function createReport(input: {
         categories: result.categories,
         model: result.model,
       };
-      // A IA só ELEVA a prioridade (triagem). Nunca decide punição.
       if (result.categories.includes("sexual_minor")) aiPriority = "critical";
+      const { applyReportedTextDecision } = await import("../textModeration");
+      const applied = await applyReportedTextDecision({ messageId: input.targetId, authorId: target.reportedUserId, result });
+      linkedViolationId = applied.violationId;
+      automaticAction = applied.action;
+      aiAssessment.automaticAction = applied.action;
     } catch {
-      // Triagem é best-effort.
+      aiAssessment = { unavailable: true, automaticAction: "manual_review" };
     }
   }
 
@@ -259,10 +265,17 @@ export async function createReport(input: {
       aiPriority ?? reportPriority(input.category)
     ),
     internalContext: target.context ?? input.description?.slice(0, 400),
+    linkedViolationId,
     aiAssessment,
   });
 
   await attachReportToCase(caseId, reportId);
+  if (["remove_and_warn", "remove_and_suspend"].includes(automaticAction ?? "")) {
+    await getDb().update(schema.reports).set({ status: "action_taken", reviewedAt: new Date() }).where(eq(schema.reports.id, reportId));
+    await getDb().update(schema.moderationCases).set({ status: "confirmed" }).where(eq(schema.moderationCases.id, caseId));
+  } else if (automaticAction === "no_violation") {
+    await getDb().update(schema.reports).set({ status: "no_violation", reviewedAt: new Date() }).where(eq(schema.reports.id, reportId));
+  }
 
   // A reported image receives a slower multi-pass visual review. Enqueueing is
   // durable and fast; the worker continues asynchronously after this response.

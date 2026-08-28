@@ -20,6 +20,7 @@ export type SafetyCategory =
   | "violence"
   | "graphic_violence"
   | "harassment"
+  | "threat"
   | "hate"
   | "self_harm"
   | "criminal"
@@ -70,6 +71,8 @@ const CATEGORY_MAP: Record<string, SafetyCategory> = {
   graphic: "graphic_violence",
   harassment: "harassment",
   bullying: "harassment",
+  threat: "threat",
+  threats: "threat",
   hate: "hate",
   "hate speech": "hate",
   self_harm: "self_harm",
@@ -110,6 +113,16 @@ function extractJson(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function parseNativeGuardResponse(text: string): Record<string, unknown> | null {
+  const safety = text.match(/^\s*User Safety\s*:\s*(safe|unsafe)\s*$/im)?.[1];
+  if (!safety) return null;
+  const categoryLine = text.match(/^\s*(?:Safety Categories|Violated Categories)\s*:\s*(.+?)\s*$/im)?.[1];
+  return {
+    safe: safety.toLowerCase() === "safe",
+    categories: categoryLine ? categoryLine.split(/[,;|]/).map(v => v.trim()).filter(Boolean) : [],
+  };
 }
 
 function normalizedSignalName(value: string): string {
@@ -203,6 +216,7 @@ function mapCategory(label: string): SafetyCategory | null {
     return "harassment";
   }
   if (normalized.includes("hate")) return "hate";
+  if (normalized.includes("threat")) return "threat";
   if (normalized.includes("self") && normalized.includes("harm")) {
     return "self_harm";
   }
@@ -211,11 +225,14 @@ function mapCategory(label: string): SafetyCategory | null {
   if (normalized.includes("scam") || normalized.includes("phishing")) {
     return "scam";
   }
+  if (normalized.includes("fraud") || normalized.includes("deception")) return "scam";
   if (normalized.includes("malware")) return "malware";
   if (normalized.includes("profan")) return "profanity";
   if (normalized.includes("weapon") || normalized.includes("drug")) {
     return "regulated_goods";
   }
+  if (normalized.includes("controlled") || normalized.includes("regulated") || normalized.includes("substance")) return "regulated_goods";
+  if (normalized.includes("criminal") || normalized.includes("planning") || normalized.includes("confession")) return "criminal";
   if (normalized.includes("privacy") || normalized.includes("pii")) {
     return "privacy";
   }
@@ -232,7 +249,7 @@ export function parseSafetyResponse(
   model: string,
   latencyMs?: number
 ): SafetyResult {
-  const parsed = extractJson(raw);
+  const parsed = extractJson(raw) ?? parseNativeGuardResponse(raw);
   if (!parsed) throw new SafetyParsingError();
 
   const safeRaw = parsed.safe ?? parsed.is_safe ?? parsed.safeContent;

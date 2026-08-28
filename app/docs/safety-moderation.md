@@ -62,7 +62,7 @@ OPENROUTER_SITE_URL=https://nexorachat.cloud
 
 # Modelos configuráveis (troca sem refactor)
 OPENROUTER_SAFETY_MODEL=nvidia/nemotron-3.5-content-safety:free
-OPENROUTER_VISION_MODEL=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+OPENROUTER_VISION_MODEL=nvidia/nemotron-3.5-content-safety:free
 OPENROUTER_VISION_FALLBACK_MODELS=google/gemma-4-31b-it:free
 OPENROUTER_CHAT_MODEL=             # chatbot oficial — separado da segurança
 
