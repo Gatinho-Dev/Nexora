@@ -83,11 +83,11 @@ export const env = {
     "nvidia/nemotron-3.5-content-safety:free",
   /** Modelo de visão para imagens (o safety model pode não aceitar imagem). */
   openrouterVisionModel:
-    process.env.OPENROUTER_VISION_MODEL ?? "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    process.env.OPENROUTER_VISION_MODEL ?? "nvidia/nemotron-3.5-content-safety:free",
   /** Fallbacks se o modelo de visão principal deixar de existir (404). */
   openrouterVisionFallbacks: csv("OPENROUTER_VISION_FALLBACK_MODELS").length
     ? csv("OPENROUTER_VISION_FALLBACK_MODELS")
-    : ["google/gemma-4-31b-it:free"],
+    : ["google/gemma-4-31b-it:free", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"],
   /** Modelo do chatbot oficial — separado da segurança (nunca usado para moderar). */
   openrouterChatModel: process.env.OPENROUTER_CHAT_MODEL ?? "",
   openrouterAppName: process.env.OPENROUTER_APP_NAME ?? "Nexora",

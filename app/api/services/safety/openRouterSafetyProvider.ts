@@ -39,14 +39,15 @@ function textMessages(
     { role: "system", content: SAFETY_SYSTEM_PROMPT },
     {
       role: "user",
-      content:
+      content: (
         input.context && input.context.length > 0
           ? `Contexto recente (apenas para referência):\n${input.context
               .map(c => `- ${c.slice(0, 200)}`)
               .join(
                 "\n"
               )}\n\nConteúdo a classificar:\n${input.content.slice(0, 2000)}`
-          : input.content.slice(0, 2000),
+          : input.content.slice(0, 2000)
+      ) + "\n/categories",
     },
   ];
   return messages;
@@ -92,7 +93,7 @@ function imageMessages(
           text:
             input.mode === "reported"
               ? `${REPORTED_IMAGE_REVIEW_PROMPT} Independent review pass ${input.pass ?? 1}.`
-              : "Run the automatic upload safety check and return the required JSON.",
+              : "Run the automatic upload safety check and return the required JSON. /categories",
         },
         { type: "image_url", image_url: { url: dataUri } },
       ],
