@@ -1,12 +1,22 @@
 import { Link } from "react-router";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 import { IconRules } from "@/components/icons/figmaChannelIcons";
+import { Seo } from "@/lib/seo";
 
 /** Minimal internal pages for Terms of Service / Community Guidelines. */
 export function LegalPage({ kind }: { kind: "terms" | "guidelines" }) {
   const isTerms = kind === "terms";
   return (
     <main className="min-h-[100dvh] bg-chat px-6 py-12 text-bodyx">
+      <Seo
+        title={isTerms ? "Termos de Serviço" : "Diretrizes da Comunidade"}
+        canonicalPath={isTerms ? "/legal/terms" : "/legal/guidelines"}
+        description={
+          isTerms
+            ? "Termos de Serviço do Nexora: uso responsável da plataforma de comunicação nexorachat.cloud."
+            : "Diretrizes da Comunidade do Nexora: regras de convivência, segurança e respeito na plataforma."
+        }
+      />
       <div className="mx-auto max-w-2xl">
         {kind === "guidelines" ? (
           <IconRules className="h-11 w-11 text-[#5865F2]" />

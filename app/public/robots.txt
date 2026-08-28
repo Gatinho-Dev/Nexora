@@ -1,0 +1,12 @@
+# Nexora — https://nexorachat.cloud
+# robots.txt orienta buscadores; NÃO é camada de segurança:
+# toda área privada continua protegida por autenticação no backend.
+
+User-agent: *
+Allow: /
+Disallow: /channels
+Disallow: /nexora-admin
+Disallow: /invite
+Disallow: /api
+
+Sitemap: https://nexorachat.cloud/sitemap.xml
