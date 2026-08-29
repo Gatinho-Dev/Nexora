@@ -57,7 +57,24 @@ export const servers = mysqlTable(
     iconUrl: text("iconUrl"),
     bannerUrl: text("bannerUrl"),
     description: text("description"),
+    tags: json("tags").$type<string[]>().default([]).notNull(),
     vanitySlug: varchar("vanitySlug", { length: 32 }),
+    verificationLevel: mysqlEnum("verificationLevel", [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "maximum",
+    ])
+      .default("none")
+      .notNull(),
+    defaultNotifications: mysqlEnum("defaultNotifications", ["all", "mentions"])
+      .default("all")
+      .notNull(),
+    invitesPaused: boolean("invitesPaused").default(false).notNull(),
+    rulesEnabled: boolean("rulesEnabled").default(false).notNull(),
+    rules: json("rules").$type<string[]>().default([]).notNull(),
+    communityEnabled: boolean("communityEnabled").default(false).notNull(),
     ownerId: bigint("ownerId", { mode: "number", unsigned: true }).notNull(),
     /** Parceria oficial com a Nexora (alimenta a badge Partnered Server Owner). */
     partnered: boolean("partnered").default(false).notNull(),
@@ -74,6 +91,9 @@ export const serverMembers = mysqlTable(
     serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
     nickname: varchar("nickname", { length: 64 }),
+    timeoutUntil: timestamp("timeoutUntil"),
+    rulesAcceptedAt: timestamp("rulesAcceptedAt"),
+    lastActiveAt: timestamp("lastActiveAt"),
     joinedAt: timestamp("joinedAt").defaultNow().notNull(),
   },
   (table) => ({
@@ -224,6 +244,8 @@ export const roles = mysqlTable(
     position: int("position").default(0).notNull(),
     permissions: json("permissions").$type<string[]>().notNull(),
     isDefault: boolean("isDefault").default(false).notNull(),
+    hoistMembers: boolean("hoistMembers").default(false).notNull(),
+    mentionable: boolean("mentionable").default(false).notNull(),
   },
   (table) => ({ serverIdx: index("role_server_idx").on(table.serverId) }),
 );
@@ -370,6 +392,7 @@ export const invites = mysqlTable(
     expiresAt: timestamp("expiresAt"),
     maxUses: int("maxUses"),
     uses: int("uses").default(0).notNull(),
+    revokedAt: timestamp("revokedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({ serverIdx: index("inv_server_idx").on(table.serverId) }),
@@ -410,6 +433,49 @@ export const notifications = mysqlTable(
   (table) => ({
     userIdx: index("notif_user_idx").on(table.userId, table.isRead),
     userIdIdIdx: index("notifications_user_id_id_idx").on(table.userId, table.id),
+  }),
+);
+
+/** Preferências privadas por usuário e servidor. */
+export const serverNotificationPreferences = mysqlTable(
+  "server_notification_preferences",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    level: mysqlEnum("level", ["all", "mentions", "none"])
+      .default("mentions")
+      .notNull(),
+    mutedUntil: timestamp("mutedUntil"),
+    suppressEveryone: boolean("suppressEveryone").default(false).notNull(),
+    suppressRoles: boolean("suppressRoles").default(false).notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqIdx: uniqueIndex("snp_server_user_uniq").on(table.serverId, table.userId),
+    userIdx: index("snp_user_idx").on(table.userId),
+  }),
+);
+
+/** Registro imutável das ações administrativas dentro de um servidor. */
+export const serverAuditLogs = mysqlTable(
+  "server_audit_logs",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    actorUserId: bigint("actorUserId", { mode: "number", unsigned: true }).notNull(),
+    action: varchar("action", { length: 64 }).notNull(),
+    targetType: varchar("targetType", { length: 48 }).notNull(),
+    targetId: bigint("targetId", { mode: "number", unsigned: true }),
+    targetUserId: bigint("targetUserId", { mode: "number", unsigned: true }),
+    reason: varchar("reason", { length: 500 }),
+    metadata: json("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    serverIdx: index("sal_server_idx").on(table.serverId, table.id),
+    actorIdx: index("sal_actor_idx").on(table.actorUserId, table.id),
+    targetIdx: index("sal_target_idx").on(table.targetUserId, table.id),
   }),
 );
 

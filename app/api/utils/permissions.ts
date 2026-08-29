@@ -93,6 +93,69 @@ export async function requirePermission(
   return perms;
 }
 
+/** Highest role position. The owner is always above every role. */
+export async function getHighestRolePosition(userId: number, serverId: number) {
+  const db = getDb();
+  const server = await db.query.servers.findFirst({
+    where: eq(schema.servers.id, serverId),
+  });
+  if (!server) return null;
+  if (server.ownerId === userId) return Number.MAX_SAFE_INTEGER;
+  const memberships = await db
+    .select({ position: schema.roles.position })
+    .from(schema.memberRoles)
+    .innerJoin(schema.roles, eq(schema.memberRoles.roleId, schema.roles.id))
+    .where(
+      and(
+        eq(schema.memberRoles.serverId, serverId),
+        eq(schema.memberRoles.userId, userId),
+      ),
+    );
+  return Math.max(0, ...memberships.map(row => row.position));
+}
+
+export async function requireRoleBelowActor(
+  actorUserId: number,
+  role: typeof schema.roles.$inferSelect,
+) {
+  const actorPosition = await getHighestRolePosition(actorUserId, role.serverId);
+  if (actorPosition === null || actorPosition <= role.position) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Você só pode gerenciar cargos abaixo do seu cargo mais alto.",
+    });
+  }
+}
+
+export async function requireMemberBelowActor(
+  actorUserId: number,
+  targetUserId: number,
+  serverId: number,
+) {
+  const server = await getDb().query.servers.findFirst({
+    where: eq(schema.servers.id, serverId),
+  });
+  if (!server) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Servidor não encontrado." });
+  }
+  if (targetUserId === server.ownerId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "O dono do servidor não pode ser moderado." });
+  }
+  if (targetUserId === actorUserId) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Essa ação não pode ser aplicada a você." });
+  }
+  const [actorPosition, targetPosition] = await Promise.all([
+    getHighestRolePosition(actorUserId, serverId),
+    getHighestRolePosition(targetUserId, serverId),
+  ]);
+  if (actorPosition === null || targetPosition === null || actorPosition <= targetPosition) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Você só pode gerenciar membros abaixo do seu cargo mais alto.",
+    });
+  }
+}
+
 /** Verifies channel access: user must be a member of the channel's server. Returns the channel. */
 /**
  * Effective permissions for a specific channel:

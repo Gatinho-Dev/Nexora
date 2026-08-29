@@ -153,6 +153,8 @@ export type RoleDTO = {
   position: number;
   permissions: Permission[] | string[];
   isDefault: boolean;
+  hoistMembers?: boolean;
+  mentionable?: boolean;
 };
 
 export type MemberDTO = {
@@ -161,6 +163,8 @@ export type MemberDTO = {
   joinedAt: string | Date;
   roles: RoleDTO[];
   isOwner: boolean;
+  timeoutUntil?: string | Date | null;
+  lastActiveAt?: string | Date | null;
 };
 
 export type ServerDTO = {
@@ -170,6 +174,13 @@ export type ServerDTO = {
   bannerUrl?: string | null;
   vanitySlug?: string | null;
   description: string | null;
+  tags?: string[];
+  verificationLevel?: "none" | "low" | "medium" | "high" | "maximum";
+  defaultNotifications?: "all" | "mentions";
+  invitesPaused?: boolean;
+  rulesEnabled?: boolean;
+  rules?: string[];
+  communityEnabled?: boolean;
   ownerId: number;
   createdAt: string | Date;
 };
