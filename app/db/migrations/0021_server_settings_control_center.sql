@@ -1,11 +1,19 @@
 ALTER TABLE `servers`
-  ADD COLUMN `tags` json NOT NULL DEFAULT ('[]'),
+  ADD COLUMN `tags` json,
   ADD COLUMN `verificationLevel` enum('none','low','medium','high','maximum') NOT NULL DEFAULT 'none',
   ADD COLUMN `defaultNotifications` enum('all','mentions') NOT NULL DEFAULT 'all',
   ADD COLUMN `invitesPaused` boolean NOT NULL DEFAULT false,
   ADD COLUMN `rulesEnabled` boolean NOT NULL DEFAULT false,
-  ADD COLUMN `rules` json NOT NULL DEFAULT ('[]'),
+  ADD COLUMN `rules` json,
   ADD COLUMN `communityEnabled` boolean NOT NULL DEFAULT false;
+--> statement-breakpoint
+UPDATE `servers`
+  SET `tags` = JSON_ARRAY(), `rules` = JSON_ARRAY()
+  WHERE `tags` IS NULL OR `rules` IS NULL;
+--> statement-breakpoint
+ALTER TABLE `servers`
+  MODIFY COLUMN `tags` json NOT NULL,
+  MODIFY COLUMN `rules` json NOT NULL;
 --> statement-breakpoint
 ALTER TABLE `server_members`
   ADD COLUMN `timeoutUntil` timestamp NULL,

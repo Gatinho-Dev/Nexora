@@ -57,7 +57,8 @@ export const servers = mysqlTable(
     iconUrl: text("iconUrl"),
     bannerUrl: text("bannerUrl"),
     description: text("description"),
-    tags: json("tags").$type<string[]>().default([]).notNull(),
+    // Runtime default keeps new servers valid without emitting a TiDB-incompatible JSON DEFAULT literal.
+    tags: json("tags").$type<string[]>().$defaultFn(() => []).notNull(),
     vanitySlug: varchar("vanitySlug", { length: 32 }),
     verificationLevel: mysqlEnum("verificationLevel", [
       "none",
@@ -73,7 +74,7 @@ export const servers = mysqlTable(
       .notNull(),
     invitesPaused: boolean("invitesPaused").default(false).notNull(),
     rulesEnabled: boolean("rulesEnabled").default(false).notNull(),
-    rules: json("rules").$type<string[]>().default([]).notNull(),
+    rules: json("rules").$type<string[]>().$defaultFn(() => []).notNull(),
     communityEnabled: boolean("communityEnabled").default(false).notNull(),
     ownerId: bigint("ownerId", { mode: "number", unsigned: true }).notNull(),
     /** Parceria oficial com a Nexora (alimenta a badge Partnered Server Owner). */

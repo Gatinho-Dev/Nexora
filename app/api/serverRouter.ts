@@ -105,6 +105,8 @@ export const serverRouter = createRouter({
           name: input.name,
           iconUrl: input.iconUrl ?? null,
           description: input.description ?? null,
+          tags: [],
+          rules: [],
           ownerId: ctx.user.id,
         })
         .$returningId();
