@@ -106,6 +106,11 @@ async function recoverIncompleteServerSettingsMigration(migrationsFolder: string
       CONSTRAINT \`snp_server_user_uniq\` UNIQUE(\`serverId\`,\`userId\`)
     )`);
   }
+  await ensureColumn("server_notification_preferences", "level", "enum('all','mentions','none') NOT NULL DEFAULT 'mentions'");
+  await ensureColumn("server_notification_preferences", "mutedUntil", "timestamp NULL");
+  await ensureColumn("server_notification_preferences", "suppressEveryone", "boolean NOT NULL DEFAULT false");
+  await ensureColumn("server_notification_preferences", "suppressRoles", "boolean NOT NULL DEFAULT false");
+  await ensureColumn("server_notification_preferences", "updatedAt", "timestamp NOT NULL DEFAULT (now())");
   await ensureIndex("server_notification_preferences", "snp_user_idx", "`userId`");
 
   if (!await tableExists("server_audit_logs")) {
@@ -123,6 +128,10 @@ async function recoverIncompleteServerSettingsMigration(migrationsFolder: string
       CONSTRAINT \`server_audit_logs_id\` PRIMARY KEY(\`id\`)
     )`);
   }
+  await ensureColumn("server_audit_logs", "targetId", "bigint unsigned");
+  await ensureColumn("server_audit_logs", "targetUserId", "bigint unsigned");
+  await ensureColumn("server_audit_logs", "reason", "varchar(500)");
+  await ensureColumn("server_audit_logs", "metadata", "json");
   await ensureIndex("server_audit_logs", "sal_server_idx", "`serverId`,`id`");
   await ensureIndex("server_audit_logs", "sal_actor_idx", "`actorUserId`,`id`");
   await ensureIndex("server_audit_logs", "sal_target_idx", "`targetUserId`,`id`");
