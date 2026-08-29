@@ -156,7 +156,7 @@ function RailButton({
               // Discord signature: 48px squircle that morphs into a circle on
               // hover — 350ms cubic-bezier(0.215, 0.61, 0.355, 1).
               "relative h-12 w-12 flex items-center justify-center overflow-hidden active:scale-95",
-              "transition-[border-radius,background-color,color,transform,box-shadow] duration-[350ms]",
+              "transition-[border-radius,background-color,color,transform,box-shadow] [transition-duration:350ms]",
               "[transition-timing-function:cubic-bezier(0.215,0.61,0.355,1)]",
               active
                 ? "rounded-[16px] bg-[#5865F2] text-white"

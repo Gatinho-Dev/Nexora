@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,6 +13,7 @@ export function InvitePage() {
   const navigate = useNavigate();
   const code = params.code ?? "";
   const { user, isLoading: authLoading } = useAuth();
+  const [acceptedRules, setAcceptedRules] = useState(false);
 
   const info = trpc.server.getInviteInfo.useQuery(
     { code },
@@ -98,6 +99,18 @@ export function InvitePage() {
                   {info.data.server.description}
                 </p>
               )}
+              {!info.data.alreadyMember && info.data.server.rulesEnabled && (info.data.server.rules?.length ?? 0) > 0 && (
+                <div className="rounded-xl border border-white/10 bg-black/15 p-3 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Regras do servidor</p>
+                  <ol className="mt-2 space-y-1.5 pl-5 text-sm text-muted-foreground">
+                    {info.data.server.rules?.map((rule, index) => <li key={`${index}-${rule}`} className="list-decimal">{rule}</li>)}
+                  </ol>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm">
+                    <input type="checkbox" checked={acceptedRules} onChange={event => setAcceptedRules(event.target.checked)} className="mt-0.5 size-4 accent-[#4654d8]" />
+                    <span>Li e aceito seguir estas regras.</span>
+                  </label>
+                </div>
+              )}
               {info.data.alreadyMember ? (
                 <Button
                   className="w-full"
@@ -110,8 +123,8 @@ export function InvitePage() {
               ) : (
                 <Button
                   className="w-full"
-                  onClick={() => join.mutate({ code })}
-                  disabled={join.isPending}
+                  onClick={() => join.mutate({ code, acceptedRules })}
+                  disabled={join.isPending || Boolean(info.data.server.rulesEnabled && (info.data.server.rules?.length ?? 0) > 0 && !acceptedRules)}
                 >
                   {join.isPending ? "Entrando..." : "Aceitar convite"}
                 </Button>
