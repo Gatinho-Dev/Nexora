@@ -150,7 +150,10 @@ try {
   );
 
   await recoverIncompleteServerSettingsMigration(migrationsFolder);
-  await migrate(db, { migrationsFolder });
+  await migrate(db, { 
+  migrationsFolder, 
+  baseline: "0004_account_safety_moderation" 
+});
   console.log("[database] Migrations are up to date.");
 } finally {
   await pool.end();

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">Nexora</title>
+  <!--
+    The Nexora mark is a single, continuous relay: a message enters one side,
+    crosses the network, and arrives at the other. Its simple silhouette keeps
+    the N readable at small interface and notification sizes.
+  -->
+  <path fill="#4654D8" d="M52 44h29c7 0 13 4 17 10l70 104V62c0-10 8-18 18-18h18c10 0 18 8 18 18v132c0 10-8 18-18 18h-29c-7 0-13-4-17-10L88 98v96c0 10-8 18-18 18H52c-10 0-18-8-18-18V62c0-10 8-18 18-18Z"/>
+</svg>
