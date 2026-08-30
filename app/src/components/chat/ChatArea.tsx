@@ -27,8 +27,10 @@ type Props = {
   members?: { id: number; username: string | null; name: string | null }[];
   myId: number;
   canManageMessages?: boolean;
+  canPinMessages?: boolean;
   /** Reservado para recibos de leitura (feature em desenvolvimento). */
   showReadReceipts?: boolean;
+  firstUnreadMessageId?: number | null;
   channelType?: string;
   canPublish?: boolean;
   sendDisabled?: boolean;
@@ -45,8 +47,10 @@ export function ChatArea({
   members = [],
   myId,
   canManageMessages = false,
+  canPinMessages = false,
   sendDisabled = false,
   showReadReceipts = false,
+  firstUnreadMessageId = null,
   onOpenProfile,
   header,
 }: Props) {
@@ -59,6 +63,7 @@ export function ChatArea({
   const [loadError, setLoadError] = useState<Error | TRPCError | false>(false);
   const [reloadTick, setReloadTick] = useState(0);
   const [newBelowCount, setNewBelowCount] = useState(0);
+  const [unreadBoundary] = useState(firstUnreadMessageId);
   const seenCountRef = useRef(0);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -199,38 +204,6 @@ export function ChatArea({
       .map(([, entry]) => entry.name);
   }, [typingMap, myId, now]);
 
-  // Compute unread bar using useMemo to avoid JSX nesting issues
-  const unreadBar = useMemo(() => {
-    if (!unreadBoundary || !messages) return null;
-    const unreadMsgs = messages.slice(messages.findIndex(m => m.id === unreadBoundary));
-    const count = unreadMsgs.length;
-    return (
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-black/20 bg-sidebar text-foreground select-none relative">
-        <div className="h-px flex-1 bg-[var(--dm-unread-divider)]" />
-        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--dm-unread-divider)]">
-          {count} mensagem{count === 1 ? "" : "s"} nova{count === 1 ? "" : "s"}
-        </span>
-        <div className="h-px flex-1 bg-[var(--dm-unread-divider)]" />
-        <button
-          onClick={() => {
-            if (channelId) {
-              utils.client.message.markRead.mutate({ channelId, lastMessageId: messages[messages.length - 1]?.id });
-              useAppStore.getState().clearUnreadChannel(channelId);
-            } else if (conversationId) {
-              utils.client.message.markRead.mutate({ conversationId, lastMessageId: messages[messages.length - 1]?.id });
-              useAppStore.getState().clearUnreadConversation(conversationId);
-            }
-          }}
-          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--dm-unread-divider)] hover:bg-white/10 transition-colors"
-        >
-          Marcar como lida
-        </button>
-      </div>
-    );
-  }, [unreadBoundary, messages, channelId, conversationId, channelId, utils, channelId]);
-
-  // Última mensagem própria (não-sistema) para o recibo "Visto por N".
-
   // Última mensagem própria (não-sistema) para o recibo "Visto por N".
   const lastOwnMessageId = useMemo(() => {
     if (!showReadReceipts || !messages) return null;
@@ -244,9 +217,6 @@ export function ChatArea({
   return (
     <main className="flex-1 flex flex-col min-w-0 h-full bg-chat relative select-text">
       {header}
-
-      {/* Unread Messages Bar */}
-      {unreadBar}
 
       {/* Messages area */}
       <div
@@ -316,8 +286,10 @@ export function ChatArea({
               messages,
               myId,
               canManageMessages,
+              canPinMessages,
               channelType,
               canPublish,
+              unreadBoundary,
               jumpTo,
               onOpenProfile
             )}
@@ -391,8 +363,10 @@ function renderMessages(
   >,
   myId: number,
   canManage: boolean,
+  canPin: boolean,
   channelType: string | undefined,
   canPublish: boolean | undefined,
+  firstUnreadMessageId: number | null,
   jumpTo: (id: number) => void,
   onOpenProfile?: (userId: number) => void
 ) {
@@ -425,6 +399,24 @@ function renderMessages(
       lastAuthor = -1;
     }
 
+    if (msg.id === firstUnreadMessageId) {
+      items.push(
+        <div
+          key={`unread-${msg.id}`}
+          className="flex items-center gap-3 px-4 py-2 select-none"
+          role="separator"
+          aria-label="Novas mensagens"
+        >
+          <div className="h-px flex-1 bg-[var(--dm-unread-divider)]" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--dm-unread-divider)]">
+            Novas mensagens
+          </span>
+          <div className="h-px flex-1 bg-[var(--dm-unread-divider)]" />
+        </div>,
+      );
+      lastAuthor = -1;
+    }
+
     const grouped =
       lastAuthor === msg.authorId &&
       date.getTime() - lastTime < 5 * 60 * 1000 &&
@@ -437,6 +429,7 @@ function renderMessages(
         grouped={grouped}
         myId={myId}
         canManageMessages={canManage}
+        canPinMessages={canPin}
         channelType={channelType}
         canPublish={canPublish}
         onJumpTo={jumpTo}

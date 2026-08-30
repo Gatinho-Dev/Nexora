@@ -130,12 +130,12 @@
   body {
     @apply bg-background text-foreground;
     font-family:
-      -apple-system,
-      BlinkMacSystemFont,
-      "Segoe UI Variable",
-      "Segoe UI",
+      "gg sans",
       "Noto Sans",
       system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
       sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -150,54 +150,6 @@
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
-}
-
-/* Private-area palette: Nexora Night + Cobalt, scoped so server surfaces keep
-   their established theme. The hierarchy comes from surface shifts; shadows
-   are reserved for overlays. */
-.nexora-private-shell {
-  --rail: 222 29% 93%;
-  --sidebar-bg: 222 33% 97%;
-  --secondary-sidebar-bg: 222 33% 98%;
-  --chat-bg: 220 33% 99%;
-  --hover-bg: 224 31% 93%;
-  --active-bg: 226 39% 90%;
-  --panel: #ffffff;
-  --hov: #e7ebf5;
-  --act: #dce2f3;
-  --body-t: #252b3b;
-  --muted2: #566078;
-  --faint: #737d94;
-  --primary: 234 65% 56%;
-  --ring: 234 65% 56%;
-  --dm-unread-indicator: #ffffff;
-}
-
-.dark .nexora-private-shell {
-  --background: 228 26% 12%;
-  --foreground: 220 36% 96%;
-  --card: 228 23% 15%;
-  --popover: 228 24% 12%;
-  --primary: 233 100% 73%;
-  --primary-hover: 234 65% 56%;
-  --secondary: 228 20% 18%;
-  --muted: 228 18% 18%;
-  --accent: 228 20% 21%;
-  --border: 225 17% 24%;
-  --input: 228 23% 12%;
-  --ring: 233 100% 73%;
-  --rail: 228 26% 7%;
-  --sidebar-bg: 228 25% 11%;
-  --secondary-sidebar-bg: 228 23% 10%;
-  --chat-bg: 228 22% 14%;
-  --hover-bg: 228 20% 19%;
-  --active-bg: 227 21% 24%;
-  --panel: #202431;
-  --hov: #252a38;
-  --act: #30364a;
-  --body-t: #e8ebf4;
-  --muted2: #a5acc0;
-  --faint: #7e879d;
 }
 
 .dm-unread-pulse {
