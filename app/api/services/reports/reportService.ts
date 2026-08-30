@@ -2,7 +2,6 @@ import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../../queries/connection";
 import * as schema from "@db/schema";
-import { env } from "../../lib/env";
 import { logSafetyEvent } from "../safetyAudit";
 import {
   attachReportToCase,
@@ -10,6 +9,13 @@ import {
   priorityForCategory,
   type CasePriority,
 } from "./moderationCaseService";
+import { enqueueDeepMediaReviews } from "./deepMediaReview";
+import { enqueueTextHistoryReview } from "./textHistoryReview";
+import {
+  requireChannelAccess,
+  requireConversationAccess,
+  getMemberPermissions,
+} from "../../utils/permissions";
 
 /**
  * ReportService — denúncias de usuários.
@@ -53,40 +59,114 @@ export function reportPriority(category: string): CasePriority {
 }
 
 async function resolveTarget(
+  reporterId: number,
   targetType: "message" | "user" | "media" | "server" | "channel",
   targetId: number
-): Promise<{ reportedUserId: number | null; exists: boolean; context?: string }> {
+): Promise<{
+  reportedUserId: number | null;
+  exists: boolean;
+  context?: string;
+  mediaFileIds?: number[];
+  scope?: { scopeType: "channel" | "conversation"; scopeId: number };
+}> {
   const db = getDb();
   switch (targetType) {
     case "message": {
       const [msg] = await db
-        .select({ authorId: schema.messages.authorId, content: schema.messages.content })
+        .select({
+          authorId: schema.messages.authorId,
+          content: schema.messages.content,
+          channelId: schema.messages.channelId,
+          conversationId: schema.messages.conversationId,
+        })
         .from(schema.messages)
         .where(eq(schema.messages.id, targetId))
         .limit(1);
       if (!msg) return { reportedUserId: null, exists: false };
+      try {
+        if (msg.channelId) {
+          const { perms } = await requireChannelAccess(reporterId, msg.channelId);
+          if (!perms.has("READ_MESSAGES")) throw new Error("NO_READ_PERMISSION");
+        } else if (msg.conversationId) {
+          await requireConversationAccess(reporterId, msg.conversationId);
+        } else {
+          throw new Error("MESSAGE_WITHOUT_SCOPE");
+        }
+      } catch {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Conteúdo denunciado não foi encontrado." });
+      }
+      if (!msg.channelId && !msg.conversationId) {
+        return { reportedUserId: null, exists: false };
+      }
+      const imageAttachments = await db
+        .select({ fileId: schema.attachments.fileId })
+        .from(schema.attachments)
+        .where(
+          and(
+            eq(schema.attachments.messageId, targetId),
+            sql`${schema.attachments.mimeType} LIKE 'image/%'`
+          )
+        );
       return {
         reportedUserId: msg.authorId,
         exists: true,
-        context: msg.content.slice(0, 400),
+        context: msg.content.slice(0, 2000),
+        mediaFileIds: imageAttachments.map(attachment => attachment.fileId),
+        scope: msg.channelId
+          ? { scopeType: "channel", scopeId: msg.channelId }
+          : { scopeType: "conversation", scopeId: msg.conversationId! },
       };
     }
     case "user":
     case "media": {
       if (targetType === "media") {
         const [file] = await db
-          .select({ uploaderId: schema.files.uploaderId })
+          .select({
+            uploaderId: schema.files.uploaderId,
+            mimeType: schema.files.mimeType,
+          })
           .from(schema.files)
           .where(eq(schema.files.id, targetId))
           .limit(1);
-        return file ? { reportedUserId: file.uploaderId, exists: true } : { reportedUserId: null, exists: false };
+        if (!file) return { reportedUserId: null, exists: false };
+        const locations = await db
+          .select({
+            channelId: schema.messages.channelId,
+            conversationId: schema.messages.conversationId,
+          })
+          .from(schema.attachments)
+          .innerJoin(schema.messages, eq(schema.attachments.messageId, schema.messages.id))
+          .where(eq(schema.attachments.fileId, targetId));
+        let visible = false;
+        for (const location of locations) {
+          try {
+            if (location.channelId) {
+              const { perms } = await requireChannelAccess(reporterId, location.channelId);
+              visible = perms.has("READ_MESSAGES");
+            } else if (location.conversationId) {
+              await requireConversationAccess(reporterId, location.conversationId);
+              visible = true;
+            }
+          } catch {
+            visible = false;
+          }
+          if (visible) break;
+        }
+        if (!visible) return { reportedUserId: null, exists: false };
+        return {
+          reportedUserId: file.uploaderId,
+          exists: true,
+          mediaFileIds: file.mimeType.startsWith("image/") ? [targetId] : [],
+        };
       }
       const [user] = await db
         .select({ id: schema.users.id })
         .from(schema.users)
         .where(eq(schema.users.id, targetId))
         .limit(1);
-      return user ? { reportedUserId: user.id, exists: true } : { reportedUserId: null, exists: false };
+      return user
+        ? { reportedUserId: user.id, exists: true }
+        : { reportedUserId: null, exists: false };
     }
     case "server": {
       const [server] = await db
@@ -94,17 +174,21 @@ async function resolveTarget(
         .from(schema.servers)
         .where(eq(schema.servers.id, targetId))
         .limit(1);
+      if (!server || !(await getMemberPermissions(reporterId, targetId))) {
+        return { reportedUserId: null, exists: false };
+      }
       return server
         ? { reportedUserId: server.ownerId, exists: true, context: server.name }
         : { reportedUserId: null, exists: false };
     }
     case "channel": {
-      const [channel] = await db
-        .select({ name: schema.channels.name, serverId: schema.channels.serverId })
-        .from(schema.channels)
-        .where(eq(schema.channels.id, targetId))
-        .limit(1);
-      if (!channel) return { reportedUserId: null, exists: false };
+      let access;
+      try {
+        access = await requireChannelAccess(reporterId, targetId);
+      } catch {
+        return { reportedUserId: null, exists: false };
+      }
+      const channel = access.channel;
       const [server] = await db
         .select({ ownerId: schema.servers.ownerId })
         .from(schema.servers)
@@ -129,14 +213,17 @@ export async function createReport(input: {
   description?: string;
 }): Promise<{ reportId: number; caseId: number }> {
   // Não denunciar a si mesmo.
-  const target = await resolveTarget(input.targetType, input.targetId);
+  const target = await resolveTarget(input.reporterId, input.targetType, input.targetId);
   if (!target.exists || target.reportedUserId == null) {
     throw new TRPCError({
       code: "NOT_FOUND",
       message: "Conteúdo denunciado não foi encontrado.",
     });
   }
-  if (target.reportedUserId === input.reporterId && input.targetType !== "message") {
+  if (
+    target.reportedUserId === input.reporterId &&
+    input.targetType !== "message"
+  ) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Você não pode denunciar seu próprio conteúdo.",
@@ -157,7 +244,8 @@ export async function createReport(input: {
   if (Number(recentCount?.count ?? 0) >= 5) {
     throw new TRPCError({
       code: "TOO_MANY_REQUESTS",
-      message: "Você enviou muitas denúncias em pouco tempo. Tente novamente mais tarde.",
+      message:
+        "Você enviou muitas denúncias em pouco tempo. Tente novamente mais tarde.",
     });
   }
 
@@ -177,31 +265,12 @@ export async function createReport(input: {
     .$returningId();
   const reportId = Number(Object.values(inserted[0] ?? {})[0] ?? 0);
 
-  // Triagem IA opcional (nunca decide punição — só prioriza).
-  let aiPriority: CasePriority | undefined;
-  let aiAssessment: Record<string, unknown> | null = null;
-  if (
-    env.reportAiTriageEnabled &&
-    input.targetType === "message" &&
-    target.context &&
-    env.safetyAiEnabled &&
-    !env.safetyShadowMode &&
-    env.openrouterApiKey
-  ) {
-    try {
-      const { SafetyService } = await import("../safety/safetyService");
-      const result = await SafetyService.analyzeText({ content: target.context });
-      aiAssessment = {
-        safe: result.safe,
-        categories: result.categories,
-        model: result.model,
-      };
-      // A IA só ELEVA a prioridade (triagem). Nunca decide punição.
-      if (result.categories.includes("sexual_minor")) aiPriority = "critical";
-    } catch {
-      // Triagem é best-effort.
-    }
-  }
+  // A revisão textual é persistente e assíncrona: a denúncia não fica presa ao
+  // provedor e o Render pode retomar o cursor depois de um restart.
+  const aiAssessment: Record<string, unknown> | null =
+    input.targetType === "message" && target.scope
+      ? { historyReview: "queued", scopeType: target.scope.scopeType }
+      : null;
 
   const categoryForCase =
     input.category === "minor_safety"
@@ -213,12 +282,35 @@ export async function createReport(input: {
     targetId: input.targetId,
     reportedUserId: target.reportedUserId!,
     category: categoryForCase,
-    priority: priorityForCategory(categoryForCase, aiPriority ?? reportPriority(input.category)),
+    priority: priorityForCategory(
+      categoryForCase,
+      reportPriority(input.category)
+    ),
     internalContext: target.context ?? input.description?.slice(0, 400),
+    linkedViolationId: null,
     aiAssessment,
   });
 
   await attachReportToCase(caseId, reportId);
+  let historyReviewQueued = false;
+  if (input.targetType === "message" && target.scope) {
+    historyReviewQueued = await enqueueTextHistoryReview({
+      reportId,
+      caseId,
+      anchorMessageId: input.targetId,
+      reportedUserId: target.reportedUserId,
+      scopeType: target.scope.scopeType,
+      scopeId: target.scope.scopeId,
+    });
+  }
+
+  // A reported image receives a slower multi-pass visual review. Enqueueing is
+  // durable and fast; the worker continues asynchronously after this response.
+  const deepMediaCount = await enqueueDeepMediaReviews({
+    fileIds: target.mediaFileIds ?? [],
+    caseId,
+    reportId,
+  });
 
   // Brigading: muitas denúncias recentes do mesmo alvo elevam a prioridade
   // (sinal — não prova).
@@ -229,13 +321,20 @@ export async function createReport(input: {
       and(
         eq(schema.reports.targetType, input.targetType),
         eq(schema.reports.targetId, input.targetId),
-        gte(schema.reports.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000))
+        gte(
+          schema.reports.createdAt,
+          new Date(Date.now() - 24 * 60 * 60 * 1000)
+        )
       )
     );
   const count = Number(brigadeCount?.count ?? 0);
   if (count >= 10) {
     const { escalateCasePriority } = await import("./moderationCaseService");
-    await escalateCasePriority(caseId, count >= 50 ? "critical" : "high", count);
+    await escalateCasePriority(
+      caseId,
+      count >= 50 ? "critical" : "high",
+      count
+    );
   }
 
   await logSafetyEvent({
@@ -243,7 +342,13 @@ export async function createReport(input: {
     actorUserId: input.reporterId,
     targetUserId: target.reportedUserId,
     caseId,
-    metadata: { reportId, targetType: input.targetType, category: input.category },
+    metadata: {
+      reportId,
+      targetType: input.targetType,
+      category: input.category,
+      deepMediaCount,
+      historyReviewQueued,
+    },
   });
 
   return { reportId, caseId };

@@ -34,7 +34,7 @@
       "idx": 4,
       "version": "5",
       "when": 1787507830815,
-      "tag": "0004_account_safety_moderation",
+      "tag": "0003_account_safety_moderation",
       "breakpoints": true
     },
     {
@@ -52,84 +52,84 @@
       "breakpoints": true
     },
     {
-      "idx": 7,
+      "idx": 3,
       "version": "5",
       "when": 1787519220005,
       "tag": "0007_message_tag",
       "breakpoints": true
     },
     {
-      "idx": 8,
+      "idx": 7,
       "version": "5",
       "when": 1787520559735,
       "tag": "0008_group_conversations",
       "breakpoints": true
     },
     {
-      "idx": 9,
+      "idx": 8,
       "version": "5",
       "when": 1787529941506,
       "tag": "0009_read_receipts_privacy",
       "breakpoints": true
     },
     {
-      "idx": 10,
+      "idx": 9,
       "version": "5",
       "when": 1787534358416,
       "tag": "0010_backfill_role_permissions",
       "breakpoints": true
     },
     {
-      "idx": 11,
+      "idx": 10,
       "version": "5",
       "when": 1787622000000,
       "tag": "0011_normalize_file_urls",
       "breakpoints": true
     },
     {
-      "idx": 12,
+      "idx": 11,
       "version": "5",
       "when": 1787708400000,
       "tag": "0012_badges_global_messages",
       "breakpoints": true
     },
     {
-      "idx": 13,
+      "idx": 12,
       "version": "5",
       "when": 1787794800000,
       "tag": "0013_polls_thread_lock",
       "breakpoints": true
     },
     {
-      "idx": 14,
+      "idx": 13,
       "version": "5",
       "when": 1787881200000,
       "tag": "0014_message_embeds",
       "breakpoints": true
     },
     {
-      "idx": 15,
+      "idx": 14,
       "version": "5",
       "when": 1787967600000,
       "tag": "0015_performance_indexes",
       "breakpoints": true
     },
     {
-      "idx": 16,
+      "idx": 15,
       "version": "5",
       "when": 1788054000000,
       "tag": "0016_safety_reports_appeals_automod",
       "breakpoints": true
     },
     {
-      "idx": 17,
+      "idx": 16,
       "version": "5",
       "when": 1788140400000,
       "tag": "0017_account_sessions",
       "breakpoints": true
     },
     {
-      "idx": 18,
+      "idx": 17,
       "version": "5",
       "when": 1788226800000,
       "tag": "0018_user_connections",
@@ -138,8 +138,29 @@
     {
       "idx": 19,
       "version": "5",
+      "when": 1788313200000,
+      "tag": "0019_media_deep_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
       "when": 1788399600000,
       "tag": "0019_private_inbox_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1788399600000,
+      "tag": "0020_text_history_reviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1788486000000,
+      "tag": "0021_server_settings_control_center",
       "breakpoints": true
     }
   ]

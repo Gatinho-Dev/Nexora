@@ -185,7 +185,7 @@ export async function reviewAppeal(input: {
           })
           .where(eq(schema.accountSafety.userId, appeal.userId));
       }
-    } else if (violation.status === "pending_review") {
+    } else if (violation.status === "pending_review" || (violation.status === "confirmed" && !violation.strikeApplied)) {
       await tx
         .update(schema.violations)
         .set({ status: "false_positive", strikeApplied: false })
@@ -217,6 +217,18 @@ export async function reviewAppeal(input: {
     }
     void strikesRemoved;
   });
+  const [reversed] = await db.select({
+    messageId: schema.violations.messageId,
+    targetType: schema.violations.targetType,
+  }).from(schema.violations).where(eq(schema.violations.id, appeal.violationId)).limit(1);
+  if (reversed?.messageId) {
+    const { restoreMessageAfterFalsePositive } = await import("../textModeration");
+    await restoreMessageAfterFalsePositive(reversed.messageId, appeal.violationId);
+  }
+  if (reversed?.targetType === "message_history") {
+    const { restoreHistoryReviewAfterFalsePositive } = await import("../reports/textHistoryReview");
+    await restoreHistoryReviewAfterFalsePositive(appeal.violationId, input.reviewerId);
+  }
 
   await logSafetyEvent({
     event: "appeal_approved",

@@ -999,13 +999,18 @@ export const adminRouter = createRouter({
             await confirmViolation(detail.linkedViolationId, ctx.user.id);
             await applyManualBan(violation.userId, ctx.user.id);
           }
-        } else if (input.decision === "suspend" && detail.reportedUserId) {
-          await manualSuspend(detail.reportedUserId, input.days ?? 3, ctx.user.id);
-        } else if (input.decision === "timeout" && detail.reportedUserId) {
-          await manualSuspend(detail.reportedUserId, 1, ctx.user.id);
-        } else if (input.decision === "warn" && detail.reportedUserId) {
-          await warnUser(detail.reportedUserId, ctx.user.id, input.note);
         }
+      }
+      if (detail.reportedUserId) {
+        if (input.decision === "suspend") await manualSuspend(detail.reportedUserId, input.days ?? 3, ctx.user.id);
+        else if (input.decision === "timeout") await manualSuspend(detail.reportedUserId, 1, ctx.user.id);
+        else if (input.decision === "warn") await warnUser(detail.reportedUserId, ctx.user.id, input.note);
+        else if (input.decision === "ban" && !detail.linkedViolationId) await applyManualBan(detail.reportedUserId, ctx.user.id);
+        else if (input.decision === "unban_lift_suspension") await manualUnban(detail.reportedUserId, ctx.user.id);
+      }
+      if (input.decision === "remove_content") {
+        if (detail.targetType === "message" && detail.targetId != null && detail.reportedUserId) await removeMessageForModeration(detail.targetId, detail.reportedUserId);
+        else if (detail.targetType === "media" && detail.targetId != null) await blockMediaForModeration(detail.targetId);
       }
 
       if (input.decision === "false_positive") {
@@ -1014,7 +1019,7 @@ export const adminRouter = createRouter({
           .update(schema.reports)
           .set({ status: "no_violation", reviewedAt: new Date() })
           .where(eq(schema.reports.caseId, input.caseId));
-      } else if (["confirm", "ban", "suspend"].includes(input.decision)) {
+      } else if (["confirm", "ban", "suspend", "timeout", "warn", "remove_content"].includes(input.decision)) {
         await getDb()
           .update(schema.reports)
           .set({ status: "action_taken", reviewedAt: new Date() })

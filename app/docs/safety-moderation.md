@@ -29,25 +29,25 @@ decidido diretamente por uma resposta do modelo.
 
 ## Arquitetura de arquivos
 
-| Caminho | Responsabilidade |
-|---|---|
-| `api/services/safety/openRouterClient.ts` | Único ponto HTTP do OpenRouter + erros tipados (`OpenRouterAuthenticationError`, `RateLimitError`, `TimeoutError`, `ProviderError`) |
-| `api/services/safety/safetyParser.ts` | `parseSafetyResponse` (formato canônico JSON), `normalizeVerdict` (payloads com scores), prompt anti-injection, retry/backoff |
-| `api/services/safety/safetyService.ts` | **SafetyService**: fachada `analyzeText/analyzeImage`, cache LRU por `sha256(conteúdo)+modelo+policyVersion`, dedup em voo, kill switch, shadow mode |
-| `api/services/safety/safetyMetrics.ts` | Métricas seguras (sem conteúdo): requests, 429, timeouts, latência, cache hit rate, fila |
-| `api/services/safety/errors.ts` | `NormalizedVerdict` + `toNormalizedVerdict` |
-| `api/services/mediaModeration.ts` | Pipeline de IMAGEM (fail closed) com circuit breaker |
-| `api/services/textModeration.ts` | Pipeline de TEXTO (assíncrono pós-publicação) |
-| `api/services/automod/engine.ts` | Regras locais puras do AutoMod (flood/repeat/menções/palavras/convites/links) |
-| `api/services/automod/service.ts` | Carrega regras do servidor e aplica antes de publicar |
-| `api/services/urlSafety.ts` | Heurísticas locais anti-phishing/golpe (sem LLM) |
-| `api/services/reports/reportService.ts` | Denúncias: criação, rate limit, dedup, triagem IA (só prioriza) |
-| `api/services/reports/moderationCaseService.ts` | Casos de moderação: agregação de denúncias, fila, escalonamento |
-| `api/services/appeals/appealService.ts` | Apelações: criação, revisão, reversão transacional |
-| `api/services/accountSafety.ts` | Strikes, suspensões, banimento, Status da Conta, guard `assertCanInteract` |
-| `api/services/profileModeration.ts` | Análise assíncrona de nomes/bios/descrições públicos |
-| `api/services/moderationActions.ts` | Ações manuais (ban, advertência, bloqueio de mídia) |
-| `api/services/safetyAudit.ts` | Auditoria estruturada em banco (`safety_audit_events`) |
+| Caminho                                         | Responsabilidade                                                                                                                                     |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api/services/safety/openRouterClient.ts`       | Único ponto HTTP do OpenRouter + erros tipados (`OpenRouterAuthenticationError`, `RateLimitError`, `TimeoutError`, `ProviderError`)                  |
+| `api/services/safety/safetyParser.ts`           | `parseSafetyResponse` (formato canônico JSON), `normalizeVerdict` (payloads com scores), prompt anti-injection, retry/backoff                        |
+| `api/services/safety/safetyService.ts`          | **SafetyService**: fachada `analyzeText/analyzeImage`, cache LRU por `sha256(conteúdo)+modelo+policyVersion`, dedup em voo, kill switch, shadow mode |
+| `api/services/safety/safetyMetrics.ts`          | Métricas seguras (sem conteúdo): requests, 429, timeouts, latência, cache hit rate, fila                                                             |
+| `api/services/safety/errors.ts`                 | `NormalizedVerdict` + `toNormalizedVerdict`                                                                                                          |
+| `api/services/mediaModeration.ts`               | Pipeline de IMAGEM (fail closed) com circuit breaker                                                                                                 |
+| `api/services/textModeration.ts`                | Pipeline de TEXTO (assíncrono pós-publicação)                                                                                                        |
+| `api/services/automod/engine.ts`                | Regras locais puras do AutoMod (flood/repeat/menções/palavras/convites/links)                                                                        |
+| `api/services/automod/service.ts`               | Carrega regras do servidor e aplica antes de publicar                                                                                                |
+| `api/services/urlSafety.ts`                     | Heurísticas locais anti-phishing/golpe (sem LLM)                                                                                                     |
+| `api/services/reports/reportService.ts`         | Denúncias: criação, rate limit, dedup, triagem IA (só prioriza)                                                                                      |
+| `api/services/reports/moderationCaseService.ts` | Casos de moderação: agregação de denúncias, fila, escalonamento                                                                                      |
+| `api/services/appeals/appealService.ts`         | Apelações: criação, revisão, reversão transacional                                                                                                   |
+| `api/services/accountSafety.ts`                 | Strikes, suspensões, banimento, Status da Conta, guard `assertCanInteract`                                                                           |
+| `api/services/profileModeration.ts`             | Análise assíncrona de nomes/bios/descrições públicos                                                                                                 |
+| `api/services/moderationActions.ts`             | Ações manuais (ban, advertência, bloqueio de mídia)                                                                                                  |
+| `api/services/safetyAudit.ts`                   | Auditoria estruturada em banco (`safety_audit_events`)                                                                                               |
 
 ---
 
@@ -62,7 +62,8 @@ OPENROUTER_SITE_URL=https://nexorachat.cloud
 
 # Modelos configuráveis (troca sem refactor)
 OPENROUTER_SAFETY_MODEL=nvidia/nemotron-3.5-content-safety:free
-OPENROUTER_VISION_MODEL=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+OPENROUTER_VISION_MODEL=nvidia/nemotron-3.5-content-safety:free
+OPENROUTER_VISION_FALLBACK_MODELS=google/gemma-4-31b-it:free
 OPENROUTER_CHAT_MODEL=             # chatbot oficial — separado da segurança
 
 OPENROUTER_SAFETY_TIMEOUT_MS=15000
@@ -87,6 +88,19 @@ SAFETY_POLICY_VERSION=2026.08.1
 O kill switch também pode ser alternado em runtime pelo painel admin
 (Proprietário), sem restart.
 
+`OPENROUTER_API_KEY` é obrigatória no ambiente do servidor (inclusive no
+Render). Se ela estiver ausente, inválida ou a análise de imagem estiver
+desativada, imagens novas ficam privadas em `review_required`: elas nunca são
+aprovadas silenciosamente.
+
+Toda imagem enviada passa pela classificação visual automática antes de poder
+ser anexada a uma mensagem. Quando uma imagem (ou uma mensagem que contém
+imagens) é denunciada, o Nexora cria uma tarefa durável em
+`media_deep_reviews` e executa uma segunda análise multipassagem com os modelos
+visuais configurados. A fila é retomada depois de reinícios do Render. Essa
+reanálise pode marcar conteúdo adulto como sensível ou ocultar conteúdo
+ambíguo, mas uma denúncia isolada nunca pune automaticamente a conta.
+
 ---
 
 ## Categorias internas
@@ -102,19 +116,21 @@ confundido com conteúdo adulto genérico.
 ## PolicyEngine
 
 ### Texto (`decideTextAction`)
-| Classificação | Ação |
-|---|---|
-| `safe` | Publicada normalmente |
-| `sexual_minor` | Mensagem removida + suspensão preventiva + caso CRITICAL `pending_review` |
-| outras inseguras (ódio, assédio…) | Caso para revisão humana (sem punição automática) |
+
+| Classificação                     | Ação                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `safe`                            | Publicada normalmente                                                     |
+| `sexual_minor`                    | Mensagem removida + suspensão preventiva + caso CRITICAL `pending_review` |
+| outras inseguras (ódio, assédio…) | Caso para revisão humana (sem punição automática)                         |
 
 ### Imagem (`decideFromVerdict`)
-| Veredicto | Status |
-|---|---|
-| ALLOW | `approved` (publica) |
-| SENSITIVE_ADULT | `sensitive` → blur 🔞 + botão "Mostrar conteúdo" |
-| BLOCK (minor) | `blocked` → bytes zerados, sem preview/thumbnail/reveal, suspensão, caso crítico |
-| UNCERTAIN | `review_required` → fica PRIVADA (fail closed, sem punição) |
+
+| Veredicto       | Status                                                                           |
+| --------------- | -------------------------------------------------------------------------------- |
+| ALLOW           | `approved` (publica)                                                             |
+| SENSITIVE_ADULT | `sensitive` → blur 🔞 + botão "Mostrar conteúdo"                                 |
+| BLOCK (minor)   | `blocked` → bytes zerados, sem preview/thumbnail/reveal, suspensão, caso crítico |
+| UNCERTAIN       | `review_required` → fica PRIVADA (fail closed, sem punição)                      |
 
 Imagem **nunca** aparece antes da análise (sem flash pré-blur): o upload entra
 em quarentena (`processing`) e só é servido a terceiros após veredito.
@@ -219,14 +235,15 @@ API key nem conteúdo sensível.
 
 ## Health check
 
-`GET /api/health` inclui bloco `safety` (provider/modelo/operational/shadowMode).
+`GET /api/health` inclui bloco `safety`
+(provider/modelos de texto e visão/operational/imageModeration/failClosed/shadowMode).
 Métricas técnicas completas: `GET /api/moderation/metrics` (somente admins).
 
 ## Troubleshooting
 
-| Sintoma | Verificar |
-|---|---|
-| Toda mídia cai em `review_required` | `OPENROUTER_API_KEY` válida? breaker aberto? (`/api/moderation/metrics`) |
-| 429 frequentes | Modelo gratuito sobrecarregado; retries já amortecem; considere modelo pago via env |
-| Nenhuma análise acontece | Kill switch ativo? `SAFETY_KILL_SWITCH`/runtime; flags desabilitadas? |
-| Suspeita de falso positivo em massa | Ativar `SAFETY_SHADOW_MODE` e comparar classificações sem impactar usuários |
+| Sintoma                             | Verificar                                                                           |
+| ----------------------------------- | ----------------------------------------------------------------------------------- |
+| Toda mídia cai em `review_required` | `OPENROUTER_API_KEY` válida? breaker aberto? (`/api/moderation/metrics`)            |
+| 429 frequentes                      | Modelo gratuito sobrecarregado; retries já amortecem; considere modelo pago via env |
+| Nenhuma análise acontece            | Kill switch ativo? `SAFETY_KILL_SWITCH`/runtime; flags desabilitadas?               |
+| Suspeita de falso positivo em massa | Ativar `SAFETY_SHADOW_MODE` e comparar classificações sem impactar usuários         |

@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent,
   type ReactNode,
 } from "react";
@@ -10,39 +11,54 @@ import {
   ArrowRight,
   Ban,
   BarChart3,
-  Bell,
   Bot,
   Check,
-  CornerUpLeft,
-  Crown,
-  Gift,
   Hash,
-  Headphones,
   Menu,
+  MessagesSquare,
   Mic,
   MonitorSmartphone,
   MonitorUp,
-  MessagesSquare,
   Palette,
   Paperclip,
-  Plus,
-  Search,
   Server,
   ShieldCheck,
-  Smile,
-  Sparkles,
-  Sticker,
-  Users,
   Video,
-  Volume2,
   X,
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { NexoraAppIcon, NexoraMark } from "@/components/NexoraBrand";
 import { useAuth } from "@/hooks/useAuth";
-import { cn } from "@/lib/utils";
+import { Seo } from "@/lib/seo";
+import heroImage from "@/assets/landing/nexora-hero.webp";
+import communityImage from "@/assets/landing/nexora-community.webp";
+import voiceImage from "@/assets/landing/nexora-voice.webp";
+import "./Landing.css";
+
+/** FAQ real da plataforma — renderizada na landing e usada no JSON-LD (FAQPage). */
+const FAQ_ITEMS = [
+  {
+    q: "O que é a Nexora?",
+    a: "Uma plataforma de comunicação com mensagens em tempo real, comunidades com canais de texto e voz, chamadas de vídeo e compartilhamento de arquivos.",
+  },
+  {
+    q: "A Nexora é gratuita?",
+    a: "Sim. Criar uma conta, conversar e participar de comunidades é gratuito.",
+  },
+  {
+    q: "Posso criar minha própria comunidade?",
+    a: "Pode. Em poucos cliques você cria um servidor com canais, cargos e convites para chamar quem quiser.",
+  },
+  {
+    q: "A Nexora funciona no celular?",
+    a: "Funciona no navegador do computador e do celular, com layout adaptado para telas pequenas.",
+  },
+  {
+    q: "Como a Nexora cuida da segurança?",
+    a: "Há denúncias, bloqueios, moderação de conteúdo e ferramentas de controle da sua conta. Os detalhes estão nas Diretrizes da Comunidade e na Política de Privacidade.",
+  },
+];
 
 const NAV_LINKS = [
   { id: "recursos", label: "Recursos" },
@@ -55,87 +71,83 @@ type Feature = {
   icon: LucideIcon;
   title: string;
   description: string;
+  className: string;
 };
 
-const FEATURES: Feature[] = [
+const FEATURE_GROUPS: Feature[] = [
   {
     icon: MessagesSquare,
-    title: "Mensagens em tempo real",
-    description: "Conversas fluidas com respostas, reações e tópicos organizados.",
+    title: "Conversa que não perde o fio",
+    description:
+      "Mensagens, respostas, reações e arquivos ficam organizados para todos acompanharem.",
+    className: "landing-feature--messages",
   },
   {
     icon: Server,
-    title: "Servidores e comunidades",
-    description: "Crie seu espaço com canais, cargos e convites personalizados.",
+    title: "Um lugar para cada comunidade",
+    description:
+      "Crie servidores, canais, cargos e convites com a identidade do seu grupo.",
+    className: "landing-feature--community",
   },
   {
     icon: Mic,
-    title: "Chamadas de voz",
-    description: "Áudio cristalino com um clique, sem configuração complicada.",
-  },
-  {
-    icon: Video,
-    title: "Vídeo",
-    description: "Ligue a câmera e sinta a presença de quem está longe.",
+    title: "Entre e fale",
+    description:
+      "Canais de voz ficam abertos para você chegar, ouvir e participar quando quiser.",
+    className: "landing-feature--voice",
   },
   {
     icon: MonitorUp,
-    title: "Compartilhamento de tela",
-    description: "Mostre projetos, jogos e ideias enquanto acontecem.",
-  },
-  {
-    icon: Paperclip,
-    title: "Arquivos e imagens",
-    description: "Envie fotos, vídeos e documentos direto no chat.",
-  },
-  {
-    icon: BarChart3,
-    title: "Enquetes",
-    description: "Crie votações rápidas e decida tudo com a comunidade.",
+    title: "Mostre o que está acontecendo",
+    description:
+      "Vídeo e compartilhamento de tela aproximam jogos, estudos, projetos e encontros.",
+    className: "landing-feature--share",
   },
   {
     icon: Hash,
-    title: "Tópicos",
-    description: "Organize assuntos sem perder o fio da meada.",
-  },
-  {
-    icon: Zap,
-    title: "Slash Commands",
-    description: "Digite / e acesse ações rápidas em qualquer canal.",
-  },
-  {
-    icon: Palette,
-    title: "Emblemas e personalização",
-    description: "Colete emblemas e mostre seu estilo no perfil.",
+    title: "Tudo no seu ritmo",
+    description:
+      "Tópicos, enquetes, comandos e personalização deixam cada conversa mais simples.",
+    className: "landing-feature--organize",
   },
 ];
 
 const COMMUNITY_PERKS = [
-  "Crie quantos canais de texto e voz precisar",
-  "Defina cargos e permissões por canal",
-  "Convide amigos com um simples link",
+  "Canais de texto e voz para cada assunto",
+  "Cargos e permissões que você controla",
+  "Convites simples para reunir todo mundo",
 ];
 
-const SECURITY_POINTS: Feature[] = [
+const VOICE_FEATURES = [
+  { icon: Mic, label: "Áudio claro para conversas naturais" },
+  { icon: Video, label: "Vídeo para quando estar presente faz diferença" },
+  { icon: MonitorUp, label: "Tela compartilhada com poucos cliques" },
+];
+
+const SECURITY_POINTS = [
   {
     icon: ShieldCheck,
-    title: "Denúncias acessíveis",
-    description: "Denuncie mensagens, usuários ou servidores direto pelo app.",
+    title: "Denúncias no contexto certo",
+    description:
+      "Denuncie mensagens, pessoas ou servidores sem sair do fluxo da conversa.",
   },
   {
     icon: Bot,
-    title: "Moderação automática",
-    description: "Proteções ajudam a manter comunidades livres de spam e abuso.",
+    title: "Moderação que ajuda de verdade",
+    description:
+      "Proteções automáticas reduzem spam e abuso antes que dominem a comunidade.",
   },
   {
     icon: Ban,
-    title: "Bloqueios",
-    description: "Bloqueie quem quiser para controlar suas interações.",
+    title: "Você decide quem alcança você",
+    description:
+      "Bloqueios claros colocam o controle das interações nas suas mãos.",
   },
   {
     icon: MonitorSmartphone,
-    title: "Sessões e dispositivos",
-    description: "Veja e encerre sessões ativas nos seus dispositivos.",
+    title: "Sessões sob controle",
+    description:
+      "Revise dispositivos conectados e encerre acessos que você não reconhece.",
   },
 ];
 
@@ -154,8 +166,9 @@ function useReveal<T extends HTMLElement>() {
   );
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el || visible) return;
+    const element = ref.current;
+    if (!element || visible) return;
+
     const observer = new IntersectionObserver(
       entries => {
         if (entries.some(entry => entry.isIntersecting)) {
@@ -163,9 +176,10 @@ function useReveal<T extends HTMLElement>() {
           observer.disconnect();
         }
       },
-      { threshold: 0.15, rootMargin: "0px 0px -48px 0px" },
+      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" },
     );
-    observer.observe(el);
+
+    observer.observe(element);
     return () => observer.disconnect();
   }, [visible]);
 
@@ -175,365 +189,126 @@ function useReveal<T extends HTMLElement>() {
 function Reveal({
   children,
   delay = 0,
-  className,
+  className = "",
 }: {
   children: ReactNode;
   delay?: number;
   className?: string;
 }) {
   const { ref, visible } = useReveal<HTMLDivElement>();
+  const style = { "--reveal-delay": `${delay}ms` } as CSSProperties;
+
   return (
     <div
       ref={ref}
-      style={delay ? { transitionDelay: `${delay}ms` } : undefined}
-      className={cn(
-        "transition-[opacity,transform] duration-500 ease-out will-change-transform motion-reduce:transition-none motion-reduce:translate-y-0",
-        visible ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0",
-        className,
-      )}
+      style={style}
+      className={`landing-reveal ${visible ? "is-visible" : ""} ${className}`}
     >
       {children}
     </div>
   );
 }
 
-function Eyebrow({ children }: { children: ReactNode }) {
+function BrandLink() {
   return (
-    <p className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-muted2">
-      <span aria-hidden className="size-1.5 rounded-full bg-primary" />
-      {children}
-    </p>
+    <Link to="/" className="landing-brand" aria-label="Nexora, página inicial">
+      <NexoraAppIcon className="landing-brand__icon" decorative />
+      <span>Nexora</span>
+    </Link>
   );
 }
 
-function SectionHeading({
-  eyebrow,
+function AuthActions({
+  isAuthenticated,
+  isLoading,
+}: {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="landing-auth-loading" role="status">
+        <span className="sr-only">Carregando opções da conta</span>
+        <span />
+        <span />
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return (
+      <Link className="landing-button landing-button--primary" to="/channels/@me">
+        Abrir Nexora
+        <ArrowRight aria-hidden />
+      </Link>
+    );
+  }
+
+  return (
+    <>
+      <Link className="landing-button landing-button--ghost" to="/login">
+        Entrar
+      </Link>
+      <Link className="landing-button landing-button--primary" to="/register">
+        Criar conta
+      </Link>
+    </>
+  );
+}
+
+function SectionIntro({
   title,
   children,
+  className = "",
 }: {
-  eyebrow: string;
   title: string;
-  children?: ReactNode;
+  children: ReactNode;
+  className?: string;
 }) {
   return (
-    <Reveal className="max-w-2xl">
-      <Eyebrow>{eyebrow}</Eyebrow>
-      <h2 className="mt-4 text-[clamp(1.75rem,1.35rem+1.8vw,2.75rem)] font-bold leading-[1.1] tracking-[-0.02em] text-foreground">
-        {title}
-      </h2>
-      {children && (
-        <p className="mt-4 text-base leading-relaxed text-muted2 sm:text-lg">
-          {children}
-        </p>
-      )}
+    <Reveal className={`landing-section-intro ${className}`}>
+      <h2>{title}</h2>
+      <p>{children}</p>
     </Reveal>
   );
 }
 
-function FeatureCard({ feature }: { feature: Feature }) {
+function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
   const Icon = feature.icon;
-  return (
-    <div className="group rounded-2xl border border-border bg-card/70 p-5 transition-[transform,box-shadow] duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_12px_32px_rgba(0,0,0,0.22)] motion-reduce:hover:translate-y-0">
-      <div className="grid size-10 place-items-center rounded-lg bg-primary/15 text-primary transition-colors duration-300 group-hover:bg-primary/25">
-        <Icon className="size-5" aria-hidden />
-      </div>
-      <h3 className="mt-4 text-sm font-semibold text-foreground">
-        {feature.title}
-      </h3>
-      <p className="mt-1.5 text-sm leading-relaxed text-muted2">
-        {feature.description}
-      </p>
-    </div>
-  );
-}
 
-function HeroMockup() {
   return (
-    <div
-      role="img"
-      aria-label="Prévia da interface do Nexora: lista de servidores, canais, conversas e chamada de voz"
-      className="relative mx-auto mt-14 w-full max-w-4xl select-none sm:mt-16"
+    <Reveal
+      delay={(index % 3) * 70}
+      className={`landing-feature ${feature.className}`}
     >
-      <div
-        aria-hidden
-        className="absolute inset-x-6 top-6 bottom-0 rounded-[3rem] bg-primary/25 blur-3xl"
-      />
-      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#1E1F22] shadow-[0_32px_80px_rgba(0,0,0,0.45)]">
-        <div className="flex h-9 items-center gap-1.5 border-b border-black/30 px-3">
-          <span aria-hidden className="size-2.5 rounded-full bg-[#FF5F57]" />
-          <span aria-hidden className="size-2.5 rounded-full bg-[#FEBC2E]" />
-          <span aria-hidden className="size-2.5 rounded-full bg-[#28C840]" />
-          <span className="flex-1 text-center text-[11px] font-semibold text-[#949ba4]">
-            nexora
+      <div className="landing-feature__topline">
+        <span className="landing-icon-well">
+          <Icon aria-hidden />
+        </span>
+        {feature.className === "landing-feature--voice" && (
+          <span className="landing-voice-signal" aria-label="Voz ativa">
+            <i />
+            <i />
+            <i />
           </span>
-          <span aria-hidden className="w-10" />
-        </div>
-
-        <div className="flex h-[320px] sm:h-[360px]">
-          <div className="flex w-12 shrink-0 flex-col items-center gap-2 bg-[#111214] py-3">
-            <NexoraAppIcon className="size-8 rounded-full" decorative />
-            <span aria-hidden className="h-px w-6 bg-white/10" />
-            <span
-              aria-hidden
-              className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-pink-500 to-rose-600 text-[11px] font-bold text-white ring-2 ring-white/80"
-            >
-              C
-            </span>
-            <span
-              aria-hidden
-              className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-[11px] font-bold text-white"
-            >
-              G
-            </span>
-            <span
-              aria-hidden
-              className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-[11px] font-bold text-white"
-            >
-              D
-            </span>
-          </div>
-
-          <div className="hidden w-40 shrink-0 flex-col bg-[#2B2D31] p-2 sm:flex">
-            <p className="truncate px-2 py-1.5 text-[13px] font-bold text-white">
-              Comunidade Nexora
-            </p>
-            <p className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-[#949ba4]">
-              Canais de texto
-            </p>
-            <p className="flex items-center gap-1.5 rounded bg-[#404249] px-2 py-1 text-[13px] font-medium text-white">
-              <Hash className="size-3.5" aria-hidden /> geral
-            </p>
-            <p className="flex items-center gap-1.5 rounded px-2 py-1 text-[13px] text-[#949ba4]">
-              <Hash className="size-3.5" aria-hidden /> apresente-se
-            </p>
-            <p className="flex items-center gap-1.5 rounded px-2 py-1 text-[13px] text-[#949ba4]">
-              <Hash className="size-3.5" aria-hidden /> memes
-            </p>
-            <p className="px-2 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-[#949ba4]">
-              Canais de voz
-            </p>
-            <p className="flex items-center gap-1.5 rounded px-2 py-1 text-[13px] text-[#949ba4]">
-              <Volume2 className="size-3.5" aria-hidden /> Lounge
-            </p>
-            <p className="flex items-center gap-1.5 rounded px-2 py-1 text-[13px] text-[#949ba4]">
-              <Volume2 className="size-3.5" aria-hidden /> Palco
-            </p>
-          </div>
-
-          <div className="flex min-w-0 flex-1 flex-col bg-[#313338]">
-            <div className="flex h-10 shrink-0 items-center gap-2 border-b border-black/20 px-3">
-              <Hash className="size-4 text-[#949ba4]" aria-hidden />
-              <span className="text-[13px] font-bold text-white">geral</span>
-              <span className="hidden truncate border-l border-white/10 pl-2 text-xs text-[#949ba4] md:inline">
-                converse com a comunidade
-              </span>
-              <span className="flex-1" />
-              <Bell className="size-4 text-[#949ba4]" aria-hidden />
-              <Users className="size-4 text-[#949ba4]" aria-hidden />
-              <Search className="size-4 text-[#949ba4]" aria-hidden />
-            </div>
-
-            <div className="flex-1 space-y-3 overflow-hidden p-3">
-              <div className="flex gap-2.5">
-                <span
-                  aria-hidden
-                  className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-pink-400 to-fuchsia-500 text-xs font-bold text-white"
-                >
-                  L
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[13px]">
-                    <span className="font-bold text-[#f472b6]">Luna</span>{" "}
-                    <span className="text-[10px] text-[#949ba4]">
-                      hoje às 14:02
-                    </span>
-                  </p>
-                  <p className="text-[13px] leading-snug text-[#dbdee1]">
-                    gente, os novos tópicos ficaram incríveis 😍
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-2.5">
-                <span aria-hidden className="w-8 shrink-0" />
-                <div className="min-w-0">
-                  <p className="-ml-[26px] mb-0.5 flex items-center gap-1 text-[10px] text-[#949ba4]">
-                    <CornerUpLeft className="size-3" aria-hidden />
-                    respondeu a{" "}
-                    <span className="font-semibold text-[#f472b6]">Luna</span>
-                  </p>
-                  <p className="text-[13px]">
-                    <span className="font-bold text-[#38bdf8]">Rafa</span>{" "}
-                    <span className="text-[10px] text-[#949ba4]">
-                      hoje às 14:04
-                    </span>
-                  </p>
-                  <p className="text-[13px] leading-snug text-[#dbdee1]">
-                    sim! já usei no servidor da facul, ajuda demais a organizar
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-2.5">
-                <span
-                  aria-hidden
-                  className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-violet-400 to-purple-500 text-xs font-bold text-white"
-                >
-                  B
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[13px]">
-                    <span className="font-bold text-[#a78bfa]">Bia</span>{" "}
-                    <span className="text-[10px] text-[#949ba4]">
-                      hoje às 14:05
-                    </span>
-                  </p>
-                  <p className="text-[13px] leading-snug text-[#dbdee1]">
-                    bora continuar no voice? tô no Lounge 🎧
-                  </p>
-                  <div className="mt-1 flex gap-1.5">
-                    <span className="inline-flex items-center gap-1 rounded-md border border-[#5865F2]/50 bg-[#5865F2]/20 px-1.5 py-0.5 text-[11px] text-[#c9cdff]">
-                      ❤️ 4
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[11px] text-[#b5bac1]">
-                      🔥 2
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3 pt-0">
-              <div className="flex h-9 items-center gap-2 rounded-lg bg-[#1E1F22] px-3 text-[13px] text-[#949ba4]">
-                <Plus className="size-4" aria-hidden />
-                <span className="flex-1 truncate">Converse em #geral</span>
-                <Gift className="size-4" aria-hidden />
-                <Sticker className="size-4" aria-hidden />
-                <Smile className="size-4" aria-hidden />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex h-11 items-center gap-2 border-t border-black/30 bg-[#1E1F22] px-3">
-          <span
-            aria-hidden
-            className="voice-avatar-speaking grid size-6 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-[10px] font-bold text-white"
-          >
-            M
-          </span>
-          <p className="min-w-0 flex-1 truncate text-xs text-[#949ba4]">
-            <span className="font-semibold text-[#3bbd72]">@marina</span> está
-            falando · Lounge
-          </p>
-          <Mic className="size-4 text-[#b5bac1]" aria-hidden />
-          <Headphones className="size-4 text-[#b5bac1]" aria-hidden />
-        </div>
+        )}
       </div>
-    </div>
-  );
-}
-
-function CommunitiesMockup() {
-  return (
-    <div
-      role="img"
-      aria-label="Prévia de um servidor com lista de canais, cargos e membros"
-      className="select-none overflow-hidden rounded-2xl border border-white/10 bg-[#2B2D31] shadow-[0_24px_64px_rgba(0,0,0,0.35)]"
-    >
-      <div className="border-b border-black/30 px-4 py-3">
-        <p className="text-sm font-bold text-white">Servidor da Bia</p>
+      <div className="landing-feature__copy">
+        <h3>{feature.title}</h3>
+        <p>{feature.description}</p>
       </div>
-      <div className="grid grid-cols-2 divide-x divide-black/30">
-        <div className="p-3">
-          <p className="pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#949ba4]">
-            Canais
-          </p>
-          <p className="flex items-center gap-1.5 rounded bg-[#404249] px-2 py-1 text-[13px] font-medium text-white">
-            <Hash className="size-3.5" aria-hidden /> bem-vindo
-          </p>
-          <p className="mt-0.5 flex items-center gap-1.5 rounded px-2 py-1 text-[13px] text-[#949ba4]">
-            <Hash className="size-3.5" aria-hidden /> estudos
-          </p>
-          <p className="mt-0.5 flex items-center gap-1.5 rounded px-2 py-1 text-[13px] text-[#949ba4]">
-            <Volume2 className="size-3.5" aria-hidden /> foco
-          </p>
-          <div className="mt-3 flex flex-wrap gap-1">
-            <span className="rounded-full border border-[#F23F43]/40 bg-[#F23F43]/10 px-2 py-0.5 text-[10px] font-bold text-[#F23F43]">
-              Admin
-            </span>
-            <span className="rounded-full border border-[#5865F2]/40 bg-[#5865F2]/10 px-2 py-0.5 text-[10px] font-bold text-[#8B9AFF]">
-              Mod
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-[#b5bac1]">
-              Membro
-            </span>
-          </div>
+      {feature.className === "landing-feature--community" && (
+        <NexoraMark className="landing-feature__mark" decorative />
+      )}
+      {feature.className === "landing-feature--organize" && (
+        <div className="landing-capability-row" aria-label="Recursos incluídos">
+          <span><Paperclip aria-hidden /> Arquivos</span>
+          <span><BarChart3 aria-hidden /> Enquetes</span>
+          <span><Zap aria-hidden /> Comandos</span>
+          <span><Palette aria-hidden /> Perfil</span>
         </div>
-        <div className="p-3">
-          <p className="pb-1.5 text-[10px] font-bold uppercase tracking-wider text-[#949ba4]">
-            Membros
-          </p>
-          <p className="flex items-center gap-1.5 text-[13px] font-semibold text-[#F23F43]">
-            <Crown className="size-3.5 text-[#F0B232]" aria-hidden /> Bia
-          </p>
-          <p className="mt-1 text-[13px] font-semibold text-[#8B9AFF]">Marina</p>
-          <p className="mt-1 text-[13px] font-semibold text-[#EB459E]">Luna</p>
-          <p className="mt-1 text-[13px] text-[#b5bac1]">Rafa</p>
-          <p className="mt-1 text-[13px] text-[#b5bac1]">Téo</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function VoiceMockup() {
-  const speakers = [
-    { initial: "M", name: "Marina", ring: true, gradient: "from-emerald-400 to-teal-500" },
-    { initial: "L", name: "Luna", ring: false, gradient: "from-pink-400 to-fuchsia-500" },
-    { initial: "R", name: "Rafa", ring: true, gradient: "from-sky-400 to-blue-500" },
-    { initial: "T", name: "Téo", ring: false, gradient: "from-amber-400 to-orange-500" },
-  ];
-  return (
-    <div
-      role="img"
-      aria-label="Prévia de um canal de voz com participantes e controles de áudio"
-      className="select-none rounded-2xl border border-white/10 bg-[#2B2D31] p-5 shadow-[0_24px_64px_rgba(0,0,0,0.35)] sm:p-6"
-    >
-      <p className="mb-4 flex items-center justify-center gap-1.5 text-xs font-bold text-[#949ba4]">
-        <Volume2 className="size-3.5" aria-hidden /> Lounge
-      </p>
-      <ul className="flex flex-wrap items-start justify-center gap-x-6 gap-y-4">
-        {speakers.map(speaker => (
-          <li key={speaker.name} className="flex w-16 flex-col items-center gap-1.5">
-            <span
-              aria-hidden
-              className={cn(
-                "grid size-14 place-items-center rounded-full bg-gradient-to-br text-lg font-bold text-white transition-transform duration-300",
-                speaker.gradient,
-                speaker.ring && "voice-avatar-speaking scale-105",
-              )}
-            >
-              {speaker.initial}
-            </span>
-            <span className="max-w-full truncate text-xs text-[#b5bac1]">
-              {speaker.name}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-6 flex items-center justify-center gap-3">
-        <span className="grid size-11 place-items-center rounded-full bg-[#5865F2] text-white">
-          <Mic className="size-5" aria-hidden />
-        </span>
-        <span className="grid size-11 place-items-center rounded-full bg-[#404249] text-[#dbdee1]">
-          <Headphones className="size-5" aria-hidden />
-        </span>
-        <span className="grid size-11 place-items-center rounded-full bg-[#404249] text-[#dbdee1]">
-          <MonitorUp className="size-5" aria-hidden />
-        </span>
-      </div>
-    </div>
+      )}
+    </Reveal>
   );
 }
 
@@ -544,278 +319,255 @@ export default function Landing() {
 
   useEffect(() => {
     if (!menuOpen) return;
-    const onKey = (event: KeyboardEvent) => {
+    const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMenuOpen(false);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
 
-  function scrollToSection(
-    event: MouseEvent<HTMLAnchorElement>,
-    id: string,
-  ) {
+  function scrollToSection(event: MouseEvent<HTMLAnchorElement>, id: string) {
     event.preventDefault();
-    setMenuOpen(false);
-    document.getElementById(id)?.scrollIntoView({
-      behavior: prefersReducedMotion() ? "auto" : "smooth",
-      block: "start",
-    });
-    window.history.replaceState(null, "", `#${id}`);
+    const moveToSection = () => {
+      document.getElementById(id)?.scrollIntoView({
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+        block: "start",
+      });
+      window.history.replaceState(null, "", `#${id}`);
+    };
+
+    if (menuOpen) {
+      setMenuOpen(false);
+      window.setTimeout(moveToSection, 0);
+      return;
+    }
+
+    moveToSection();
   }
 
-  const authActions = isLoading ? null : isAuthenticated ? (
-    <Button
-      asChild
-      className="rounded-full bg-[#5865F2] font-semibold text-white hover:bg-[#4752C4]"
-    >
-      <Link to="/channels/@me">
-        Abrir Nexora
-        <ArrowRight aria-hidden />
-      </Link>
-    </Button>
-  ) : (
-    <>
-      <Button
-        variant="ghost"
-        asChild
-        className="rounded-full font-medium text-muted2 hover:text-foreground"
-      >
-        <Link to="/login">Entrar</Link>
-      </Button>
-      <Button
-        asChild
-        className="rounded-full bg-[#5865F2] font-semibold text-white hover:bg-[#4752C4]"
-      >
-        <Link to="/register">Criar conta</Link>
-      </Button>
-    </>
-  );
-
   return (
-    <div className="h-full overflow-y-auto overscroll-y-contain bg-chat text-foreground">
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-chat/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <Link to="/" className="flex shrink-0 items-center gap-2">
-            <NexoraAppIcon className="size-8" decorative />
-            <span className="text-lg font-extrabold tracking-tight">
-              Nexora
-            </span>
-          </Link>
+    <div className="nexora-landing">
+      <Seo
+        canonicalPath="/"
+        description="Nexora é uma plataforma de comunicação para conversar com amigos, criar comunidades, participar de chamadas de voz e vídeo e compartilhar momentos em um só lugar."
+      />
+      <a className="landing-skip-link" href="#conteudo">
+        Pular para o conteúdo
+      </a>
 
-          <nav
-            aria-label="Navegação principal"
-            className="hidden items-center gap-1 md:flex"
-          >
+      <header className="landing-header">
+        <div className="landing-shell landing-nav-row">
+          <BrandLink />
+
+          <nav className="landing-nav-links" aria-label="Navegação principal">
             {NAV_LINKS.map(link => (
               <a
                 key={link.id}
                 href={`#${link.id}`}
                 onClick={event => scrollToSection(event, link.id)}
-                className="rounded-full px-3.5 py-2 text-sm font-medium text-muted2 transition-colors duration-200 hover:bg-hover hover:text-foreground"
               >
                 {link.label}
               </a>
             ))}
           </nav>
 
-          <div className="hidden items-center gap-2 md:flex">{authActions}</div>
+          <div className="landing-nav-actions">
+            <AuthActions
+              isAuthenticated={isAuthenticated}
+              isLoading={isLoading}
+            />
+          </div>
 
           <button
             type="button"
-            className="grid size-10 place-items-center rounded-lg text-muted2 transition-colors duration-200 hover:bg-hover hover:text-foreground md:hidden"
+            className="landing-menu-button"
             aria-expanded={menuOpen}
-            aria-controls="mobile-menu"
+            aria-controls="landing-mobile-menu"
             aria-label={menuOpen ? "Fechar menu" : "Abrir menu"}
             onClick={() => setMenuOpen(open => !open)}
           >
-            {menuOpen ? (
-              <X className="size-5" aria-hidden />
-            ) : (
-              <Menu className="size-5" aria-hidden />
-            )}
+            {menuOpen ? <X aria-hidden /> : <Menu aria-hidden />}
           </button>
         </div>
 
         {menuOpen && (
-          <div
-            id="mobile-menu"
-            className="border-t border-border/60 bg-chat/95 backdrop-blur-lg md:hidden"
-          >
-            <nav
-              aria-label="Navegação principal"
-              className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4"
-            >
+          <div id="landing-mobile-menu" className="landing-mobile-menu">
+            <nav aria-label="Navegação principal para celular">
               {NAV_LINKS.map(link => (
                 <a
                   key={link.id}
                   href={`#${link.id}`}
                   onClick={event => scrollToSection(event, link.id)}
-                  className="rounded-lg px-3 py-3 text-sm font-medium text-muted2 transition-colors duration-200 hover:bg-hover hover:text-foreground"
                 >
                   {link.label}
                 </a>
               ))}
-              <div className="mt-3 flex flex-col gap-2">{authActions}</div>
             </nav>
+            <div className="landing-mobile-actions">
+              <AuthActions
+                isAuthenticated={isAuthenticated}
+                isLoading={isLoading}
+              />
+            </div>
           </div>
         )}
       </header>
 
-      <main>
-        <section className="relative overflow-hidden px-4 pb-16 pt-14 sm:px-6 sm:pb-24 sm:pt-20 lg:px-8">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -top-40 left-1/2 size-[34rem] -translate-x-1/2 rounded-full bg-primary/20 blur-[120px]"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute right-[-8rem] top-40 size-72 rounded-full bg-[#00A8FC]/10 blur-[100px]"
-          />
-          <div className="relative mx-auto max-w-3xl text-center">
-            <Reveal>
-              <p className="inline-flex items-center gap-2 rounded-full border border-border bg-card/60 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted2">
-                <Sparkles className="size-3.5 text-primary" aria-hidden />
-                Bem-vindo à Nexora
-              </p>
-            </Reveal>
-            <Reveal delay={80}>
-              <h1 className="mt-6 text-[clamp(2.5rem,1.55rem+3.6vw,4.25rem)] font-bold leading-[1.05] tracking-[-0.03em]">
-                Um novo jeito de{" "}
-                <span className="bg-gradient-to-r from-[#7383FF] via-[#8B9AFF] to-[#00A8FC] bg-clip-text text-transparent">
-                  estar conectado.
-                </span>
-              </h1>
-            </Reveal>
-            <Reveal delay={160}>
-              <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted2 sm:text-lg">
-                Converse com amigos, crie comunidades, participe de chamadas de
-                voz e compartilhe momentos — tudo em um só lugar.
-              </p>
-            </Reveal>
-            <Reveal delay={240}>
-              <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-                <Button
-                  asChild
-                  className="h-12 rounded-full bg-[#5865F2] px-7 text-base font-semibold text-white shadow-[0_8px_24px_rgba(88,101,242,0.35)] hover:bg-[#4752C4]"
-                >
-                  <Link to="/register">Criar uma conta</Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  asChild
-                  className="h-12 rounded-full border-white/15 bg-white/5 px-7 text-base font-semibold hover:bg-white/10"
-                >
-                  <Link to="/login">Entrar</Link>
-                </Button>
-              </div>
+      <main id="conteudo">
+        <section className="landing-hero">
+          <div className="landing-shell landing-hero__grid">
+            <div className="landing-hero__copy">
+              <Reveal>
+                <p className="landing-eyebrow">Conversa em tempo real</p>
+              </Reveal>
+              <Reveal delay={70}>
+                <h1>Mais perto de quem importa.</h1>
+              </Reveal>
+              <Reveal delay={140}>
+                <p className="landing-hero__lead">
+                  Mensagens, comunidades e chamadas no mesmo lugar, para
+                  conversas que continuam de verdade.
+                </p>
+              </Reveal>
+              <Reveal delay={210}>
+                <div className="landing-hero__actions">
+                  <Link
+                    className="landing-button landing-button--primary landing-button--large"
+                    to="/register"
+                  >
+                    Criar conta
+                    <ArrowRight aria-hidden />
+                  </Link>
+                  <Link
+                    className="landing-button landing-button--secondary landing-button--large"
+                    to="/login"
+                  >
+                    Entrar
+                  </Link>
+                </div>
+              </Reveal>
+            </div>
+
+            <Reveal delay={120} className="landing-hero__media">
+              <figure>
+                <img
+                  src={heroImage}
+                  alt="Três amigos conversando juntos com fones e notebook"
+                  width="1586"
+                  height="992"
+                  fetchPriority="high"
+                />
+                <figcaption>
+                  Um espaço simples para chegar, conversar e ficar por perto.
+                </figcaption>
+              </figure>
             </Reveal>
           </div>
-          <Reveal delay={200}>
-            <HeroMockup />
-          </Reveal>
         </section>
 
-        <section
-          id="recursos"
-          className="scroll-mt-20 border-t border-border/60 px-4 py-16 sm:px-6 sm:py-24 lg:px-8"
-        >
-          <div className="mx-auto max-w-6xl">
-            <SectionHeading
-              eyebrow="Recursos"
-              title="Tudo que você precisa para ficar conectado."
-            >
-              Do primeiro oi à comunidade inteira: as ferramentas certas, sem
-              complicação.
-            </SectionHeading>
-            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {FEATURES.map((feature, index) => (
-                <Reveal key={feature.title} delay={(index % 3) * 70}>
-                  <FeatureCard feature={feature} />
-                </Reveal>
+        <section id="recursos" className="landing-section landing-section--features">
+          <div className="landing-shell">
+            <SectionIntro title="Tudo o que aproxima, sem complicar.">
+              O Nexora reúne as ferramentas certas e deixa a conversa ocupar o
+              centro da experiência.
+            </SectionIntro>
+
+            <div className="landing-feature-grid">
+              {FEATURE_GROUPS.map((feature, index) => (
+                <FeatureCard
+                  key={feature.title}
+                  feature={feature}
+                  index={index}
+                />
               ))}
             </div>
           </div>
         </section>
 
-        <section
-          id="comunidades"
-          className="scroll-mt-20 border-t border-border/60 bg-sidebar/50 px-4 py-16 sm:px-6 sm:py-24 lg:px-8"
-        >
-          <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-14">
-            <div>
-              <SectionHeading eyebrow="Comunidades" title="Crie seu espaço.">
-                Monte seu servidor em segundos: canais de texto e voz sob
-                medida, cargos com permissões específicas e convites fáceis de
-                compartilhar. O espaço é seu — e você decide quem faz o quê.
-              </SectionHeading>
-              <Reveal delay={120}>
-                <ul className="mt-6 space-y-3">
+        <section id="comunidades" className="landing-section">
+          <div className="landing-shell landing-story-grid">
+            <Reveal className="landing-story-media landing-story-media--portrait">
+              <img
+                src={communityImage}
+                alt="Amigos organizando um projeto e conversando com outra pessoa por chamada"
+                width="880"
+                height="1100"
+                loading="lazy"
+                decoding="async"
+              />
+            </Reveal>
+
+            <div className="landing-story-copy">
+              <SectionIntro title="Sua comunidade, do seu jeito.">
+                Reúna amigos, projetos e interesses em um espaço que cresce sem
+                perder a organização.
+              </SectionIntro>
+              <Reveal delay={100}>
+                <ul className="landing-check-list">
                   {COMMUNITY_PERKS.map(perk => (
-                    <li
-                      key={perk}
-                      className="flex items-start gap-2.5 text-sm text-muted2 sm:text-base"
-                    >
-                      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
-                        <Check className="size-3" aria-hidden />
-                      </span>
+                    <li key={perk}>
+                      <span><Check aria-hidden /></span>
                       {perk}
                     </li>
                   ))}
                 </ul>
               </Reveal>
             </div>
-            <Reveal delay={150}>
-              <CommunitiesMockup />
-            </Reveal>
           </div>
         </section>
 
-        <section
-          id="voz"
-          className="scroll-mt-20 border-t border-border/60 px-4 py-16 sm:px-6 sm:py-24 lg:px-8"
-        >
-          <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2 lg:gap-14">
-            <Reveal delay={150} className="order-last lg:order-first">
-              <VoiceMockup />
-            </Reveal>
-            <div>
-              <SectionHeading eyebrow="Voz e vídeo" title="Entre na conversa.">
-                Canais de voz sempre abertos, chamadas com latência baixa e
-                compartilhamento de tela em um clique. Chegou junto? É só
-                entrar — ninguém precisa agendar nada.
-              </SectionHeading>
+        <section id="voz" className="landing-section landing-section--voice">
+          <div className="landing-shell landing-voice-grid">
+            <div className="landing-voice-copy">
+              <SectionIntro title="Entrou no canal, entrou na conversa.">
+                Fale, apareça em vídeo ou mostre sua tela sem transformar um
+                encontro espontâneo em reunião.
+              </SectionIntro>
+              <Reveal delay={100}>
+                <ul className="landing-voice-list">
+                  {VOICE_FEATURES.map(item => (
+                    <li key={item.label}>
+                      <item.icon aria-hidden />
+                      <span>{item.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Reveal>
             </div>
+
+            <Reveal delay={80} className="landing-story-media landing-story-media--square">
+              <img
+                src={voiceImage}
+                alt="Dois amigos participando de uma chamada pelo notebook"
+                width="1100"
+                height="1100"
+                loading="lazy"
+                decoding="async"
+              />
+            </Reveal>
           </div>
         </section>
 
-        <section
-          id="seguranca"
-          className="scroll-mt-20 border-t border-border/60 bg-sidebar/50 px-4 py-16 sm:px-6 sm:py-24 lg:px-8"
-        >
-          <div className="mx-auto max-w-6xl">
-            <SectionHeading
-              eyebrow="Segurança"
-              title="Segurança integrada à experiência."
-            >
-              Sua segurança não fica escondida em menus: ela está a alguns
-              cliques de distância, exatamente onde você precisa.
-            </SectionHeading>
-            <div className="mt-10 grid gap-4 sm:grid-cols-2">
+        <section id="seguranca" className="landing-section landing-security">
+          <div className="landing-shell">
+            <SectionIntro title="Segurança presente, não escondida.">
+              Controles claros ajudam pessoas e comunidades a cuidar do espaço
+              sem interromper a conversa.
+            </SectionIntro>
+
+            <div className="landing-security-grid">
               {SECURITY_POINTS.map((point, index) => (
-                <Reveal key={point.title} delay={(index % 2) * 70}>
-                  <div className="flex gap-4 rounded-2xl border border-border bg-card/70 p-5">
-                    <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
-                      <point.icon className="size-5" aria-hidden />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground">
-                        {point.title}
-                      </h3>
-                      <p className="mt-1 text-sm leading-relaxed text-muted2">
-                        {point.description}
-                      </p>
-                    </div>
+                <Reveal
+                  key={point.title}
+                  delay={(index % 2) * 70}
+                  className="landing-security-item"
+                >
+                  <span className="landing-icon-well">
+                    <point.icon aria-hidden />
+                  </span>
+                  <div>
+                    <h3>{point.title}</h3>
+                    <p>{point.description}</p>
                   </div>
                 </Reveal>
               ))}
@@ -823,68 +575,79 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="relative overflow-hidden px-4 py-20 text-center sm:px-6 sm:py-28 lg:px-8">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute left-1/2 top-1/2 size-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[120px]"
-          />
-          <div className="relative mx-auto max-w-2xl">
-            <Reveal>
-              <h2 className="text-[clamp(1.875rem,1.4rem+2.2vw,3rem)] font-bold leading-[1.08] tracking-[-0.02em]">
-                Pronto para experimentar a Nexora?
-              </h2>
-            </Reveal>
-            <Reveal delay={100}>
-              <div className="mt-8">
-                <Button
-                  asChild
-                  className="h-12 rounded-full bg-[#5865F2] px-8 text-base font-semibold text-white shadow-[0_8px_24px_rgba(88,101,242,0.35)] hover:bg-[#4752C4]"
-                >
-                  <Link to="/register">Criar minha conta</Link>
-                </Button>
-              </div>
-              <p className="mt-5 text-sm text-muted2">
-                Já possui uma conta?{" "}
+        <section id="faq" className="landing-section">
+          <div className="landing-shell">
+            <SectionIntro title="Perguntas frequentes">
+              O essencial sobre a Nexora, direto ao ponto.
+            </SectionIntro>
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{
+                __html: JSON.stringify({
+                  "@context": "https://schema.org",
+                  "@type": "FAQPage",
+                  mainEntity: FAQ_ITEMS.map(item => ({
+                    "@type": "Question",
+                    name: item.q,
+                    acceptedAnswer: { "@type": "Answer", text: item.a },
+                  })),
+                }),
+              }}
+            />
+            <div className="landing-faq">
+              {FAQ_ITEMS.map(item => (
+                <Reveal key={item.q}>
+                  <details className="landing-faq__item">
+                    <summary>{item.q}</summary>
+                    <p>{item.a}</p>
+                  </details>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-section landing-final-cta">
+          <div className="landing-shell">
+            <Reveal className="landing-final-cta__panel">
+              <NexoraAppIcon className="landing-final-cta__icon" decorative />
+              <h2>O próximo “oi” começa aqui.</h2>
+              <p>Crie seu espaço no Nexora e chame quem faz parte dele.</p>
+              <div className="landing-final-cta__actions">
                 <Link
-                  to="/login"
-                  className="font-semibold text-[#00A8FC] hover:underline"
+                  className="landing-button landing-button--primary landing-button--large"
+                  to="/register"
                 >
+                  Criar conta
+                  <ArrowRight aria-hidden />
+                </Link>
+                <Link className="landing-text-link" to="/login">
                   Entrar
                 </Link>
-              </p>
+              </div>
             </Reveal>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-border/60 px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 sm:flex-row sm:justify-between">
-          <div className="flex items-center gap-2">
-            <NexoraAppIcon className="size-6" decorative />
-            <span className="text-sm font-bold">Nexora</span>
-            <span className="text-sm text-muted2">© {year} Nexora</span>
+      <footer className="landing-footer">
+        <div className="landing-shell landing-footer__row">
+          <div className="landing-footer__brand">
+            <NexoraAppIcon className="landing-footer__icon" decorative />
+            <span>Nexora</span>
+            <small>© {year}</small>
           </div>
-          <nav
-            aria-label="Links do rodapé"
-            className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-muted2"
-          >
-            <Link to="/privacy" className="hover:text-white">Privacidade</Link>
-            <Link to="/legal/terms" className="hover:text-foreground">
-              Termos
-            </Link>
-            <Link to="/legal/guidelines" className="hover:text-foreground">
-              Diretrizes da Comunidade
-            </Link>
+          <nav aria-label="Links do rodapé">
+            <Link to="/privacy">Privacidade</Link>
+            <Link to="/legal/terms">Termos</Link>
+            <Link to="/legal/guidelines">Diretrizes</Link>
             <a
               href="#seguranca"
               onClick={event => scrollToSection(event, "seguranca")}
-              className="hover:text-foreground"
             >
               Segurança
             </a>
-            <a href="mailto:suporte@nexorachat.cloud" className="hover:text-foreground">
-              Contato
-            </a>
+            <a href="mailto:suporte@nexorachat.cloud">Contato</a>
           </nav>
         </div>
       </footer>

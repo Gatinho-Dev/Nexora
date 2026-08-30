@@ -20,6 +20,7 @@ export type SafetyCategory =
   | "violence"
   | "graphic_violence"
   | "harassment"
+  | "threat"
   | "hate"
   | "self_harm"
   | "criminal"
@@ -35,11 +36,19 @@ export type SafetyResult = {
   safe: boolean;
   categories: SafetyCategory[];
   confidence?: number;
+  /** Normalized visual signals returned by image-capable classifiers. */
+  signals?: Record<string, number>;
+  /** Ambiguous age/sexual context must be held for human review, never punished. */
+  reviewRecommended?: boolean;
   provider: "openrouter";
   model: string;
   analyzedAt: Date;
   latencyMs?: number;
 };
+
+export const IMAGE_EXPLICIT_THRESHOLD = 0.35;
+export const IMAGE_SUGGESTIVE_THRESHOLD = 0.72;
+export const IMAGE_MINOR_THRESHOLD = 0.72;
 
 export class SafetyParsingError extends Error {
   constructor() {
@@ -49,39 +58,41 @@ export class SafetyParsingError extends Error {
 
 const CATEGORY_MAP: Record<string, SafetyCategory> = {
   // Nemotron / taxonomia comum → interna
-  "sexual_minor": "sexual_minor",
+  sexual_minor: "sexual_minor",
   "sexual (minor)": "sexual_minor",
   "sexual content involving minor": "sexual_minor",
-  "csam": "sexual_minor",
+  csam: "sexual_minor",
   "child sexual abuse": "sexual_minor",
-  "sexual": "sexual",
+  sexual: "sexual",
   "sexual content": "sexual",
-  "porn": "sexual",
-  "violence": "violence",
+  porn: "sexual",
+  violence: "violence",
   "graphic violence": "graphic_violence",
-  "graphic": "graphic_violence",
-  "harassment": "harassment",
-  "bullying": "harassment",
-  "hate": "hate",
+  graphic: "graphic_violence",
+  harassment: "harassment",
+  bullying: "harassment",
+  threat: "threat",
+  threats: "threat",
+  hate: "hate",
   "hate speech": "hate",
-  "self_harm": "self_harm",
+  self_harm: "self_harm",
   "self-harm": "self_harm",
-  "suicide": "self_harm",
+  suicide: "self_harm",
   "self harm": "self_harm",
-  "criminal": "criminal",
-  "illegal": "criminal",
-  "privacy": "privacy",
-  "pii": "privacy",
+  criminal: "criminal",
+  illegal: "criminal",
+  privacy: "privacy",
+  pii: "privacy",
   "personal information": "privacy",
-  "regulated_goods": "regulated_goods",
-  "weapons": "regulated_goods",
-  "drugs": "regulated_goods",
-  "spam": "spam",
-  "scam": "scam",
-  "phishing": "scam",
-  "fraud": "scam",
-  "malware": "malware",
-  "profanity": "profanity",
+  regulated_goods: "regulated_goods",
+  weapons: "regulated_goods",
+  drugs: "regulated_goods",
+  spam: "spam",
+  scam: "scam",
+  phishing: "scam",
+  fraud: "scam",
+  malware: "malware",
+  profanity: "profanity",
 };
 
 /**
@@ -102,6 +113,78 @@ function extractJson(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function parseNativeGuardResponse(text: string): Record<string, unknown> | null {
+  const safety = text.match(/^\s*User Safety\s*:\s*(safe|unsafe)\s*$/im)?.[1];
+  if (!safety) return null;
+  const categoryLine = text.match(/^\s*(?:Safety Categories|Violated Categories)\s*:\s*(.+?)\s*$/im)?.[1];
+  return {
+    safe: safety.toLowerCase() === "safe",
+    categories: categoryLine ? categoryLine.split(/[,;|]/).map(v => v.trim()).filter(Boolean) : [],
+  };
+}
+
+function normalizedSignalName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function numericScore(value: unknown): number | null {
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const normalized = value > 1 ? value / 100 : value;
+    return Math.max(0, Math.min(1, normalized));
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return numericScore(parsed);
+  }
+  return null;
+}
+
+/** Extract only documented visual signals; arbitrary model keys are ignored. */
+function parseImageSignals(
+  parsed: Record<string, unknown>
+): Record<string, number> {
+  const allowed = new Set([
+    "explicit_nudity",
+    "nudity",
+    "sexual_activity",
+    "adult_sexual_content",
+    "sexualized_content",
+    "suggestive_content",
+    "sexual_minor",
+    "age_uncertain",
+    "graphic_violence",
+  ]);
+  const aliases: Record<string, string> = {
+    adult_sexual: "adult_sexual_content",
+    pornographic_content: "adult_sexual_content",
+    pornography: "adult_sexual_content",
+    sexually_suggestive: "suggestive_content",
+    suggestive: "suggestive_content",
+    minor_sexual: "sexual_minor",
+    child_sexual_content: "sexual_minor",
+  };
+  const sources = [parsed, parsed.signals, parsed.scores].filter(
+    (value): value is Record<string, unknown> =>
+      Boolean(value) && typeof value === "object" && !Array.isArray(value)
+  );
+  const signals: Record<string, number> = {};
+  for (const source of sources) {
+    for (const [rawKey, rawValue] of Object.entries(source)) {
+      const normalized = normalizedSignalName(rawKey);
+      const key = aliases[normalized] ?? normalized;
+      if (!allowed.has(key)) continue;
+      const score = numericScore(rawValue);
+      if (score == null) continue;
+      signals[key] = Math.max(signals[key] ?? 0, score);
+    }
+  }
+  return signals;
 }
 
 /** Normaliza um label do modelo para categoria interna. */
@@ -133,6 +216,7 @@ function mapCategory(label: string): SafetyCategory | null {
     return "harassment";
   }
   if (normalized.includes("hate")) return "hate";
+  if (normalized.includes("threat")) return "threat";
   if (normalized.includes("self") && normalized.includes("harm")) {
     return "self_harm";
   }
@@ -141,11 +225,14 @@ function mapCategory(label: string): SafetyCategory | null {
   if (normalized.includes("scam") || normalized.includes("phishing")) {
     return "scam";
   }
+  if (normalized.includes("fraud") || normalized.includes("deception")) return "scam";
   if (normalized.includes("malware")) return "malware";
   if (normalized.includes("profan")) return "profanity";
   if (normalized.includes("weapon") || normalized.includes("drug")) {
     return "regulated_goods";
   }
+  if (normalized.includes("controlled") || normalized.includes("regulated") || normalized.includes("substance")) return "regulated_goods";
+  if (normalized.includes("criminal") || normalized.includes("planning") || normalized.includes("confession")) return "criminal";
   if (normalized.includes("privacy") || normalized.includes("pii")) {
     return "privacy";
   }
@@ -160,9 +247,9 @@ function mapCategory(label: string): SafetyCategory | null {
 export function parseSafetyResponse(
   raw: string,
   model: string,
-  latencyMs?: number,
+  latencyMs?: number
 ): SafetyResult {
-  const parsed = extractJson(raw);
+  const parsed = extractJson(raw) ?? parseNativeGuardResponse(raw);
   if (!parsed) throw new SafetyParsingError();
 
   const safeRaw = parsed.safe ?? parsed.is_safe ?? parsed.safeContent;
@@ -186,13 +273,49 @@ export function parseSafetyResponse(
     if (mapped && !categories.includes(mapped)) categories.push(mapped);
   }
 
+  const signals = parseImageSignals(parsed);
+  const explicitSexualScore = Math.max(
+    signals.explicit_nudity ?? 0,
+    signals.nudity ?? 0,
+    signals.sexual_activity ?? 0,
+    signals.adult_sexual_content ?? 0
+  );
+  const suggestiveScore = Math.max(
+    signals.sexualized_content ?? 0,
+    signals.suggestive_content ?? 0
+  );
+  const minorScore = signals.sexual_minor ?? 0;
+  const ageUncertainScore = signals.age_uncertain ?? 0;
+
+  // Image models frequently return `safe: true` while also returning numeric
+  // nudity signals. The scores are authoritative when above policy thresholds.
+  const confirmedMinor =
+    minorScore >= IMAGE_MINOR_THRESHOLD &&
+    Math.max(explicitSexualScore, suggestiveScore) >= 0.25;
+  const confirmedAdultSexual =
+    explicitSexualScore >= IMAGE_EXPLICIT_THRESHOLD ||
+    suggestiveScore >= IMAGE_SUGGESTIVE_THRESHOLD;
+  if (confirmedMinor && !categories.includes("sexual_minor")) {
+    categories.unshift("sexual_minor");
+  } else if (confirmedAdultSexual && !categories.includes("sexual")) {
+    categories.push("sexual");
+  }
+
   // Coerência: se o modelo disse safe=false mas não categorizou nada,
   // classifica como "other" (ainda assim não é safe).
   if (!safeRaw && categories.length === 0) categories.push("other");
   // Se disse safe=true mas categorizou sexual_minor, o minor vence
   // (fail closed para o caso mais grave).
+  const reviewRecommended =
+    (ageUncertainScore >= 0.5 &&
+      Math.max(explicitSexualScore, suggestiveScore) >= 0.25) ||
+    parsed.review_required === true ||
+    parsed.reviewRecommended === true;
   const effectiveSafe =
-    safeRaw === true && !categories.includes("sexual_minor");
+    safeRaw === true &&
+    !categories.includes("sexual_minor") &&
+    !confirmedAdultSexual &&
+    !reviewRecommended;
 
   const confidence =
     typeof parsed.confidence === "number" ? parsed.confidence : undefined;
@@ -201,6 +324,8 @@ export function parseSafetyResponse(
     safe: effectiveSafe,
     categories,
     confidence,
+    signals: Object.keys(signals).length > 0 ? signals : undefined,
+    reviewRecommended,
     provider: "openrouter",
     model,
     analyzedAt: new Date(),
@@ -223,7 +348,9 @@ export const SAFETY_SYSTEM_PROMPT =
 /** Executa a chamada com retry/backoff (429/5xx/timeout). */
 export async function classifyWithRetry(
   messages: ChatMessage[],
-  opts: { model: string; vision?: boolean } = { model: env.openrouterSafetyModel },
+  opts: { model: string; vision?: boolean; maxTokens?: number } = {
+    model: env.openrouterSafetyModel,
+  }
 ): Promise<SafetyResult> {
   let lastError: unknown = null;
   for (let attempt = 0; attempt <= env.safetyMaxRetries; attempt++) {
@@ -234,13 +361,15 @@ export async function classifyWithRetry(
       const { content, latencyMs } = await openRouterChat({
         model: opts.model,
         messages,
-        maxTokens: 200,
+        maxTokens: opts.maxTokens ?? 260,
       });
       return parseSafetyResponse(content, opts.model, latencyMs);
     } catch (e) {
       lastError = e;
-      if (e instanceof OpenRouterRateLimitError) recordSafetyError("rate_limited");
-      else if (e instanceof OpenRouterTimeoutError) recordSafetyError("timeout");
+      if (e instanceof OpenRouterRateLimitError)
+        recordSafetyError("rate_limited");
+      else if (e instanceof OpenRouterTimeoutError)
+        recordSafetyError("timeout");
       // Auth error não melhora com retry.
       if ((e as Error).constructor.name === "OpenRouterAuthenticationError") {
         recordSafetyError("error");
@@ -249,7 +378,9 @@ export async function classifyWithRetry(
     }
   }
   recordSafetyError("error");
-  throw lastError instanceof Error ? lastError : new Error("OpenRouter falhou.");
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("OpenRouter falhou.");
 }
 
 // ── Parsing de payloads com scores numéricos ─────────────────
@@ -378,19 +509,29 @@ export function normalizeVerdict(parsed: unknown): ScoredVerdict {
   } else if (sexualAdult) {
     decision = "SENSITIVE_ADULT";
   } else if (flagged === true && maxAnyScore >= ADULT_THRESHOLD) {
-    decision = "SENSITIVE_ADULT";
+    // A high violence/hate/etc. score is unsafe, but it is not adult sexual
+    // content. Keep it for review rather than displaying a misleading +18.
+    decision = "UNCERTAIN";
   } else if (
     flagged === false ||
     (flagged === null && categories.length === 0 && maxAnyScore <= 0)
   ) {
     decision = "ALLOW";
-  } else if (hasTextualOnlyCategories && typeof p.safe === "number" && p.safe >= 0.5) {
+  } else if (
+    hasTextualOnlyCategories &&
+    typeof p.safe === "number" &&
+    p.safe >= 0.5
+  ) {
     // Labels citados sem score + safe alto → modelo diz que está ok.
     decision = "ALLOW";
   } else {
     decision = "UNCERTAIN";
   }
 
-  const confidence = Math.max(minorScore, adultScore, flagged === false ? 0.99 : 0);
+  const confidence = Math.max(
+    minorScore,
+    adultScore,
+    flagged === false ? 0.99 : 0
+  );
   return { decision, confidence, categories, sexualMinor, sexualAdult };
 }

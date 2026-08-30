@@ -8,7 +8,7 @@ import {
   MAX_SEVERE_STRIKES,
 } from "../accountSafety";
 import { decideFromVerdict } from "../mediaModeration";
-import type { NormalizedVerdict } from "../safety/errors";
+import { toNormalizedVerdict, type NormalizedVerdict } from "../safety/errors";
 import {
   normalizeVerdict,
   parseSafetyResponse,
@@ -19,6 +19,8 @@ import {
   OpenRouterAuthenticationError,
 } from "../safety/openRouterClient";
 import { env } from "../../lib/env";
+import { aggregateImageSafetyResults } from "../safety/safetyService";
+import { decideReportedTextAction } from "../textModeration";
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -102,7 +104,7 @@ describe("normalizeVerdict", () => {
 
   it("boolean safe=false com categorias nomeadas → sensível", () => {
     const verdict = normalizeVerdict({ safe: false, categories: ["Violence"] });
-    expect(["SENSITIVE_ADULT", "UNCERTAIN"]).toContain(verdict.decision);
+    expect(verdict.decision).toBe("UNCERTAIN");
   });
 
   it("strings de score são normalizadas ('high'/'0.9')", () => {
@@ -149,9 +151,28 @@ describe("normalizeVerdict", () => {
     expect(verdict.decision).toBe("ALLOW");
   });
 
-  it("flagged com violência confusa e score explícito alto segue sensível", () => {
+  it("violência explícita nunca recebe rótulo sexual +18", () => {
     const verdict = normalizeVerdict({ safe: 0.05, violence: 0.9 });
-    expect(verdict.decision).toBe("SENSITIVE_ADULT");
+    expect(verdict.decision).toBe("UNCERTAIN");
+  });
+});
+
+describe("Nemotron native safety output", () => {
+  it("classifica nudez adulta e categorias compostas", () => {
+    const sexual = parseSafetyResponse("User Safety: unsafe\nSafety Categories: Sexual", "guard");
+    expect(toNormalizedVerdict(sexual).decision).toBe("SENSITIVE_ADULT");
+    expect(parseSafetyResponse("User Safety: unsafe\nSafety Categories: Criminal Planning/Confessions", "guard").categories).toContain("criminal");
+    expect(parseSafetyResponse("User Safety: unsafe\nSafety Categories: Controlled/Regulated Substances", "guard").categories).toContain("regulated_goods");
+    expect(parseSafetyResponse("User Safety: unsafe\nSafety Categories: Fraud/Deception", "guard").categories).toContain("scam");
+  });
+  it("bloqueia sexual envolvendo menor", () => {
+    const result = parseSafetyResponse("User Safety: unsafe\nSafety Categories: Sexual (minor)", "guard");
+    expect(toNormalizedVerdict(result).decision).toBe("BLOCK");
+  });
+  it("política de denúncia é limitada e determinística", () => {
+    const base = { provider: "openrouter" as const, model: "guard", analyzedAt: new Date() };
+    expect(decideReportedTextAction({ ...base, safe: false, categories: ["threat"] })).toEqual({ action: "remove_and_warn", category: "threat" });
+    expect(decideReportedTextAction({ ...base, safe: false, categories: ["harassment"] })).toEqual({ action: "remove_and_warn", category: "harassment" });
   });
 });
 
@@ -160,9 +181,18 @@ describe("normalizeVerdict", () => {
 describe("isRealImage", () => {
   it("reconhece JPEG/PNG/GIF/WebP reais", async () => {
     const { isRealImage } = await import("../mediaModeration");
-    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(16)]);
-    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(16)]);
-    const gif = Buffer.concat([Buffer.from([0x47, 0x49, 0x46, 0x38]), Buffer.alloc(16)]);
+    const jpeg = Buffer.concat([
+      Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+      Buffer.alloc(16),
+    ]);
+    const png = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+      Buffer.alloc(16),
+    ]);
+    const gif = Buffer.concat([
+      Buffer.from([0x47, 0x49, 0x46, 0x38]),
+      Buffer.alloc(16),
+    ]);
     const webp = Buffer.concat([
       Buffer.from("RIFF"),
       Buffer.alloc(4),
@@ -184,33 +214,55 @@ describe("calculateAccountStatus", () => {
   const base = { permanentBan: false, suspendedUntil: null as Date | null };
 
   it("test 1/7: sem infrações → good_standing (Tudo certo)", () => {
-    expect(calculateAccountStatus({ ...base, severeStrikes: 0 })).toBe("good_standing");
+    expect(calculateAccountStatus({ ...base, severeStrikes: 0 })).toBe(
+      "good_standing"
+    );
   });
 
   it("primeiro strike confirmado → limited", () => {
-    expect(calculateAccountStatus({ ...base, severeStrikes: 1 })).toBe("limited");
+    expect(calculateAccountStatus({ ...base, severeStrikes: 1 })).toBe(
+      "limited"
+    );
   });
 
   it("segundo strike → at_risk", () => {
-    expect(calculateAccountStatus({ ...base, severeStrikes: 2 })).toBe("at_risk");
+    expect(calculateAccountStatus({ ...base, severeStrikes: 2 })).toBe(
+      "at_risk"
+    );
   });
 
   it("suspensão ativa → suspended", () => {
     const until = new Date(Date.now() + 2 * DAY);
-    expect(calculateAccountStatus({ ...base, severeStrikes: 0, suspendedUntil: until })).toBe("suspended");
+    expect(
+      calculateAccountStatus({
+        ...base,
+        severeStrikes: 0,
+        suspendedUntil: until,
+      })
+    ).toBe("suspended");
   });
 
   it("test 14: suspensão expirada restaura o nível subjacente automaticamente", () => {
     const past = new Date(Date.now() - HOUR);
-    expect(isActivelySuspended({ suspendedUntil: past, permanentBan: false })).toBe(false);
     expect(
-      calculateAccountStatus({ ...base, severeStrikes: 1, suspendedUntil: past })
+      isActivelySuspended({ suspendedUntil: past, permanentBan: false })
+    ).toBe(false);
+    expect(
+      calculateAccountStatus({
+        ...base,
+        severeStrikes: 1,
+        suspendedUntil: past,
+      })
     ).toBe("limited");
   });
 
   it("test 9: banimento permanente tem precedência máxima", () => {
     expect(
-      calculateAccountStatus({ permanentBan: true, suspendedUntil: null, severeStrikes: MAX_SEVERE_STRIKES })
+      calculateAccountStatus({
+        permanentBan: true,
+        suspendedUntil: null,
+        severeStrikes: MAX_SEVERE_STRIKES,
+      })
     ).toBe("permanently_banned");
   });
 });
@@ -227,7 +279,9 @@ describe("shouldEscalateToBan", () => {
 describe("restrictionError", () => {
   it("usuário suspenso recebe mensagem de bloqueio", () => {
     const until = new Date(Date.now() + DAY);
-    expect(restrictionError({ suspendedUntil: until, permanentBan: false })).toMatch(/suspen/i);
+    expect(
+      restrictionError({ suspendedUntil: until, permanentBan: false })
+    ).toMatch(/suspen/i);
   });
 
   it("usuário banido recebe 403 mesmo chamando a API diretamente", () => {
@@ -236,7 +290,9 @@ describe("restrictionError", () => {
   });
 
   it("usuário em boa conta não é bloqueado", () => {
-    expect(restrictionError({ suspendedUntil: null, permanentBan: false })).toBeNull();
+    expect(
+      restrictionError({ suspendedUntil: null, permanentBan: false })
+    ).toBeNull();
   });
 });
 
@@ -248,16 +304,24 @@ describe("provider availability", () => {
     try {
       (env as unknown as { openrouterApiKey: string }).openrouterApiKey = "";
       await expect(
-        openRouterChat({ model: "x", messages: [{ role: "user", content: "t" }] })
+        openRouterChat({
+          model: "x",
+          messages: [{ role: "user", content: "t" }],
+        })
       ).rejects.toBeInstanceOf(OpenRouterAuthenticationError);
     } finally {
-      (env as unknown as { openrouterApiKey: string }).openrouterApiKey = original;
+      (env as unknown as { openrouterApiKey: string }).openrouterApiKey =
+        original;
     }
   });
 
   it("resposta em formato inesperado lança SafetyParsingError (fail closed)", () => {
-    expect(() => parseSafetyResponse("texto solto sem json", "m")).toThrow(SafetyParsingError);
-    expect(() => parseSafetyResponse('{"foo": 1}', "m")).toThrow(SafetyParsingError);
+    expect(() => parseSafetyResponse("texto solto sem json", "m")).toThrow(
+      SafetyParsingError
+    );
+    expect(() => parseSafetyResponse('{"foo": 1}', "m")).toThrow(
+      SafetyParsingError
+    );
   });
 
   it("formato canônico: safe=true → resultado seguro", () => {
@@ -275,5 +339,66 @@ describe("provider availability", () => {
     expect(r.categories).toContain("sexual_minor");
     expect(r.categories.filter(c => c === "sexual_minor")).toHaveLength(1);
     expect(r.safe).toBe(false);
+  });
+
+  it("detecta nudez explícita pelo score mesmo se o modelo disser safe=true", () => {
+    const result = parseSafetyResponse(
+      '{"safe":true,"categories":[],"signals":{"explicit_nudity":0.94,"sexual_activity":0.1}}',
+      "vision"
+    );
+    expect(result.safe).toBe(false);
+    expect(result.categories).toContain("sexual");
+    expect(toNormalizedVerdict(result).decision).toBe("SENSITIVE_ADULT");
+  });
+
+  it("conteúdo sexual com idade incerta exige revisão humana", () => {
+    const result = parseSafetyResponse(
+      '{"safe":false,"categories":["Sexual"],"signals":{"adult_sexual_content":0.8,"age_uncertain":0.8}}',
+      "vision"
+    );
+    expect(result.reviewRecommended).toBe(true);
+    expect(toNormalizedVerdict(result).decision).toBe("UNCERTAIN");
+  });
+
+  it("sexual envolvendo menor só bloqueia com sinal visual forte", () => {
+    const result = parseSafetyResponse(
+      '{"safe":true,"categories":[],"signals":{"sexual_minor":0.93,"sexualized_content":0.82}}',
+      "vision"
+    );
+    expect(result.categories[0]).toBe("sexual_minor");
+    expect(toNormalizedVerdict(result).decision).toBe("BLOCK");
+  });
+
+  it("violência insegura vai para revisão, não para +18", () => {
+    const result = parseSafetyResponse(
+      '{"safe":false,"categories":["Graphic violence"],"confidence":0.95}',
+      "vision"
+    );
+    expect(toNormalizedVerdict(result).decision).toBe("UNCERTAIN");
+  });
+});
+
+describe("deep image consensus", () => {
+  const base = {
+    provider: "openrouter" as const,
+    analyzedAt: new Date(),
+  };
+
+  it("discordância entre modelos nunca libera automaticamente", () => {
+    const result = aggregateImageSafetyResults([
+      { ...base, safe: true, categories: [], model: "a" },
+      { ...base, safe: false, categories: ["sexual"], model: "b" },
+    ]);
+    expect(result.reviewRecommended).toBe(true);
+    expect(toNormalizedVerdict(result).decision).toBe("UNCERTAIN");
+  });
+
+  it("consenso sexual adulto preserva o rótulo sensível", () => {
+    const result = aggregateImageSafetyResults([
+      { ...base, safe: false, categories: ["sexual"], model: "a" },
+      { ...base, safe: false, categories: ["sexual"], model: "b" },
+    ]);
+    expect(result.categories).toEqual(["sexual"]);
+    expect(toNormalizedVerdict(result).decision).toBe("SENSITIVE_ADULT");
   });
 });

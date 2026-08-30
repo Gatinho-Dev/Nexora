@@ -1,17 +1,11 @@
-import { useEffect } from "react";
 import { Link } from "react-router";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { Seo } from "@/lib/seo";
 
 /**
  * Páginas legais públicas (/privacy e /terms) — sem login, prontas para
  * registro OAuth no Roblox Creator Dashboard.
  */
-
-function useDocTitle(title: string) {
-  useEffect(() => {
-    document.title = title;
-  }, [title]);
-}
 
 function DocShell({
   title,
@@ -80,9 +74,14 @@ const CONTATO =
 const ATUALIZACAO = "agosto de 2026";
 
 export function PrivacyPage() {
-  useDocTitle("Política de Privacidade | Nexora");
   return (
-    <DocShell title="Política de Privacidade da Nexora" updated={ATUALIZACAO}>
+    <>
+      <Seo
+        title="Política de Privacidade"
+        canonicalPath="/privacy"
+        description="Política de Privacidade da Nexora: como coletamos, usamos e protegemos seus dados na plataforma nexorachat.cloud."
+      />
+      <DocShell title="Política de Privacidade da Nexora" updated={ATUALIZACAO}>
       <p>
         A Nexora respeita a sua privacidade. Coletamos apenas as informações
         necessárias para o funcionamento da plataforma, para a segurança da
@@ -225,14 +224,20 @@ export function PrivacyPage() {
       <Section n={15} t="Contato">
         <p>{CONTATO}</p>
       </Section>
-    </DocShell>
+      </DocShell>
+    </>
   );
 }
 
 export function TermsPage() {
-  useDocTitle("Termos de Serviço | Nexora");
   return (
-    <DocShell title="Termos de Serviço da Nexora" updated={ATUALIZACAO}>
+    <>
+      <Seo
+        title="Termos de Serviço"
+        canonicalPath="/terms"
+        description="Termos de Serviço da Nexora: regras de uso, responsabilidades e condições da plataforma de comunicação nexorachat.cloud."
+      />
+      <DocShell title="Termos de Serviço da Nexora" updated={ATUALIZACAO}>
       <Section n={1} t="Aceitação dos Termos">
         <p>
           Ao criar uma conta ou utilizar a Nexora, você concorda com estes
@@ -363,5 +368,6 @@ export function TermsPage() {
         <p>{CONTATO}</p>
       </Section>
     </DocShell>
+    </>
   );
 }

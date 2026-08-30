@@ -153,8 +153,11 @@ function RailButton({
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             className={cn(
-              "relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-[14px] active:scale-95",
-              "transition-[border-radius,background-color,color,transform] duration-200",
+              # Discord signature: 48px squircle that morphs into a circle on
+              # hover — 350ms cubic-bezier(0.215, 0.61, 0.355, 1).
+              "relative h-12 w-12 flex items-center justify-center overflow-hidden active:scale-95",
+              "transition-[border-radius,background-color,color,transform,box-shadow] [transition-duration:350ms]",
+              "[transition-timing-function:cubic-bezier(0.215,0.61,0.355,1)]",
               active
                 ? "bg-primary text-primary-foreground"
                 : actionType === "add" || actionType === "explore"

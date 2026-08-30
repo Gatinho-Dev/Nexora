@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { createRouter, authedQuery } from "./middleware";
@@ -15,10 +15,14 @@ import type { MemberDTO, RoleDTO, ServerDetailsDTO } from "@contracts/types";
 import { rateLimit } from "./utils/rateLimit";
 import {
   getEffectiveChannelPermissions,
+  getHighestRolePosition,
   getMemberPermissions,
+  requireMemberBelowActor,
   requirePermission,
+  requireRoleBelowActor,
   toPublicUser,
 } from "./utils/permissions";
+import { logServerAudit } from "./services/serverAudit";
 import { broadcastToServer, sendToUsers, setLiveStageSpeaker } from "./realtime";
 import { assertCanInteract } from "./services/accountSafety";
 import { moderatePublicFieldAsync } from "./services/profileModeration";
@@ -101,6 +105,8 @@ export const serverRouter = createRouter({
           name: input.name,
           iconUrl: input.iconUrl ?? null,
           description: input.description ?? null,
+          tags: [],
+          rules: [],
           ownerId: ctx.user.id,
         })
         .$returningId();
@@ -216,6 +222,8 @@ export const serverRouter = createRouter({
           position: r.position,
           permissions: (r.permissions ?? []) as string[],
           isDefault: r.isDefault,
+          hoistMembers: r.hoistMembers,
+          mentionable: r.mentionable,
         }))
         .sort((a, b) => b.position - a.position);
 
@@ -234,6 +242,8 @@ export const serverRouter = createRouter({
           joinedAt: m.joinedAt,
           roles: roles.filter((r) => roleIds.has(r.id)),
           isOwner: server.ownerId === m.userId,
+          timeoutUntil: m.timeoutUntil,
+          lastActiveAt: m.lastActiveAt,
         });
       }
 
@@ -267,8 +277,16 @@ export const serverRouter = createRouter({
         targetId: z.number(),
       })
     )
-    .query(async ({ input }) =>
-      getDb()
+    .query(async ({ ctx, input }) => {
+      const db = getDb();
+      const target = input.targetType === "channel"
+        ? await db.query.channels.findFirst({ where: eq(schema.channels.id, input.targetId) })
+        : await db.query.categories.findFirst({ where: eq(schema.categories.id, input.targetId) });
+      if (!target) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Destino não encontrado." });
+      }
+      await requirePermission(ctx.user.id, target.serverId, "MANAGE_CHANNELS");
+      return db
         .select()
         .from(schema.permissionOverrides)
         .where(
@@ -276,8 +294,8 @@ export const serverRouter = createRouter({
             eq(schema.permissionOverrides.targetType, input.targetType),
             eq(schema.permissionOverrides.targetId, input.targetId),
           ),
-        ),
-    ),
+        );
+    }),
 
   upsertOverride: authedQuery
     .input(
@@ -413,6 +431,12 @@ export const serverRouter = createRouter({
         bannerUrl: z.string().max(500).nullable().optional(),
         vanitySlug: z.string().regex(/^[a-z0-9-]{3,32}$/).nullable().optional(),
         description: z.string().max(500).nullable().optional(),
+        tags: z.array(z.string().trim().min(1).max(24)).max(5).optional(),
+        verificationLevel: z.enum(["none", "low", "medium", "high", "maximum"]).optional(),
+        defaultNotifications: z.enum(["all", "mentions"]).optional(),
+        rulesEnabled: z.boolean().optional(),
+        rules: z.array(z.string().trim().min(1).max(240)).max(20).optional(),
+        communityEnabled: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -423,6 +447,12 @@ export const serverRouter = createRouter({
       if (input.iconUrl !== undefined) patch.iconUrl = input.iconUrl;
       if (input.bannerUrl !== undefined) patch.bannerUrl = input.bannerUrl;
       if (input.description !== undefined) patch.description = input.description;
+      if (input.tags !== undefined) patch.tags = [...new Set(input.tags.map(tag => tag.trim()))];
+      if (input.verificationLevel !== undefined) patch.verificationLevel = input.verificationLevel;
+      if (input.defaultNotifications !== undefined) patch.defaultNotifications = input.defaultNotifications;
+      if (input.rulesEnabled !== undefined) patch.rulesEnabled = input.rulesEnabled;
+      if (input.rules !== undefined) patch.rules = input.rules.map(rule => rule.trim());
+      if (input.communityEnabled !== undefined) patch.communityEnabled = input.communityEnabled;
       if (input.vanitySlug !== undefined) {
         if (input.vanitySlug === null) {
           patch.vanitySlug = null;
@@ -460,6 +490,14 @@ export const serverRouter = createRouter({
         });
       }
       await refreshServer(input.serverId);
+      await logServerAudit({
+        serverId: input.serverId,
+        actorUserId: ctx.user.id,
+        action: "SERVER_UPDATE",
+        targetType: "server",
+        targetId: input.serverId,
+        metadata: { fields: Object.keys(patch) },
+      });
       return { ok: true };
     }),
 
@@ -469,30 +507,41 @@ export const serverRouter = createRouter({
       await requireOwner(ctx.user.id, input.serverId);
       const db = getDb();
 
-      const channelRows = await db
-        .select({ id: schema.channels.id })
-        .from(schema.channels)
-        .where(eq(schema.channels.serverId, input.serverId));
-      for (const ch of channelRows) {
-        const msgRows = await db
-          .select({ id: schema.messages.id })
-          .from(schema.messages)
-          .where(eq(schema.messages.channelId, ch.id));
-        for (const msg of msgRows) {
-          await db.delete(schema.attachments).where(eq(schema.attachments.messageId, msg.id));
-          await db.delete(schema.messageReactions).where(eq(schema.messageReactions.messageId, msg.id));
-        }
-        await db.delete(schema.messages).where(eq(schema.messages.channelId, ch.id));
-        await db.delete(schema.channelReads).where(eq(schema.channelReads.channelId, ch.id));
-      }
-      await db.delete(schema.channels).where(eq(schema.channels.serverId, input.serverId));
-      await db.delete(schema.categories).where(eq(schema.categories.serverId, input.serverId));
-      await db.delete(schema.roles).where(eq(schema.roles.serverId, input.serverId));
-      await db.delete(schema.memberRoles).where(eq(schema.memberRoles.serverId, input.serverId));
-      await db.delete(schema.serverMembers).where(eq(schema.serverMembers.serverId, input.serverId));
-      await db.delete(schema.invites).where(eq(schema.invites.serverId, input.serverId));
-      await db.delete(schema.bans).where(eq(schema.bans.serverId, input.serverId));
-      await db.delete(schema.servers).where(eq(schema.servers.id, input.serverId));
+      // A deleção é atômica: uma falha reverte o grafo inteiro e evita dados órfãos.
+      await db.transaction(async tx => {
+        const messageIds = sql`SELECT m.id FROM messages m INNER JOIN channels c ON c.id = m.channelId WHERE c.serverId = ${input.serverId}`;
+        const pollIds = sql`SELECT p.id FROM polls p WHERE p.messageId IN (${messageIds})`;
+        const channelIds = sql`SELECT id FROM channels WHERE serverId = ${input.serverId}`;
+        const categoryIds = sql`SELECT id FROM categories WHERE serverId = ${input.serverId}`;
+
+        await tx.execute(sql`DELETE FROM poll_votes WHERE pollId IN (${pollIds})`);
+        await tx.execute(sql`DELETE FROM poll_answers WHERE pollId IN (${pollIds})`);
+        await tx.execute(sql`DELETE FROM polls WHERE messageId IN (${messageIds})`);
+        await tx.execute(sql`DELETE FROM message_embeds WHERE messageId IN (${messageIds})`);
+        await tx.execute(sql`DELETE FROM message_reactions WHERE messageId IN (${messageIds})`);
+        await tx.execute(sql`DELETE FROM attachments WHERE messageId IN (${messageIds})`);
+        await tx.execute(sql`DELETE FROM pinned_messages WHERE messageId IN (${messageIds})`);
+        await tx.execute(sql`DELETE FROM channel_reads WHERE channelId IN (${channelIds})`);
+        await tx.execute(sql`DELETE FROM voice_sessions WHERE channelId IN (${channelIds})`);
+        await tx.execute(sql`DELETE FROM stage_speakers WHERE channelId IN (${channelIds})`);
+        await tx.execute(sql`DELETE FROM threads WHERE channelId IN (${channelIds})`);
+        await tx.execute(sql`DELETE FROM permission_overrides WHERE (targetType = 'channel' AND targetId IN (${channelIds})) OR (targetType = 'category' AND targetId IN (${categoryIds}))`);
+        await tx.delete(schema.messages).where(sql`${schema.messages.channelId} IN (${channelIds})`);
+        await tx.delete(schema.webhooks).where(eq(schema.webhooks.serverId, input.serverId));
+        await tx.delete(schema.serverEvents).where(eq(schema.serverEvents.serverId, input.serverId));
+        await tx.delete(schema.automodRules).where(eq(schema.automodRules.serverId, input.serverId));
+        await tx.delete(schema.notifications).where(eq(schema.notifications.serverId, input.serverId));
+        await tx.delete(schema.serverNotificationPreferences).where(eq(schema.serverNotificationPreferences.serverId, input.serverId));
+        await tx.delete(schema.channels).where(eq(schema.channels.serverId, input.serverId));
+        await tx.delete(schema.categories).where(eq(schema.categories.serverId, input.serverId));
+        await tx.delete(schema.memberRoles).where(eq(schema.memberRoles.serverId, input.serverId));
+        await tx.delete(schema.roles).where(eq(schema.roles.serverId, input.serverId));
+        await tx.delete(schema.serverMembers).where(eq(schema.serverMembers.serverId, input.serverId));
+        await tx.delete(schema.invites).where(eq(schema.invites.serverId, input.serverId));
+        await tx.delete(schema.bans).where(eq(schema.bans.serverId, input.serverId));
+        await tx.delete(schema.serverAuditLogs).where(eq(schema.serverAuditLogs.serverId, input.serverId));
+        await tx.delete(schema.servers).where(eq(schema.servers.id, input.serverId));
+      });
       return { ok: true };
     }),
 
@@ -829,16 +878,28 @@ export const serverRouter = createRouter({
       if (!perms) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Você não é membro deste servidor." });
       }
+      const server = await getServerOr404(input.serverId);
+      if (server.invitesPaused) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Os convites deste servidor estão pausados." });
+      }
       const code = nanoid(10);
       const expiresAt = input.expiresInHours
         ? new Date(Date.now() + input.expiresInHours * 3_600_000)
         : null;
-      await getDb().insert(schema.invites).values({
+      const [{ id }] = await getDb().insert(schema.invites).values({
         serverId: input.serverId,
         code,
         creatorId: ctx.user.id,
         expiresAt,
         maxUses: input.maxUses ?? null,
+      }).$returningId();
+      await logServerAudit({
+        serverId: input.serverId,
+        actorUserId: ctx.user.id,
+        action: "INVITE_CREATE",
+        targetType: "invite",
+        targetId: id,
+        metadata: { maxUses: input.maxUses ?? null, expiresAt: expiresAt?.toISOString() ?? null },
       });
       return { code, url: `/invite/${code}` };
     }),
@@ -862,7 +923,33 @@ export const serverRouter = createRouter({
       });
       if (!invite) throw new TRPCError({ code: "NOT_FOUND", message: "Convite não encontrado." });
       await requirePermission(ctx.user.id, invite.serverId, "MANAGE_SERVER");
-      await db.delete(schema.invites).where(eq(schema.invites.id, input.inviteId));
+      await db.update(schema.invites).set({ revokedAt: new Date() }).where(eq(schema.invites.id, input.inviteId));
+      await logServerAudit({
+        serverId: invite.serverId,
+        actorUserId: ctx.user.id,
+        action: "INVITE_REVOKE",
+        targetType: "invite",
+        targetId: input.inviteId,
+      });
+      return { ok: true };
+    }),
+
+  setInvitesPaused: authedQuery
+    .input(z.object({ serverId: z.number(), paused: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await requirePermission(ctx.user.id, input.serverId, "MANAGE_SERVER");
+      await getDb()
+        .update(schema.servers)
+        .set({ invitesPaused: input.paused })
+        .where(eq(schema.servers.id, input.serverId));
+      await logServerAudit({
+        serverId: input.serverId,
+        actorUserId: ctx.user.id,
+        action: input.paused ? "INVITES_PAUSE" : "INVITES_RESUME",
+        targetType: "server",
+        targetId: input.serverId,
+      });
+      await refreshServer(input.serverId);
       return { ok: true };
     }),
 
@@ -875,6 +962,13 @@ export const serverRouter = createRouter({
       });
       if (!invite) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Convite inválido ou expirado." });
+      }
+      if (invite.revokedAt) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Este convite foi revogado." });
+      }
+      const inviteServer = await getServerOr404(invite.serverId);
+      if (inviteServer.invitesPaused) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Os convites deste servidor estão pausados." });
       }
       if (invite.expiresAt && invite.expiresAt.getTime() < Date.now()) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Este convite expirou." });
@@ -911,7 +1005,7 @@ export const serverRouter = createRouter({
     }),
 
   joinByCode: authedQuery
-    .input(z.object({ code: z.string() }))
+    .input(z.object({ code: z.string(), acceptedRules: z.boolean().default(false) }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
       const invite = await db.query.invites.findFirst({
@@ -919,6 +1013,13 @@ export const serverRouter = createRouter({
       });
       if (!invite) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Convite inválido ou expirado." });
+      }
+      if (invite.revokedAt) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Este convite foi revogado." });
+      }
+      const inviteServer = await getServerOr404(invite.serverId);
+      if (inviteServer.invitesPaused) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Os convites deste servidor estão pausados." });
       }
       if (invite.expiresAt && invite.expiresAt.getTime() < Date.now()) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Este convite expirou." });
@@ -942,9 +1043,20 @@ export const serverRouter = createRouter({
         ),
       });
       if (!existing) {
+        if (inviteServer.rulesEnabled && (inviteServer.rules?.length ?? 0) > 0 && !input.acceptedRules) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Você precisa aceitar as regras deste servidor." });
+        }
+        if (inviteServer.verificationLevel !== "none" && !ctx.user.email) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Este servidor exige uma conta com e-mail cadastrado." });
+        }
+        if (["medium", "high", "maximum"].includes(inviteServer.verificationLevel)
+          && ctx.user.createdAt.getTime() > Date.now() - 5 * 60_000) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Sua conta precisa ter pelo menos 5 minutos para entrar neste servidor." });
+        }
         await db.insert(schema.serverMembers).values({
           serverId: invite.serverId,
           userId: ctx.user.id,
+          rulesAcceptedAt: inviteServer.rulesEnabled ? new Date() : null,
         });
         await db
           .update(schema.invites)
@@ -957,9 +1069,10 @@ export const serverRouter = createRouter({
 
   // ── Moderation ──────────────────────────────────────────────
   kick: authedQuery
-    .input(z.object({ serverId: z.number(), userId: z.number() }))
+    .input(z.object({ serverId: z.number(), userId: z.number(), reason: z.string().max(500).optional() }))
     .mutation(async ({ ctx, input }) => {
       await requirePermission(ctx.user.id, input.serverId, "KICK_MEMBERS");
+      await requireMemberBelowActor(ctx.user.id, input.userId, input.serverId);
       const server = await getServerOr404(input.serverId);
       if (input.userId === server.ownerId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode expulsar o dono do servidor." });
@@ -986,6 +1099,14 @@ export const serverRouter = createRouter({
         );
       sendToUsers([input.userId], { t: "server:refresh", serverId: input.serverId });
       await refreshServer(input.serverId);
+      await logServerAudit({
+        serverId: input.serverId,
+        actorUserId: ctx.user.id,
+        action: "MEMBER_KICK",
+        targetType: "member",
+        targetUserId: input.userId,
+        reason: input.reason ?? null,
+      });
       return { ok: true };
     }),
 
@@ -999,6 +1120,7 @@ export const serverRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await requirePermission(ctx.user.id, input.serverId, "BAN_MEMBERS");
+      await requireMemberBelowActor(ctx.user.id, input.userId, input.serverId);
       const server = await getServerOr404(input.serverId);
       if (input.userId === server.ownerId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode banir o dono do servidor." });
@@ -1026,6 +1148,14 @@ export const serverRouter = createRouter({
         );
       sendToUsers([input.userId], { t: "server:refresh", serverId: input.serverId });
       await refreshServer(input.serverId);
+      await logServerAudit({
+        serverId: input.serverId,
+        actorUserId: ctx.user.id,
+        action: "MEMBER_BAN",
+        targetType: "member",
+        targetUserId: input.userId,
+        reason: input.reason ?? null,
+      });
       return { ok: true };
     }),
 
@@ -1041,6 +1171,47 @@ export const serverRouter = createRouter({
             eq(schema.bans.userId, input.userId),
           ),
         );
+      await logServerAudit({
+        serverId: input.serverId,
+        actorUserId: ctx.user.id,
+        action: "MEMBER_UNBAN",
+        targetType: "member",
+        targetUserId: input.userId,
+      });
+      return { ok: true };
+    }),
+
+  timeoutMember: authedQuery
+    .input(z.object({
+      serverId: z.number(),
+      userId: z.number(),
+      until: z.string().datetime().nullable(),
+      reason: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await requirePermission(ctx.user.id, input.serverId, "KICK_MEMBERS");
+      await requireMemberBelowActor(ctx.user.id, input.userId, input.serverId);
+      const until = input.until ? new Date(input.until) : null;
+      if (until && until.getTime() > Date.now() + 28 * 24 * 60 * 60_000) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "O timeout máximo é de 28 dias." });
+      }
+      await getDb()
+        .update(schema.serverMembers)
+        .set({ timeoutUntil: until })
+        .where(and(
+          eq(schema.serverMembers.serverId, input.serverId),
+          eq(schema.serverMembers.userId, input.userId),
+        ));
+      await logServerAudit({
+        serverId: input.serverId,
+        actorUserId: ctx.user.id,
+        action: until ? "MEMBER_TIMEOUT" : "MEMBER_TIMEOUT_CLEAR",
+        targetType: "member",
+        targetUserId: input.userId,
+        reason: input.reason ?? null,
+        metadata: { until: until?.toISOString() ?? null },
+      });
+      await refreshServer(input.serverId);
       return { ok: true };
     }),
 
@@ -1050,17 +1221,162 @@ export const serverRouter = createRouter({
       await requirePermission(ctx.user.id, input.serverId, "BAN_MEMBERS");
       const db = getDb();
       const banRows = await db
-        .select()
+        .select({ ban: schema.bans, user: schema.users })
         .from(schema.bans)
-        .where(eq(schema.bans.serverId, input.serverId));
-      const result = [];
-      for (const ban of banRows) {
-        const user = await db.query.users.findFirst({
-          where: eq(schema.users.id, ban.userId),
-        });
-        if (user) result.push({ ban, user: toPublicUser(user) });
+        .innerJoin(schema.users, eq(schema.users.id, schema.bans.userId))
+        .where(eq(schema.bans.serverId, input.serverId))
+        .orderBy(desc(schema.bans.createdAt));
+      return banRows.map(({ ban, user }) => ({ ban, user: toPublicUser(user) }));
+    }),
+
+  settingsMembers: authedQuery
+    .input(z.object({
+      serverId: z.number(),
+      query: z.string().max(64).default(""),
+      roleId: z.number().optional(),
+      activity: z.enum(["all", "active_today", "active_7d", "joined_7d", "timeout"]).default("all"),
+      cursor: z.number().optional(),
+      limit: z.number().int().min(10).max(100).default(50),
+    }))
+    .query(async ({ ctx, input }) => {
+      const permissions = await getMemberPermissions(ctx.user.id, input.serverId);
+      if (!permissions || !["MANAGE_SERVER", "MANAGE_ROLES", "KICK_MEMBERS", "BAN_MEMBERS"].some(permission => permissions.has(permission as never))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode gerenciar membros." });
       }
-      return result;
+      const db = getDb();
+      const filters = [eq(schema.serverMembers.serverId, input.serverId)];
+      if (input.cursor) filters.push(sql`${schema.serverMembers.id} < ${input.cursor}`);
+      if (input.query.trim()) {
+        const term = `%${input.query.trim()}%`;
+        filters.push(or(like(schema.users.username, term), like(schema.users.name, term), like(schema.serverMembers.nickname, term))!);
+      }
+      if (input.roleId) {
+        filters.push(sql`EXISTS (SELECT 1 FROM member_roles mr WHERE mr.serverId = ${input.serverId} AND mr.userId = ${schema.serverMembers.userId} AND mr.roleId = ${input.roleId})`);
+      }
+      const now = new Date();
+      if (input.activity === "active_today") filters.push(sql`${schema.serverMembers.lastActiveAt} >= ${new Date(now.getTime() - 24 * 60 * 60_000)}`);
+      if (input.activity === "active_7d") filters.push(sql`${schema.serverMembers.lastActiveAt} >= ${new Date(now.getTime() - 7 * 24 * 60 * 60_000)}`);
+      if (input.activity === "joined_7d") filters.push(sql`${schema.serverMembers.joinedAt} >= ${new Date(now.getTime() - 7 * 24 * 60 * 60_000)}`);
+      if (input.activity === "timeout") filters.push(sql`${schema.serverMembers.timeoutUntil} > ${now}`);
+      const rows = await db
+        .select({ member: schema.serverMembers, user: schema.users })
+        .from(schema.serverMembers)
+        .innerJoin(schema.users, eq(schema.serverMembers.userId, schema.users.id))
+        .where(and(...filters))
+        .orderBy(desc(schema.serverMembers.id))
+        .limit(input.limit + 1);
+      const hasMore = rows.length > input.limit;
+      const page = rows.slice(0, input.limit);
+      const roleRows = await db.select().from(schema.roles).where(eq(schema.roles.serverId, input.serverId));
+      const memberRoleRows = page.length
+        ? await db.select().from(schema.memberRoles).where(and(
+            eq(schema.memberRoles.serverId, input.serverId),
+            sql`${schema.memberRoles.userId} IN (${sql.join(page.map(row => sql`${row.user.id}`), sql`, `)})`,
+          ))
+        : [];
+      const server = await getServerOr404(input.serverId);
+      return {
+        items: page.map(({ member, user }) => ({
+          user: toPublicUser(user),
+          nickname: member.nickname,
+          joinedAt: member.joinedAt,
+          timeoutUntil: member.timeoutUntil,
+          lastActiveAt: member.lastActiveAt,
+          isOwner: server.ownerId === user.id,
+          roles: roleRows.filter(role => memberRoleRows.some(mr => mr.userId === user.id && mr.roleId === role.id)),
+        })),
+        nextCursor: hasMore ? page.at(-1)?.member.id ?? null : null,
+      };
+    }),
+
+  auditLog: authedQuery
+    .input(z.object({ serverId: z.number(), cursor: z.number().optional(), limit: z.number().int().min(10).max(100).default(50) }))
+    .query(async ({ ctx, input }) => {
+      await requirePermission(ctx.user.id, input.serverId, "MANAGE_SERVER");
+      const filters = [eq(schema.serverAuditLogs.serverId, input.serverId)];
+      if (input.cursor) filters.push(sql`${schema.serverAuditLogs.id} < ${input.cursor}`);
+      const db = getDb();
+      const rows = await db.select().from(schema.serverAuditLogs).where(and(...filters)).orderBy(desc(schema.serverAuditLogs.id)).limit(input.limit + 1);
+      const hasMore = rows.length > input.limit;
+      const page = rows.slice(0, input.limit);
+      const userIds = [...new Set(page.flatMap(row => [row.actorUserId, row.targetUserId]).filter((id): id is number => id !== null))];
+      const userRows = userIds.length
+        ? await db.select().from(schema.users).where(inArray(schema.users.id, userIds))
+        : [];
+      return {
+        items: page.map(row => ({
+          ...row,
+          actor: (() => {
+            const actor = userRows.find(user => user.id === row.actorUserId);
+            return actor
+              ? toPublicUser(actor)
+              : { id: row.actorUserId, username: `user-${row.actorUserId}`, name: null, avatar: null, banner: null, bio: null, status: "offline" };
+          })(),
+          targetUser: row.targetUserId
+            ? (() => {
+                const target = userRows.find(user => user.id === row.targetUserId);
+                return target ? toPublicUser(target) : null;
+              })()
+            : null,
+        })),
+        nextCursor: hasMore ? page.at(-1)?.id ?? null : null,
+      };
+    }),
+
+  notificationPreferences: authedQuery
+    .input(z.object({ serverId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      if (!(await getMemberPermissions(ctx.user.id, input.serverId))) throw new TRPCError({ code: "FORBIDDEN" });
+      const preferences = await getDb().query.serverNotificationPreferences.findFirst({
+        where: and(eq(schema.serverNotificationPreferences.serverId, input.serverId), eq(schema.serverNotificationPreferences.userId, ctx.user.id)),
+      });
+      if (!preferences) return { serverId: input.serverId, userId: ctx.user.id, level: "mentions" as const, mutedUntil: null, suppressEveryone: false, suppressRoles: false };
+      return {
+        ...preferences,
+        mutedUntil: preferences.mutedUntil && preferences.mutedUntil.getTime() > Date.now()
+          ? preferences.mutedUntil
+          : null,
+      };
+    }),
+
+  updateNotificationPreferences: authedQuery
+    .input(z.object({
+      serverId: z.number(),
+      level: z.enum(["all", "mentions", "none"]),
+      mutedUntil: z.string().datetime().nullable(),
+      suppressEveryone: z.boolean(),
+      suppressRoles: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (!(await getMemberPermissions(ctx.user.id, input.serverId))) throw new TRPCError({ code: "FORBIDDEN" });
+      await getDb().insert(schema.serverNotificationPreferences).values({
+        serverId: input.serverId,
+        userId: ctx.user.id,
+        level: input.level,
+        mutedUntil: input.mutedUntil ? new Date(input.mutedUntil) : null,
+        suppressEveryone: input.suppressEveryone,
+        suppressRoles: input.suppressRoles,
+      }).onDuplicateKeyUpdate({ set: {
+        level: input.level,
+        mutedUntil: input.mutedUntil ? new Date(input.mutedUntil) : null,
+        suppressEveryone: input.suppressEveryone,
+        suppressRoles: input.suppressRoles,
+        updatedAt: new Date(),
+      }});
+      return { ok: true };
+    }),
+
+  transferOwnership: authedQuery
+    .input(z.object({ serverId: z.number(), newOwnerId: z.number(), confirmation: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const server = await requireOwner(ctx.user.id, input.serverId);
+      if (input.confirmation !== server.name) throw new TRPCError({ code: "BAD_REQUEST", message: "Digite o nome exato do servidor." });
+      const member = await getDb().query.serverMembers.findFirst({ where: and(eq(schema.serverMembers.serverId, input.serverId), eq(schema.serverMembers.userId, input.newOwnerId)) });
+      if (!member || input.newOwnerId === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "Escolha outro membro do servidor." });
+      await getDb().update(schema.servers).set({ ownerId: input.newOwnerId }).where(eq(schema.servers.id, input.serverId));
+      await logServerAudit({ serverId: input.serverId, actorUserId: ctx.user.id, action: "OWNERSHIP_TRANSFER", targetType: "member", targetUserId: input.newOwnerId, metadata: { previousOwnerId: ctx.user.id } });
+      await refreshServer(input.serverId);
+      return { ok: true };
     }),
 
   // ── Roles ───────────────────────────────────────────────────
@@ -1071,6 +1387,8 @@ export const serverRouter = createRouter({
         name: z.string().min(1).max(64),
         color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#94a3b8"),
         permissions: z.array(permissionEnum).default([]),
+        hoistMembers: z.boolean().default(false),
+        mentionable: z.boolean().default(false),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -1081,18 +1399,30 @@ export const serverRouter = createRouter({
         .from(schema.roles)
         .where(eq(schema.roles.serverId, input.serverId));
       const maxPos = Math.max(0, ...rows.map((r) => r.position));
+      const actorPosition = await getHighestRolePosition(ctx.user.id, input.serverId);
+      if (actorPosition === null) throw new TRPCError({ code: "FORBIDDEN" });
+      const actorPermissions = await getMemberPermissions(ctx.user.id, input.serverId);
+      if (!actorPermissions?.has("ADMINISTRATOR")) {
+        const unauthorized = input.permissions.find(permission => !actorPermissions?.has(permission));
+        if (unauthorized) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode conceder permissões que não possui." });
+        }
+      }
       const [{ id }] = await db
         .insert(schema.roles)
         .values({
           serverId: input.serverId,
           name: input.name,
           color: input.color,
-          position: maxPos + 1,
+          position: Math.min(maxPos + 1, actorPosition - 1),
           permissions: input.permissions,
           isDefault: false,
+          hoistMembers: input.hoistMembers,
+          mentionable: input.mentionable,
         })
         .$returningId();
       await refreshServer(input.serverId);
+      await logServerAudit({ serverId: input.serverId, actorUserId: ctx.user.id, action: "ROLE_CREATE", targetType: "role", targetId: id, metadata: { name: input.name } });
       return { id };
     }),
 
@@ -1103,6 +1433,8 @@ export const serverRouter = createRouter({
         name: z.string().min(1).max(64).optional(),
         color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
         permissions: z.array(permissionEnum).optional(),
+        hoistMembers: z.boolean().optional(),
+        mentionable: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -1112,12 +1444,23 @@ export const serverRouter = createRouter({
       });
       if (!role) throw new TRPCError({ code: "NOT_FOUND", message: "Cargo não encontrado." });
       await requirePermission(ctx.user.id, role.serverId, "MANAGE_ROLES");
+      if (!role.isDefault) await requireRoleBelowActor(ctx.user.id, role);
+      if (input.permissions) {
+        const actorPermissions = await getMemberPermissions(ctx.user.id, role.serverId);
+        if (!actorPermissions?.has("ADMINISTRATOR")) {
+          const unauthorized = input.permissions.find(permission => !actorPermissions?.has(permission));
+          if (unauthorized) throw new TRPCError({ code: "FORBIDDEN", message: "Você não pode conceder permissões que não possui." });
+        }
+      }
       const patch: Partial<typeof schema.roles.$inferInsert> = {};
       if (input.name !== undefined) patch.name = input.name;
       if (input.color !== undefined) patch.color = input.color;
       if (input.permissions !== undefined) patch.permissions = input.permissions;
+      if (input.hoistMembers !== undefined) patch.hoistMembers = input.hoistMembers;
+      if (input.mentionable !== undefined) patch.mentionable = input.mentionable;
       await db.update(schema.roles).set(patch).where(eq(schema.roles.id, input.roleId));
       await refreshServer(role.serverId);
+      await logServerAudit({ serverId: role.serverId, actorUserId: ctx.user.id, action: "ROLE_UPDATE", targetType: "role", targetId: role.id, metadata: { fields: Object.keys(patch) } });
       return { ok: true };
     }),
 
@@ -1133,9 +1476,11 @@ export const serverRouter = createRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "O cargo padrão não pode ser excluído." });
       }
       await requirePermission(ctx.user.id, role.serverId, "MANAGE_ROLES");
+      await requireRoleBelowActor(ctx.user.id, role);
       await db.delete(schema.memberRoles).where(eq(schema.memberRoles.roleId, input.roleId));
       await db.delete(schema.roles).where(eq(schema.roles.id, input.roleId));
       await refreshServer(role.serverId);
+      await logServerAudit({ serverId: role.serverId, actorUserId: ctx.user.id, action: "ROLE_DELETE", targetType: "role", targetId: role.id, metadata: { name: role.name } });
       return { ok: true };
     }),
 
@@ -1150,11 +1495,14 @@ export const serverRouter = createRouter({
       if (!role || role.serverId !== input.serverId) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Cargo não encontrado." });
       }
+      await requireRoleBelowActor(ctx.user.id, role);
+      await requireMemberBelowActor(ctx.user.id, input.userId, input.serverId);
       await db
         .insert(schema.memberRoles)
         .values({ serverId: input.serverId, userId: input.userId, roleId: input.roleId })
         .onDuplicateKeyUpdate({ set: { roleId: input.roleId } });
       await refreshServer(input.serverId);
+      await logServerAudit({ serverId: input.serverId, actorUserId: ctx.user.id, action: "ROLE_ASSIGN", targetType: "role", targetId: role.id, targetUserId: input.userId });
       return { ok: true };
     }),
 
@@ -1162,6 +1510,10 @@ export const serverRouter = createRouter({
     .input(z.object({ serverId: z.number(), userId: z.number(), roleId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       await requirePermission(ctx.user.id, input.serverId, "MANAGE_ROLES");
+      const role = await getDb().query.roles.findFirst({ where: eq(schema.roles.id, input.roleId) });
+      if (!role || role.serverId !== input.serverId) throw new TRPCError({ code: "NOT_FOUND", message: "Cargo não encontrado." });
+      await requireRoleBelowActor(ctx.user.id, role);
+      await requireMemberBelowActor(ctx.user.id, input.userId, input.serverId);
       await getDb()
         .delete(schema.memberRoles)
         .where(
@@ -1171,6 +1523,31 @@ export const serverRouter = createRouter({
             eq(schema.memberRoles.roleId, input.roleId),
           ),
         );
+      await refreshServer(input.serverId);
+      await logServerAudit({ serverId: input.serverId, actorUserId: ctx.user.id, action: "ROLE_UNASSIGN", targetType: "role", targetId: input.roleId, targetUserId: input.userId });
+      return { ok: true };
+    }),
+
+  reorderRoles: authedQuery
+    .input(z.object({ serverId: z.number(), roleIds: z.array(z.number()).min(1).max(250) }))
+    .mutation(async ({ ctx, input }) => {
+      await requirePermission(ctx.user.id, input.serverId, "MANAGE_ROLES");
+      const db = getDb();
+      const roleRows = await db.select().from(schema.roles).where(eq(schema.roles.serverId, input.serverId));
+      const movable = roleRows.filter(role => !role.isDefault);
+      if (input.roleIds.length !== movable.length || new Set(input.roleIds).size !== input.roleIds.length || input.roleIds.some(id => !movable.some(role => role.id === id))) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "A ordem dos cargos está incompleta." });
+      }
+      const actorPosition = await getHighestRolePosition(ctx.user.id, input.serverId);
+      for (const [index, roleId] of input.roleIds.entries()) {
+        const role = movable.find(item => item.id === roleId)!;
+        await requireRoleBelowActor(ctx.user.id, role);
+        const position = Math.min(input.roleIds.length - index, (actorPosition ?? 1) - 1);
+        await db.update(schema.roles).set({ position }).where(eq(schema.roles.id, roleId));
+      }
+      const defaultRole = roleRows.find(role => role.isDefault);
+      if (defaultRole) await db.update(schema.roles).set({ position: 0 }).where(eq(schema.roles.id, defaultRole.id));
+      await logServerAudit({ serverId: input.serverId, actorUserId: ctx.user.id, action: "ROLE_REORDER", targetType: "server", targetId: input.serverId, metadata: { roleIds: input.roleIds } });
       await refreshServer(input.serverId);
       return { ok: true };
     }),
@@ -1241,6 +1618,14 @@ export const serverRouter = createRouter({
           ruleType: input.ruleType,
           enabled: input.enabled,
         },
+      });
+      await logServerAudit({
+        serverId: input.serverId,
+        actorUserId: ctx.user.id,
+        action: "AUTOMOD_UPDATE",
+        targetType: "automod_rule",
+        reason: `Regra ${input.ruleType} ${input.enabled ? "ativada" : "desativada"}`,
+        metadata: { ruleType: input.ruleType, enabled: input.enabled },
       });
       return { ok: true };
     }),

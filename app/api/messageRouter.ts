@@ -162,7 +162,7 @@ export async function buildMessageDTOs(
     const originalAuthor = usersById.get(original.authorId);
     return {
       id: original.id,
-      content: original.content.slice(0, 200),
+      content: original.tag === "removed" ? "" : original.content.slice(0, 200),
       author: originalAuthor
         ? toPublicUser(originalAuthor)
         : removedUser(),
@@ -189,7 +189,7 @@ export async function buildMessageDTOs(
       channelId: msg.channelId,
       conversationId: msg.conversationId,
       authorId: msg.authorId,
-      content: msg.content,
+      content: msg.tag === "removed" ? "" : msg.content,
       replyToId: msg.replyToId,
       tag: msg.tag ?? null,
       createdAt: msg.createdAt,
@@ -209,9 +209,9 @@ export async function buildMessageDTOs(
             moderation?.status === "processing" ||
             moderation?.status === "approved" ||
             moderation?.status === "sensitive" ||
-            moderation?.status === "blocked"
+            moderation?.status === "blocked" || moderation?.status === "review_required"
               ? moderation.status
-              : ("approved" as const),
+              : a.mimeType.startsWith("image/") ? ("review_required" as const) : ("approved" as const),
           sensitive: moderation?.sensitive ?? false,
           adultOnly: moderation?.adultOnly ?? false,
           allowReveal: moderation?.allowReveal ?? true,
@@ -682,6 +682,25 @@ export const messageRouter = createRouter({
         }
       }
 
+      let validatedFiles: (typeof schema.files.$inferSelect)[] = [];
+      if (input.attachmentIds && input.attachmentIds.length > 0) {
+        validatedFiles = await db.select().from(schema.files).where(inArray(schema.files.id, input.attachmentIds));
+        if (validatedFiles.length !== input.attachmentIds.length || validatedFiles.some(file => file.uploaderId !== ctx.user.id)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Um dos anexos não existe ou não pertence à sua conta." });
+        }
+        const imageIds = validatedFiles.filter(file => file.mimeType.startsWith("image/")).map(file => file.id);
+        if (imageIds.length) {
+          const mods = await db.select().from(schema.mediaModeration).where(inArray(schema.mediaModeration.fileId, imageIds));
+          const byId = new Map(mods.map(row => [row.fileId, row]));
+          for (const imageId of imageIds) {
+            const moderation = byId.get(imageId);
+            if (!moderation || !["approved", "sensitive"].includes(moderation.status)) {
+              throw new TRPCError({ code: "FORBIDDEN", message: moderation?.status === "blocked" ? "Uma das mídias foi bloqueada pela segurança do Nexora." : "Verificando mídia... Aguarde a análise antes de enviar." });
+            }
+          }
+        }
+      }
+
       const [{ id }] = await db
         .insert(schema.messages)
         .values({
@@ -696,34 +715,7 @@ export const messageRouter = createRouter({
       // Attach previously uploaded files — only media already cleared by
       // content-safety may be published.
       if (input.attachmentIds && input.attachmentIds.length > 0) {
-        const fileRows = await db
-          .select()
-          .from(schema.files)
-          .where(inArray(schema.files.id, input.attachmentIds));
-        const modRows = await db
-          .select()
-          .from(schema.mediaModeration)
-          .where(inArray(schema.mediaModeration.fileId, input.attachmentIds));
-        const modById = new Map(modRows.map(m => [m.fileId, m]));
-        for (const file of fileRows) {
-          if (file.uploaderId !== ctx.user.id) continue;
-          const moderation = modById.get(file.id);
-          // Unmoderated or blocked media is never published.
-          if (moderation) {
-            if (
-              moderation.status === "blocked" ||
-              moderation.status === "processing" ||
-              moderation.status === "review_required"
-            ) {
-              throw new TRPCError({
-                code: "FORBIDDEN",
-                message:
-                  moderation.status === "blocked"
-                    ? "Uma das mídias foi bloqueada pela segurança do Nexora."
-                    : "Verificando mídia... Aguarde a análise antes de enviar.",
-              });
-            }
-          }
+        for (const file of validatedFiles) {
           await db.insert(schema.attachments).values({
             messageId: id,
             fileId: file.id,

@@ -145,6 +145,132 @@ function notifyUser(userId: number, content: string) {
   });
 }
 
+export type AutomatedHistorySanction = {
+  action: "warning" | "temporary_suspension";
+  suspensionDays: number | null;
+  primaryCategory: string;
+  publicReason: string;
+  affectedContentCount: number;
+};
+
+/**
+ * Applies the single grouped consequence selected after a completed history
+ * review. It is idempotent for the anchor message/category and deliberately
+ * cannot permanently ban an account or add a severe strike.
+ */
+export async function applyAutomatedHistorySanction(input: {
+  userId: number;
+  anchorMessageId: number;
+  reportId: number;
+  model: string;
+  sanction: AutomatedHistorySanction;
+}): Promise<number> {
+  const db = getDb();
+  await ensureSafetyRow(input.userId);
+  // One grouped decision per report. A later report must never reuse a
+  // violation that was already reversed by staff or an approved appeal.
+  const category = `history_${input.sanction.primaryCategory}_report_${input.reportId}`.slice(0, 120);
+
+  let violationId = 0;
+  let created = false;
+  try {
+    violationId = await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(schema.violations)
+        .values({
+          userId: input.userId,
+          messageId: input.anchorMessageId,
+          targetType: "message_history",
+          category,
+          severity:
+            input.sanction.action === "temporary_suspension" ? "severe" : "warning",
+          source: "user_report",
+          moderationModel: input.model,
+          policyVersion: env.safetyPolicyVersion,
+          status: "confirmed",
+          action: input.sanction.action,
+          publicReason: input.sanction.publicReason.slice(0, 500),
+          affectedContentCount: Math.max(1, input.sanction.affectedContentCount),
+          suspensionDays: input.sanction.suspensionDays,
+          strikeApplied: false,
+          internalNote:
+            "Decisão automática agrupada após revisão do histórico no escopo da denúncia.",
+        })
+        .$returningId();
+      const newViolationId = Number(Object.values(inserted[0] ?? {})[0] ?? 0);
+
+      if (
+        input.sanction.action === "temporary_suspension" &&
+        input.sanction.suspensionDays
+      ) {
+        const [safety] = await tx
+          .select({ suspendedUntil: schema.accountSafety.suspendedUntil })
+          .from(schema.accountSafety)
+          .where(eq(schema.accountSafety.userId, input.userId))
+          .limit(1);
+        const proposedUntil = new Date(
+          Date.now() + input.sanction.suspensionDays * 86_400_000,
+        );
+        const currentUntil = safety?.suspendedUntil
+          ? new Date(safety.suspendedUntil)
+          : null;
+        if (!currentUntil || currentUntil.getTime() < proposedUntil.getTime()) {
+          await tx
+            .update(schema.accountSafety)
+            .set({
+              suspendedUntil: proposedUntil,
+              suspendedByViolationId: newViolationId,
+            })
+            .where(eq(schema.accountSafety.userId, input.userId));
+        }
+      }
+
+      return newViolationId;
+    });
+    created = true;
+  } catch {
+    const [existing] = await db
+      .select({ id: schema.violations.id })
+      .from(schema.violations)
+      .where(
+        and(
+          eq(schema.violations.messageId, input.anchorMessageId),
+          eq(schema.violations.category, category),
+        ),
+      )
+      .limit(1);
+    // A restrição e a ocorrência são gravadas na mesma transação. Encontrar a
+    // ocorrência significa que este job já concluiu os efeitos persistentes;
+    // não prolongue a suspensão nem repita notificação/auditoria no retry.
+    if (existing) return existing.id;
+    else throw new Error("Não foi possível registrar a decisão do histórico.");
+  }
+
+  if (created && input.sanction.action === "temporary_suspension") {
+    await refreshStatus(input.userId);
+    void notifyRestrictionChanged(input.userId).catch(() => {});
+  }
+
+  notifyUser(
+    input.userId,
+    input.sanction.action === "temporary_suspension"
+      ? `A IA de segurança removeu ${input.sanction.affectedContentCount} conteúdo(s) e suspendeu sua conta por ${input.sanction.suspensionDays} dia(s). Consulte a Central de Segurança para ver o motivo e enviar uma apelação.`
+      : `A IA de segurança removeu ${input.sanction.affectedContentCount} conteúdo(s) e aplicou uma advertência. Consulte a Central de Segurança para ver o motivo.`,
+  );
+  await logSafetyEvent({
+    event: "reported_history_sanction_applied",
+    targetUserId: input.userId,
+    violationId,
+    metadata: {
+      action: input.sanction.action,
+      suspensionDays: input.sanction.suspensionDays,
+      affectedContentCount: input.sanction.affectedContentCount,
+      primaryCategory: input.sanction.primaryCategory,
+    },
+  });
+  return violationId;
+}
+
 /** Evento realtime para o cliente atualizar restrições imediatamente. */
 export async function notifyRestrictionChanged(userId: number): Promise<void> {
   const safety = await getSafety(userId);
@@ -257,6 +383,11 @@ export async function confirmViolation(
   if (!violation) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Ocorrência não encontrada." });
   }
+  if (violation.severity !== "severe") {
+    await db.update(schema.violations).set({ status: "confirmed", reviewedAt: new Date(), reviewedByUserId: reviewerId }).where(eq(schema.violations.id, violationId));
+    const safety = await getSafety(violation.userId);
+    return { severeStrikes: safety.severeStrikes, banned: safety.permanentBan };
+  }
 
   if (violation.status === "confirmed" && violation.strikeApplied) {
     const safety = await getSafety(violation.userId);
@@ -364,6 +495,14 @@ export async function markFalsePositive(
   });
 
   await refreshStatus(violation.userId);
+  if (violation.messageId) {
+    const { restoreMessageAfterFalsePositive } = await import("./textModeration");
+    await restoreMessageAfterFalsePositive(violation.messageId, violationId);
+  }
+  if (violation.targetType === "message_history") {
+    const { restoreHistoryReviewAfterFalsePositive } = await import("./reports/textHistoryReview");
+    await restoreHistoryReviewAfterFalsePositive(violation.id, reviewerId);
+  }
   await logSafetyEvent({
     event: "violation_marked_false_positive",
     actorUserId: reviewerId,

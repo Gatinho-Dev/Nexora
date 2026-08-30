@@ -20,26 +20,87 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Nexora" />
+    <meta name="application-name" content="Nexora" />
     <link rel="apple-touch-icon" href="/icons/icon-180.png" />
     <meta
       name="description"
-      content="Converse com amigos, crie comunidades, participe de chamadas de voz e compartilhe momentos — tudo em um só lugar."
+      content="Nexora é uma plataforma de comunicação para conversar com amigos, criar comunidades, participar de chamadas de voz e vídeo e compartilhar momentos em um só lugar."
     />
+    <link rel="canonical" href="https://nexorachat.cloud/" />
+    <meta property="og:site_name" content="Nexora" />
+    <meta property="og:type" content="website" />
     <meta property="og:title" content="Nexora — Converse, conecte-se e crie comunidades" />
     <meta
       property="og:description"
-      content="Converse com amigos, crie comunidades, participe de chamadas de voz e compartilhe momentos — tudo em um só lugar."
+      content="Converse com amigos, crie comunidades, participe de chamadas de voz e compartilhe momentos, tudo em um só lugar."
     />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Nexora" />
+    <meta property="og:url" content="https://nexorachat.cloud/" />
+    <meta property="og:image" content="https://nexorachat.cloud/og-nexora.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Nexora — Converse, conecte-se e compartilhe" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Nexora — Converse, conecte-se e crie comunidades" />
+    <meta
+      name="twitter:description"
+      content="Converse com amigos, crie comunidades, participe de chamadas de voz e compartilhe momentos, tudo em um só lugar."
+    />
+    <meta name="twitter:image" content="https://nexorachat.cloud/og-nexora.png" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <title>Nexora — Converse, conecte-se e crie comunidades</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Nexora",
+        "url": "https://nexorachat.cloud",
+        "logo": "https://nexorachat.cloud/icons/icon-512.png"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Nexora",
+        "url": "https://nexorachat.cloud"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Nexora",
+        "applicationCategory": "CommunicationApplication",
+        "operatingSystem": "Web",
+        "url": "https://nexorachat.cloud"
+      }
+    </script>
   </head>
   <body
     class="bg-background text-foreground antialiased selection:bg-[#5865F2]/30 selection:text-white"
     style="background: #313338; color: #f2f3f5"
   >
+    <!--
+      Conteúdo público para crawlers: a Nexora é uma SPA, então o HTML
+      inicial carrega o essencial (metadados + JSON-LD acima). A landing
+      completa (H1, seções e textos) é renderizada pelo React imediatamente
+      após; sitemap.xml lista apenas as rotas públicas.
+    -->
+    <noscript>
+      <h1>Nexora — converse, conecte-se e crie comunidades</h1>
+      <p>
+        A Nexora é uma plataforma de comunicação com mensagens em tempo real,
+        comunidades com canais de texto e voz, chamadas de vídeo, compartilhamento
+        de imagens e arquivos. Crie sua conta em
+        <a href="https://nexorachat.cloud/register">https://nexorachat.cloud/register</a>.
+      </p>
+      <ul>
+        <li><a href="https://nexorachat.cloud/privacy">Política de Privacidade</a></li>
+        <li><a href="https://nexorachat.cloud/terms">Termos de Serviço</a></li>
+        <li><a href="https://nexorachat.cloud/legal/guidelines">Diretrizes da Comunidade</a></li>
+      </ul>
+    </noscript>
     <div id="root" style="height: 100dvh">
       <div
         class="min-h-[100dvh] flex flex-col items-center justify-center bg-background text-foreground select-none"

@@ -90,14 +90,17 @@ type PendingFile = {
   size: number;
   url: string;
   moderationStatus?: string | null;
+  sensitive?: boolean;
+  adultOnly?: boolean;
+  allowReveal?: boolean;
   /** MODERATION_UNAVAILABLE terminal state — user can retry. */
   failed?: boolean;
 };
 
 /** Terminal moderation states allow sending; others must be awaited. */
 function isMediaCleared(f: PendingFile): boolean {
+  if (!f.mimeType.startsWith("image/")) return true;
   return (
-    !f.moderationStatus ||
     f.moderationStatus === "approved" ||
     f.moderationStatus === "sensitive"
   );
@@ -838,13 +841,25 @@ export function MessageInput({
         );
         if (!res.ok) continue;
         const { statuses } = (await res.json()) as {
-          statuses: Record<string, string>;
+          statuses: Record<string, string | {
+            status: string;
+            sensitive: boolean;
+            adultOnly: boolean;
+            allowReveal: boolean;
+          }>;
         };
-        const status = statuses[String(fileId)];
-        if (!status) continue;
+        const moderation = statuses[String(fileId)];
+        if (!moderation) continue;
+        const status = typeof moderation === "string" ? moderation : moderation.status;
         setFiles(prev =>
           prev.map(f =>
-            f.id === fileId ? { ...f, moderationStatus: status } : f
+            f.id === fileId ? {
+              ...f,
+              moderationStatus: status,
+              sensitive: typeof moderation === "string" ? status === "sensitive" : moderation.sensitive,
+              adultOnly: typeof moderation === "string" ? status === "sensitive" : moderation.adultOnly,
+              allowReveal: typeof moderation === "string" ? status !== "blocked" : moderation.allowReveal,
+            } : f
           )
         );
         if (status === "blocked") {
@@ -1253,12 +1268,12 @@ export function MessageInput({
                       alt={isSpoiler ? "Spoiler" : f.filename}
                       className={cn(
                         "h-10 w-10 rounded-md object-cover transition-all",
-                        isSpoiler && "blur-md"
+                        (isSpoiler || f.adultOnly) && "blur-md"
                       )}
                     />
-                    {isSpoiler && (
+                    {(isSpoiler || f.adultOnly) && (
                       <span className="absolute inset-0 flex items-center justify-center rounded-md bg-black/60 text-[9px] font-bold tracking-widest">
-                        SPOILER
+                        {f.adultOnly ? "🔞 +18" : "SPOILER"}
                       </span>
                     )}
                   </div>
@@ -1268,6 +1283,11 @@ export function MessageInput({
                 <div className="max-w-32">
                   <div className="truncate font-medium">{f.filename}</div>
                   <div className="text-muted2">{formatSize(f.size)}</div>
+                  {f.adultOnly && (
+                    <div className="mt-0.5 text-[10px] font-bold text-amber-300">
+                      Conteúdo +18 detectado — será enviado com aviso
+                    </div>
+                  )}
                 </div>
                 {/* Attachment actions */}
                 {f.mimeType.startsWith("image/") && (
@@ -1287,16 +1307,6 @@ export function MessageInput({
                     ) : (
                       <Eye className="h-3 w-3" />
                     )}
-                  </button>
-                )}
-                {isFailed && (
-                  <button
-                    type="button"
-                    title="Não foi possível verificar agora — tentar novamente"
-                    onClick={() => retryFailedMedia(f.id)}
-                    className="flex items-center gap-1 rounded-md bg-black/40 px-1.5 py-1 text-[10px] font-bold text-amber-200 hover:bg-black/60"
-                  >
-                    ⚠ Tentar novamente
                   </button>
                 )}
                 {isFailed && (

@@ -57,7 +57,25 @@ export const servers = mysqlTable(
     iconUrl: text("iconUrl"),
     bannerUrl: text("bannerUrl"),
     description: text("description"),
+    // Runtime default keeps new servers valid without emitting a TiDB-incompatible JSON DEFAULT literal.
+    tags: json("tags").$type<string[]>().$defaultFn(() => []).notNull(),
     vanitySlug: varchar("vanitySlug", { length: 32 }),
+    verificationLevel: mysqlEnum("verificationLevel", [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "maximum",
+    ])
+      .default("none")
+      .notNull(),
+    defaultNotifications: mysqlEnum("defaultNotifications", ["all", "mentions"])
+      .default("all")
+      .notNull(),
+    invitesPaused: boolean("invitesPaused").default(false).notNull(),
+    rulesEnabled: boolean("rulesEnabled").default(false).notNull(),
+    rules: json("rules").$type<string[]>().$defaultFn(() => []).notNull(),
+    communityEnabled: boolean("communityEnabled").default(false).notNull(),
     ownerId: bigint("ownerId", { mode: "number", unsigned: true }).notNull(),
     /** Parceria oficial com a Nexora (alimenta a badge Partnered Server Owner). */
     partnered: boolean("partnered").default(false).notNull(),
@@ -74,6 +92,9 @@ export const serverMembers = mysqlTable(
     serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
     nickname: varchar("nickname", { length: 64 }),
+    timeoutUntil: timestamp("timeoutUntil"),
+    rulesAcceptedAt: timestamp("rulesAcceptedAt"),
+    lastActiveAt: timestamp("lastActiveAt"),
     joinedAt: timestamp("joinedAt").defaultNow().notNull(),
   },
   (table) => ({
@@ -102,10 +123,7 @@ export const channels = mysqlTable(
     categoryId: bigint("categoryId", { mode: "number", unsigned: true }),
     name: varchar("name", { length: 64 }).notNull(),
     topic: varchar("topic", { length: 500 }),
-    type: mysqlEnum(
-      "type",
-      ["TEXT", "VOICE", "ANNOUNCEMENT", "FORUM", "STAGE", "MEDIA"]
-    )
+    type: mysqlEnum("type", ["TEXT", "VOICE", "ANNOUNCEMENT", "FORUM", "STAGE", "MEDIA"])
       .default("TEXT")
       .notNull(),
     position: int("position").default(0).notNull(),
@@ -140,7 +158,10 @@ export const messages = mysqlTable(
   {
     id: serial("id").primaryKey(),
     channelId: bigint("channelId", { mode: "number", unsigned: true }),
-    conversationId: bigint("conversationId", { mode: "number", unsigned: true }),
+    conversationId: bigint("conversationId", {
+      mode: "number",
+      unsigned: true,
+    }),
     authorId: bigint("authorId", { mode: "number", unsigned: true }).notNull(),
     content: text("content").notNull(),
     replyToId: bigint("replyToId", { mode: "number", unsigned: true }),
@@ -152,12 +173,25 @@ export const messages = mysqlTable(
   (table) => ({
     channelIdx: index("msg_channel_idx").on(table.channelId, table.id),
     conversationIdx: index("msg_conversation_idx").on(table.conversationId, table.id),
+    channelAuthorIdx: index("msg_channel_author_idx").on(
+      table.channelId,
+      table.authorId,
+      table.id,
+    ),
+    conversationAuthorIdx: index("msg_conversation_author_idx").on(
+      table.conversationId,
+      table.authorId,
+      table.id,
+    ),
   }),
 );
 
 export const files = mysqlTable("files", {
   id: serial("id").primaryKey(),
-  uploaderId: bigint("uploaderId", { mode: "number", unsigned: true }).notNull(),
+  uploaderId: bigint("uploaderId", {
+    mode: "number",
+    unsigned: true,
+  }).notNull(),
   filename: varchar("filename", { length: 255 }).notNull(),
   mimeType: varchar("mimeType", { length: 128 }).notNull(),
   size: int("size").notNull(),
@@ -169,7 +203,10 @@ export const attachments = mysqlTable(
   "attachments",
   {
     id: serial("id").primaryKey(),
-    messageId: bigint("messageId", { mode: "number", unsigned: true }).notNull(),
+    messageId: bigint("messageId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     fileId: bigint("fileId", { mode: "number", unsigned: true }).notNull(),
     filename: varchar("filename", { length: 255 }).notNull(),
     mimeType: varchar("mimeType", { length: 128 }).notNull(),
@@ -183,7 +220,10 @@ export const messageReactions = mysqlTable(
   "message_reactions",
   {
     id: serial("id").primaryKey(),
-    messageId: bigint("messageId", { mode: "number", unsigned: true }).notNull(),
+    messageId: bigint("messageId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
     emoji: varchar("emoji", { length: 64 }).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -205,6 +245,8 @@ export const roles = mysqlTable(
     position: int("position").default(0).notNull(),
     permissions: json("permissions").$type<string[]>().notNull(),
     isDefault: boolean("isDefault").default(false).notNull(),
+    hoistMembers: boolean("hoistMembers").default(false).notNull(),
+    mentionable: boolean("mentionable").default(false).notNull(),
   },
   (table) => ({ serverIdx: index("role_server_idx").on(table.serverId) }),
 );
@@ -228,11 +270,15 @@ export const friendships = mysqlTable(
   "friendships",
   {
     id: serial("id").primaryKey(),
-    requesterId: bigint("requesterId", { mode: "number", unsigned: true }).notNull(),
-    addresseeId: bigint("addresseeId", { mode: "number", unsigned: true }).notNull(),
-    status: mysqlEnum("status", ["PENDING", "ACCEPTED", "BLOCKED"])
-      .default("PENDING")
-      .notNull(),
+    requesterId: bigint("requesterId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    addresseeId: bigint("addresseeId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    status: mysqlEnum("status", ["PENDING", "ACCEPTED", "BLOCKED"]).default("PENDING").notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({
@@ -260,11 +306,12 @@ export const conversationMembers = mysqlTable(
   "conversation_members",
   {
     id: serial("id").primaryKey(),
-    conversationId: bigint("conversationId", { mode: "number", unsigned: true }).notNull(),
+    conversationId: bigint("conversationId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
-    role: mysqlEnum("role", ["owner", "admin", "member"])
-      .default("member")
-      .notNull(),
+    role: mysqlEnum("role", ["owner", "admin", "member"]).default("member").notNull(),
     nickname: varchar("nickname", { length: 64 }),
     mutedUntil: timestamp("mutedUntil"),
     notificationLevel: mysqlEnum("notificationLevel", ["all", "mentions", "muted"])
@@ -322,12 +369,16 @@ export const groupInvites = mysqlTable(
   "group_invites",
   {
     id: serial("id").primaryKey(),
-    conversationId: bigint("conversationId", { mode: "number", unsigned: true })
-      .notNull(),
+    conversationId: bigint("conversationId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     /** sha256 hex of the raw invite token — raw token lives only in the link. */
     tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
-    createdByUserId: bigint("createdByUserId", { mode: "number", unsigned: true })
-      .notNull(),
+    createdByUserId: bigint("createdByUserId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     expiresAt: timestamp("expiresAt"),
     maxUses: int("maxUses"),
     uses: int("uses").default(0).notNull(),
@@ -345,19 +396,22 @@ export const pinnedMessages = mysqlTable(
   "pinned_messages",
   {
     id: serial("id").primaryKey(),
-    conversationId: bigint("conversationId", { mode: "number", unsigned: true })
-      .notNull(),
-    messageId: bigint("messageId", { mode: "number", unsigned: true })
-      .notNull(),
-    pinnedByUserId: bigint("pinnedByUserId", { mode: "number", unsigned: true })
-      .notNull(),
+    conversationId: bigint("conversationId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    messageId: bigint("messageId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    pinnedByUserId: bigint("pinnedByUserId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({
-    uniqIdx: uniqueIndex("pm_conv_msg_uniq").on(
-      table.conversationId,
-      table.messageId,
-    ),
+    uniqIdx: uniqueIndex("pm_conv_msg_uniq").on(table.conversationId, table.messageId),
     convIdx: index("pm_conv_idx").on(table.conversationId),
   }),
 );
@@ -369,10 +423,14 @@ export const invites = mysqlTable(
     id: serial("id").primaryKey(),
     serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
     code: varchar("code", { length: 32 }).notNull().unique(),
-    creatorId: bigint("creatorId", { mode: "number", unsigned: true }).notNull(),
+    creatorId: bigint("creatorId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     expiresAt: timestamp("expiresAt"),
     maxUses: int("maxUses"),
     uses: int("uses").default(0).notNull(),
+    revokedAt: timestamp("revokedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({ serverIdx: index("inv_server_idx").on(table.serverId) }),
@@ -387,7 +445,9 @@ export const bans = mysqlTable(
     reason: text("reason"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
-  (table) => ({ uniqIdx: uniqueIndex("ban_uniq_idx").on(table.serverId, table.userId) }),
+  (table) => ({
+    uniqIdx: uniqueIndex("ban_uniq_idx").on(table.serverId, table.userId),
+  }),
 );
 
 export const notifications = mysqlTable(
@@ -399,7 +459,10 @@ export const notifications = mysqlTable(
     actorId: bigint("actorId", { mode: "number", unsigned: true }),
     serverId: bigint("serverId", { mode: "number", unsigned: true }),
     channelId: bigint("channelId", { mode: "number", unsigned: true }),
-    conversationId: bigint("conversationId", { mode: "number", unsigned: true }),
+    conversationId: bigint("conversationId", {
+      mode: "number",
+      unsigned: true,
+    }),
     messageId: bigint("messageId", { mode: "number", unsigned: true }),
     content: text("content"),
     isRead: boolean("isRead").default(false).notNull(),
@@ -411,14 +474,63 @@ export const notifications = mysqlTable(
   }),
 );
 
+/** Preferências privadas por usuário e servidor. */
+export const serverNotificationPreferences = mysqlTable(
+  "server_notification_preferences",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    level: mysqlEnum("level", ["all", "mentions", "none"])
+      .default("mentions")
+      .notNull(),
+    mutedUntil: timestamp("mutedUntil"),
+    suppressEveryone: boolean("suppressEveryone").default(false).notNull(),
+    suppressRoles: boolean("suppressRoles").default(false).notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqIdx: uniqueIndex("snp_server_user_uniq").on(table.serverId, table.userId),
+    userIdx: index("snp_user_idx").on(table.userId),
+  }),
+);
+
+/** Registro imutável das ações administrativas dentro de um servidor. */
+export const serverAuditLogs = mysqlTable(
+  "server_audit_logs",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    actorUserId: bigint("actorUserId", { mode: "number", unsigned: true }).notNull(),
+    action: varchar("action", { length: 64 }).notNull(),
+    targetType: varchar("targetType", { length: 48 }).notNull(),
+    targetId: bigint("targetId", { mode: "number", unsigned: true }),
+    targetUserId: bigint("targetUserId", { mode: "number", unsigned: true }),
+    reason: varchar("reason", { length: 500 }),
+    metadata: json("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    serverIdx: index("sal_server_idx").on(table.serverId, table.id),
+    actorIdx: index("sal_actor_idx").on(table.actorUserId, table.id),
+    targetIdx: index("sal_target_idx").on(table.targetUserId, table.id),
+  }),
+);
+
 export const channelReads = mysqlTable(
   "channel_reads",
   {
     id: serial("id").primaryKey(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
     channelId: bigint("channelId", { mode: "number", unsigned: true }),
-    conversationId: bigint("conversationId", { mode: "number", unsigned: true }),
-    lastReadMessageId: bigint("lastReadMessageId", { mode: "number", unsigned: true })
+    conversationId: bigint("conversationId", {
+      mode: "number",
+      unsigned: true,
+    }),
+    lastReadMessageId: bigint("lastReadMessageId", {
+      mode: "number",
+      unsigned: true,
+    })
       .default(0)
       .notNull(),
     updatedAt: timestamp("updatedAt")
@@ -443,7 +555,10 @@ export const voiceSessions = mysqlTable(
   "voice_sessions",
   {
     id: serial("id").primaryKey(),
-    channelId: bigint("channelId", { mode: "number", unsigned: true }).notNull(),
+    channelId: bigint("channelId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
     joinedAt: timestamp("joinedAt").defaultNow().notNull(),
     leftAt: timestamp("leftAt"),
@@ -469,14 +584,7 @@ export const officialAnnouncements = mysqlTable(
       .default("GENERAL")
       .notNull(),
     /** INFO | SUCCESS | WARNING | ERROR | MAINTENANCE | ANNOUNCEMENT */
-    type: mysqlEnum("type", [
-      "INFO",
-      "SUCCESS",
-      "WARNING",
-      "ERROR",
-      "MAINTENANCE",
-      "ANNOUNCEMENT",
-    ])
+    type: mysqlEnum("type", ["INFO", "SUCCESS", "WARNING", "ERROR", "MAINTENANCE", "ANNOUNCEMENT"])
       .default("ANNOUNCEMENT")
       .notNull(),
     /** CTA opcional. */
@@ -557,14 +665,7 @@ export const badges = mysqlTable(
     /** Arquivo em /badges/{icon}.svg */
     icon: varchar("icon", { length: 64 }).notNull(),
     category: varchar("category", { length: 32 }).default("general").notNull(),
-    rarity: mysqlEnum("rarity", [
-      "COMMON",
-      "UNCOMMON",
-      "RARE",
-      "EPIC",
-      "LEGENDARY",
-      "EXCLUSIVE",
-    ])
+    rarity: mysqlEnum("rarity", ["COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "EXCLUSIVE"])
       .default("COMMON")
       .notNull(),
     /** Quem pode conceder: SYSTEM | ADMIN | MIGRATION | EVENT | IMPORT | STAFF_DIRECTORY */
@@ -594,18 +695,14 @@ export const userBadges = mysqlTable(
     /** userId de quem concedeu (null = SYSTEM). */
     grantedBy: bigint("grantedBy", { mode: "number", unsigned: true }),
     /** SYSTEM | ADMIN | MIGRATION | EVENT | IMPORT | STAFF_DIRECTORY | LEGACY_ARCHIVED */
-    grantSource: varchar("grantSource", { length: 24 })
-      .default("SYSTEM")
-      .notNull(),
+    grantSource: varchar("grantSource", { length: 24 }).default("SYSTEM").notNull(),
     reason: varchar("reason", { length: 300 }),
     expiresAt: timestamp("expiresAt"),
     hiddenByUser: boolean("hiddenByUser").default(false).notNull(),
     /** true = automação não pode remover esta concessão. */
     manualOverride: boolean("manualOverride").default(false).notNull(),
     /** true = automação não pode conceder esta badge a este usuário. */
-    automaticGrantDisabled: boolean("automaticGrantDisabled")
-      .default(false)
-      .notNull(),
+    automaticGrantDisabled: boolean("automaticGrantDisabled").default(false).notNull(),
     metadata: json("metadata").$type<Record<string, unknown>>(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt")
@@ -615,10 +712,7 @@ export const userBadges = mysqlTable(
   },
   (table) => ({
     // Um usuário nunca possui duas instâncias da mesma badge.
-    userBadgeIdx: uniqueIndex("ub_user_badge_idx").on(
-      table.userId,
-      table.badgeId,
-    ),
+    userBadgeIdx: uniqueIndex("ub_user_badge_idx").on(table.userId, table.badgeId),
     badgeIdx: index("ub_badge_idx").on(table.badgeId, table.userId),
   }),
 );
@@ -682,7 +776,10 @@ export const adminAuditLog = mysqlTable(
   "admin_audit_log",
   {
     id: serial("id").primaryKey(),
-    actorUserId: bigint("actorUserId", { mode: "number", unsigned: true }).notNull(),
+    actorUserId: bigint("actorUserId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     action: varchar("action", { length: 64 }).notNull(),
     entityType: varchar("entityType", { length: 48 }).notNull(),
     entityId: bigint("entityId", { mode: "number", unsigned: true }),
@@ -703,7 +800,10 @@ export const stageSpeakers = mysqlTable(
   "stage_speakers",
   {
     id: serial("id").primaryKey(),
-    channelId: bigint("channelId", { mode: "number", unsigned: true }).notNull(),
+    channelId: bigint("channelId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
     grantedByUserId: bigint("grantedByUserId", {
       mode: "number",
@@ -745,13 +845,19 @@ export const webhooks = mysqlTable(
   "webhooks",
   {
     id: serial("id").primaryKey(),
-    channelId: bigint("channelId", { mode: "number", unsigned: true }).notNull(),
+    channelId: bigint("channelId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
     name: varchar("name", { length: 80 }).notNull(),
     avatarUrl: varchar("avatarUrl", { length: 500 }),
     /** sha256 of the secret token — raw token is never stored. */
     tokenHash: varchar("tokenHash", { length: 64 }).notNull(),
-    createdById: bigint("createdById", { mode: "number", unsigned: true }).notNull(),
+    createdById: bigint("createdById", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({ channelIdx: index("wh_channel_idx").on(table.channelId) }),
@@ -762,9 +868,15 @@ export const threads = mysqlTable(
   "threads",
   {
     id: serial("id").primaryKey(),
-    channelId: bigint("channelId", { mode: "number", unsigned: true }).notNull(),
+    channelId: bigint("channelId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     name: varchar("name", { length: 100 }).notNull(),
-    createdById: bigint("createdById", { mode: "number", unsigned: true }).notNull(),
+    createdById: bigint("createdById", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     private: boolean("private").default(false).notNull(),
     archivedAt: timestamp("archivedAt"),
     lockedAt: timestamp("lockedAt"),
@@ -773,14 +885,15 @@ export const threads = mysqlTable(
   (table) => ({ channelIdx: index("th_channel_idx").on(table.channelId) }),
 );
 
-
-
 // ── Embeds de links ───────────────────────────────────────────
 export const messageEmbeds = mysqlTable(
   "message_embeds",
   {
     id: serial("id").primaryKey(),
-    messageId: bigint("messageId", { mode: "number", unsigned: true }).notNull(),
+    messageId: bigint("messageId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     url: varchar("url", { length: 1000 }).notNull(),
     provider: varchar("provider", { length: 24 }).notNull(),
     type: varchar("type", { length: 16 }).default("unknown").notNull(),
@@ -812,9 +925,7 @@ export const messageEmbeds = mysqlTable(
 // ── Enquetes ──────────────────────────────────────────────────
 export const polls = mysqlTable("polls", {
   id: serial("id").primaryKey(),
-  messageId: bigint("messageId", { mode: "number", unsigned: true })
-    .notNull()
-    .unique(),
+  messageId: bigint("messageId", { mode: "number", unsigned: true }).notNull().unique(),
   question: varchar("question", { length: 300 }).notNull(),
   allowMultiple: boolean("allowMultiple").default(false).notNull(),
   expiresAt: timestamp("expiresAt"),
@@ -848,11 +959,7 @@ export const pollVotes = mysqlTable(
   },
   (table) => ({
     // Um voto por resposta por usuário — a chave garante idempotência.
-    voteUniq: uniqueIndex("poll_votes_uniq").on(
-      table.pollId,
-      table.userId,
-      table.answerId,
-    ),
+    voteUniq: uniqueIndex("poll_votes_uniq").on(table.pollId, table.userId, table.answerId),
     userIdx: index("poll_votes_user_idx").on(table.userId),
   }),
 );
@@ -862,10 +969,22 @@ export const channelFollows = mysqlTable(
   "channel_follows",
   {
     id: serial("id").primaryKey(),
-    sourceChannelId: bigint("sourceChannelId", { mode: "number", unsigned: true }).notNull(),
-    followerServerId: bigint("followerServerId", { mode: "number", unsigned: true }).notNull(),
-    targetChannelId: bigint("targetChannelId", { mode: "number", unsigned: true }).notNull(),
-    createdByUserId: bigint("createdByUserId", { mode: "number", unsigned: true }).notNull(),
+    sourceChannelId: bigint("sourceChannelId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    followerServerId: bigint("followerServerId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    targetChannelId: bigint("targetChannelId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    createdByUserId: bigint("createdByUserId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   (table) => ({
@@ -878,8 +997,7 @@ export const channelFollows = mysqlTable(
 // Server-side source of truth for account standing. The frontend may display
 // this data but never decides punishments.
 export const accountSafety = mysqlTable("account_safety", {
-  userId: bigint("userId", { mode: "number", unsigned: true })
-    .primaryKey(),
+  userId: bigint("userId", { mode: "number", unsigned: true }).primaryKey(),
   status: mysqlEnum("status", [
     "good_standing",
     "limited",
@@ -899,11 +1017,7 @@ export const accountSafety = mysqlTable("account_safety", {
   }),
   permanentBan: boolean("permanentBan").default(false).notNull(),
   /** Sensitive media preference: hide | warn | auto */
-  sensitiveMediaPref: mysqlEnum("sensitiveMediaPref", [
-    "hide",
-    "warn",
-    "auto",
-  ])
+  sensitiveMediaPref: mysqlEnum("sensitiveMediaPref", ["hide", "warn", "auto"])
     .default("warn")
     .notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -924,21 +1038,14 @@ export const violations = mysqlTable(
     /** Tipo do alvo original: message | image | profile | server | channel | user. */
     targetType: varchar("targetType", { length: 32 }),
     category: varchar("category", { length: 120 }).notNull(),
-    severity: mysqlEnum("severity", ["warning", "moderate", "severe"])
-      .default("severe")
-      .notNull(),
+    severity: mysqlEnum("severity", ["warning", "moderate", "severe"]).default("severe").notNull(),
     source: mysqlEnum("source", ["automatic_ai", "moderator", "user_report", "automod"])
       .default("automatic_ai")
       .notNull(),
     moderationModel: varchar("moderationModel", { length: 160 }),
     /** Versão da política aplicada na detecção (ex.: 2026.08.1). */
     policyVersion: varchar("policyVersion", { length: 40 }),
-    status: mysqlEnum("status", [
-      "pending_review",
-      "confirmed",
-      "false_positive",
-      "resolved",
-    ])
+    status: mysqlEnum("status", ["pending_review", "confirmed", "false_positive", "resolved"])
       .default("pending_review")
       .notNull(),
     action: mysqlEnum("action", [
@@ -952,6 +1059,12 @@ export const violations = mysqlTable(
     ])
       .default("none")
       .notNull(),
+    /** Motivo sanitizado exibido ao titular na Central de Segurança. */
+    publicReason: varchar("publicReason", { length: 500 }),
+    /** Quantos conteúdos foram afetados pela decisão agrupada. */
+    affectedContentCount: int("affectedContentCount").default(1).notNull(),
+    /** Duração escolhida pela política automática, quando houver suspensão. */
+    suspensionDays: int("suspensionDays"),
     strikeApplied: boolean("strikeApplied").default(false).notNull(),
     internalNote: text("internalNote"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -973,21 +1086,15 @@ export const violations = mysqlTable(
 
 /** Moderation state for uploaded files (images/videos). One row per file. */
 export const mediaModeration = mysqlTable("media_moderation", {
-  fileId: bigint("fileId", { mode: "number", unsigned: true })
-    .primaryKey(),
-  uploaderId: bigint("uploaderId", { mode: "number", unsigned: true }).notNull(),
-  status: mysqlEnum("status", [
-    "processing",
-    "approved",
-    "sensitive",
-    "blocked",
-    "review_required",
-  ])
+  fileId: bigint("fileId", { mode: "number", unsigned: true }).primaryKey(),
+  uploaderId: bigint("uploaderId", {
+    mode: "number",
+    unsigned: true,
+  }).notNull(),
+  status: mysqlEnum("status", ["processing", "approved", "sensitive", "blocked", "review_required"])
     .default("processing")
     .notNull(),
-  safety: mysqlEnum("safety", ["safe", "unsafe", "unknown"])
-    .default("unknown")
-    .notNull(),
+  safety: mysqlEnum("safety", ["safe", "unsafe", "unknown"]).default("unknown").notNull(),
   categories: json("categories").$type<string[]>().notNull(),
   sensitive: boolean("sensitive").default(false).notNull(),
   adultOnly: boolean("adultOnly").default(false).notNull(),
@@ -1004,7 +1111,10 @@ export const reports = mysqlTable(
   "reports",
   {
     id: serial("id").primaryKey(),
-    reporterId: bigint("reporterId", { mode: "number", unsigned: true }).notNull(),
+    reporterId: bigint("reporterId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     /** message | user | media | server | channel */
     targetType: mysqlEnum("targetType", [
       "message",
@@ -1014,7 +1124,10 @@ export const reports = mysqlTable(
       "channel",
     ]).notNull(),
     targetId: bigint("targetId", { mode: "number", unsigned: true }).notNull(),
-    reportedUserId: bigint("reportedUserId", { mode: "number", unsigned: true }),
+    reportedUserId: bigint("reportedUserId", {
+      mode: "number",
+      unsigned: true,
+    }),
     category: varchar("category", { length: 64 }).notNull(),
     subcategory: varchar("subcategory", { length: 64 }),
     description: varchar("description", { length: 1000 }),
@@ -1051,18 +1164,15 @@ export const moderationCases = mysqlTable(
     /** message | user | media | server | channel | automatic_ai */
     targetType: varchar("targetType", { length: 32 }).notNull(),
     targetId: bigint("targetId", { mode: "number", unsigned: true }),
-    reportedUserId: bigint("reportedUserId", { mode: "number", unsigned: true }),
+    reportedUserId: bigint("reportedUserId", {
+      mode: "number",
+      unsigned: true,
+    }),
     category: varchar("category", { length: 64 }).notNull(),
     priority: mysqlEnum("priority", ["low", "normal", "high", "critical"])
       .default("normal")
       .notNull(),
-    status: mysqlEnum("status", [
-      "open",
-      "under_review",
-      "confirmed",
-      "false_positive",
-      "closed",
-    ])
+    status: mysqlEnum("status", ["open", "under_review", "confirmed", "false_positive", "closed"])
       .default("open")
       .notNull(),
     /** Resultado normalizado da IA (SafetyResult) na triagem — sem conteúdo bruto. */
@@ -1108,20 +1218,109 @@ export const moderationCaseReports = mysqlTable(
   }),
 );
 
+/** Durable, idempotent second-stage visual review triggered by a report. */
+export const mediaDeepReviews = mysqlTable(
+  "media_deep_reviews",
+  {
+    id: serial("id").primaryKey(),
+    fileId: bigint("fileId", { mode: "number", unsigned: true }).notNull(),
+    caseId: bigint("caseId", { mode: "number", unsigned: true }).notNull(),
+    reportId: bigint("reportId", { mode: "number", unsigned: true }).notNull(),
+    status: mysqlEnum("status", ["queued", "processing", "completed", "failed"])
+      .default("queued")
+      .notNull(),
+    attempts: int("attempts").default(0).notNull(),
+    lastError: varchar("lastError", { length: 500 }),
+    result: json("result").$type<Record<string, unknown> | null>(),
+    model: varchar("model", { length: 160 }),
+    startedAt: timestamp("startedAt"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    reportFileUniq: uniqueIndex("mdr_report_file_uniq").on(table.reportId, table.fileId),
+    statusIdx: index("mdr_status_created_idx").on(table.status, table.createdAt),
+    caseIdx: index("mdr_case_idx").on(table.caseId),
+  }),
+);
+
+/**
+ * Revisão durável do histórico textual iniciada por uma denúncia. O escopo é
+ * congelado no momento da denúncia e processado por cursor, evitando que uma
+ * requisição HTTP fique presa ou que um restart do Render perca a análise.
+ */
+export const textHistoryReviews = mysqlTable(
+  "text_history_reviews",
+  {
+    id: serial("id").primaryKey(),
+    reportId: bigint("reportId", { mode: "number", unsigned: true }).notNull(),
+    caseId: bigint("caseId", { mode: "number", unsigned: true }).notNull(),
+    anchorMessageId: bigint("anchorMessageId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    reportedUserId: bigint("reportedUserId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    scopeType: mysqlEnum("scopeType", ["channel", "conversation"]).notNull(),
+    scopeId: bigint("scopeId", { mode: "number", unsigned: true }).notNull(),
+    status: mysqlEnum("status", ["queued", "processing", "completed", "failed"])
+      .default("queued")
+      .notNull(),
+    attempts: int("attempts").default(0).notNull(),
+    snapshotMaxMessageId: bigint("snapshotMaxMessageId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    cursorMessageId: bigint("cursorMessageId", {
+      mode: "number",
+      unsigned: true,
+    })
+      .default(0)
+      .notNull(),
+    scannedCount: int("scannedCount").default(0).notNull(),
+    removedCount: int("removedCount").default(0).notNull(),
+    categories: json("categories").$type<string[]>().notNull(),
+    violationIds: json("violationIds").$type<number[]>().notNull(),
+    enforcementViolationId: bigint("enforcementViolationId", {
+      mode: "number",
+      unsigned: true,
+    }),
+    sanction: mysqlEnum("sanction", ["none", "warning", "temporary_suspension"])
+      .default("none")
+      .notNull(),
+    suspensionDays: int("suspensionDays"),
+    publicReason: varchar("publicReason", { length: 500 }),
+    model: varchar("model", { length: 160 }),
+    lastError: varchar("lastError", { length: 500 }),
+    startedAt: timestamp("startedAt"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    reportUniq: uniqueIndex("thr_report_uniq").on(table.reportId),
+    statusIdx: index("thr_status_created_idx").on(table.status, table.createdAt),
+    scopeIdx: index("thr_scope_author_idx").on(
+      table.scopeType,
+      table.scopeId,
+      table.reportedUserId,
+    ),
+  }),
+);
+
 // ── Apelações ─────────────────────────────────────────────────
 export const appeals = mysqlTable(
   "appeals",
   {
     id: serial("id").primaryKey(),
     userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
-    violationId: bigint("violationId", { mode: "number", unsigned: true }).notNull(),
+    violationId: bigint("violationId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
     reason: varchar("reason", { length: 2000 }),
-    status: mysqlEnum("status", [
-      "submitted",
-      "under_review",
-      "approved",
-      "denied",
-    ])
+    status: mysqlEnum("status", ["submitted", "under_review", "approved", "denied"])
       .default("submitted")
       .notNull(),
     reviewNote: varchar("reviewNote", { length: 1000 }),
@@ -1160,10 +1359,7 @@ export const automodRules = mysqlTable(
       .$onUpdate(() => new Date()),
   },
   (table) => ({
-    serverTypeUniq: uniqueIndex("amr_server_type_uniq").on(
-      table.serverId,
-      table.ruleType
-    ),
+    serverTypeUniq: uniqueIndex("amr_server_type_uniq").on(table.serverId, table.ruleType),
   }),
 );
 
@@ -1244,10 +1440,7 @@ export const userConnections = mysqlTable(
       .$onUpdate(() => new Date()),
   },
   (table) => ({
-    providerUserUniq: uniqueIndex("uc_provider_user_uniq").on(
-      table.provider,
-      table.providerUserId
-    ),
+    providerUserUniq: uniqueIndex("uc_provider_user_uniq").on(table.provider, table.providerUserId),
     userIdx: index("uc_user_idx").on(table.userId, table.provider),
   }),
 );
@@ -1312,6 +1505,7 @@ export type MediaModeration = typeof mediaModeration.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type ModerationCase = typeof moderationCases.$inferSelect;
 export type ModerationCaseReport = typeof moderationCaseReports.$inferSelect;
+export type MediaDeepReview = typeof mediaDeepReviews.$inferSelect;
 export type Appeal = typeof appeals.$inferSelect;
 export type AutomodRule = typeof automodRules.$inferSelect;
 export type SafetyAuditEvent = typeof safetyAuditEvents.$inferSelect;

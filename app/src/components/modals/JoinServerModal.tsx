@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,18 +20,7 @@ export function JoinServerModal({
   onOpenChange: (v: boolean) => void;
 }) {
   const navigate = useNavigate();
-  const utils = trpc.useUtils();
   const [code, setCode] = useState("");
-
-  const join = trpc.server.joinByCode.useMutation({
-    onSuccess: async (data) => {
-      await utils.server.list.invalidate();
-      onOpenChange(false);
-      setCode("");
-      navigate(`/channels/${data.serverId}/first`);
-    },
-    onError: (e) => toast.error(e.message),
-  });
 
   const extractCode = (value: string) => {
     // Accept both raw codes and full invite URLs
@@ -55,7 +43,13 @@ export function JoinServerModal({
           onSubmit={(e) => {
             e.preventDefault();
             const c = extractCode(code);
-            if (c) join.mutate({ code: c });
+            if (c) {
+              onOpenChange(false);
+              setCode("");
+              navigate(`/invite/${c}`);
+            } else {
+              toast.error("Informe um código de convite válido.");
+            }
           }}
         >
           <div className="space-y-2">
@@ -68,8 +62,8 @@ export function JoinServerModal({
               required
             />
           </div>
-          <Button type="submit" className="w-full" disabled={join.isPending}>
-            {join.isPending ? "Entrando..." : "Entrar no servidor"}
+          <Button type="submit" className="w-full">
+            Revisar convite
           </Button>
         </form>
       </DialogContent>

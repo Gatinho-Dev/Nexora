@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
@@ -6,12 +6,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Users } from "lucide-react";
+import { Seo } from "@/lib/seo";
 
 export function InvitePage() {
   const params = useParams();
   const navigate = useNavigate();
   const code = params.code ?? "";
   const { user, isLoading: authLoading } = useAuth();
+  const [acceptedRules, setAcceptedRules] = useState(false);
 
   const info = trpc.server.getInviteInfo.useQuery(
     { code },
@@ -55,6 +57,7 @@ export function InvitePage() {
 
   return (
     <main className="flex h-[100dvh] items-center justify-center bg-chat p-4 text-white">
+      <Seo noindex canonicalPath="/invite" />
       <Card className="w-full max-w-sm border-black/20 bg-sidebar text-center text-white shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
         <CardHeader>
           <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#5865F2] text-2xl font-bold text-white">
@@ -96,6 +99,18 @@ export function InvitePage() {
                   {info.data.server.description}
                 </p>
               )}
+              {!info.data.alreadyMember && info.data.server.rulesEnabled && (info.data.server.rules?.length ?? 0) > 0 && (
+                <div className="rounded-xl border border-white/10 bg-black/15 p-3 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Regras do servidor</p>
+                  <ol className="mt-2 space-y-1.5 pl-5 text-sm text-muted-foreground">
+                    {info.data.server.rules?.map((rule, index) => <li key={`${index}-${rule}`} className="list-decimal">{rule}</li>)}
+                  </ol>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm">
+                    <input type="checkbox" checked={acceptedRules} onChange={event => setAcceptedRules(event.target.checked)} className="mt-0.5 size-4 accent-[#4654d8]" />
+                    <span>Li e aceito seguir estas regras.</span>
+                  </label>
+                </div>
+              )}
               {info.data.alreadyMember ? (
                 <Button
                   className="w-full"
@@ -108,8 +123,8 @@ export function InvitePage() {
               ) : (
                 <Button
                   className="w-full"
-                  onClick={() => join.mutate({ code })}
-                  disabled={join.isPending}
+                  onClick={() => join.mutate({ code, acceptedRules })}
+                  disabled={join.isPending || Boolean(info.data.server.rulesEnabled && (info.data.server.rules?.length ?? 0) > 0 && !acceptedRules)}
                 >
                   {join.isPending ? "Entrando..." : "Aceitar convite"}
                 </Button>

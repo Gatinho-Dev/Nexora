@@ -145,14 +145,14 @@ export function AccountStanding({
         <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-faint">
           Infrações da conta · {safety.severeStrikes} / {safety.maxSevereStrikes} graves confirmadas
         </p>
-        {violations.filter(v => v.strikeApplied || v.status === "pending_review").length === 0 ? (
+        {violations.filter(v => v.status === "confirmed" || v.status === "pending_review").length === 0 ? (
           <p className="rounded-lg bg-white/[0.04] px-3 py-2.5 text-xs text-muted2">
             Nenhuma infração ativa. Continue seguindo nossas Diretrizes da Comunidade.
           </p>
         ) : (
           <ul className="space-y-2">
             {violations
-              .filter(v => v.strikeApplied || v.status === "pending_review")
+              .filter(v => v.status === "confirmed" || v.status === "pending_review")
               .map(v => (
                 <li key={v.id}>
                   <ViolationCard violation={v} />
@@ -393,9 +393,18 @@ export function ViolationCard({ violation }: { violation: SafetyViolationDTO }) 
         <dt className="font-semibold text-faint">Data:</dt>
         <dd>{new Date(violation.createdAt).toLocaleDateString("pt-BR")}</dd>
         <dt className="font-semibold text-faint">Motivo:</dt>
-        <dd>{violation.category === "manual_moderator_action" ? "Decisão da moderação" : severeLabel}</dd>
+        <dd>{violation.publicReason ?? (violation.category === "manual_moderator_action" ? "Decisão da moderação" : severeLabel)}</dd>
         <dt className="font-semibold text-faint">Ação:</dt>
-        <dd>{ACTION_LABELS[violation.action]}</dd>
+        <dd>
+          {ACTION_LABELS[violation.action]}
+          {violation.suspensionDays ? ` (${violation.suspensionDays} dia(s))` : ""}
+        </dd>
+        {(violation.affectedContentCount ?? 0) > 1 && (
+          <>
+            <dt className="font-semibold text-faint">Conteúdos removidos:</dt>
+            <dd>{violation.affectedContentCount}</dd>
+          </>
+        )}
         <dt className="font-semibold text-faint">Status:</dt>
         <dd>{STATUS_LABELS[violation.status]}</dd>
       </dl>

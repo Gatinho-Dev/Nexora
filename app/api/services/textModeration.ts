@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { getDb } from "../queries/connection";
 import * as schema from "@db/schema";
 import { SafetyService } from "./safety/safetyService";
-import type { SafetyResult } from "./safety/safetyParser";
+import type { SafetyCategory, SafetyResult } from "./safety/safetyParser";
 import { env } from "../lib/env";
 import { handleSevereViolation } from "./accountSafety";
 import {
@@ -63,11 +63,8 @@ async function removeViolatingMessage(
   // Placeholder público: conteúdo original NUNCA volta ao cliente.
   await db
     .update(schema.messages)
-    .set({ content: "", tag: "removed" })
+    .set({ tag: "removed" })
     .where(eq(schema.messages.id, messageId));
-  await db
-    .delete(schema.messageReactions)
-    .where(eq(schema.messageReactions.messageId, messageId));
 
   const rows = await db
     .select()
@@ -108,6 +105,57 @@ export function decideTextAction(result: SafetyResult): {
   if (result.categories.includes("sexual_minor")) return { action: "remove_and_suspend" };
   if (!result.safe) return { action: "review" };
   return { action: "allow" };
+}
+
+export type ReportedTextDecision =
+  | { action: "no_violation" }
+  | { action: "manual_review" }
+  | { action: "remove_and_warn"; category: string }
+  | { action: "remove_and_suspend"; category: string };
+
+export function decideReportedTextAction(result: SafetyResult): ReportedTextDecision {
+  if (result.safe) return { action: "no_violation" };
+  // A single user report must not be enough to suspend another account on a
+  // probabilistic classification. Keep automatic suspension limited to the
+  // already established child-safety path; other unsafe categories are still
+  // removed and recorded as warnings for staff escalation or appeal.
+  const severe: SafetyCategory[] = ["sexual_minor"];
+  const severeCategory = severe.find(c => result.categories.includes(c));
+  if (severeCategory) return { action: "remove_and_suspend", category: severeCategory };
+  const warning: SafetyCategory[] = ["threat", "hate", "graphic_violence", "criminal", "harassment", "sexual", "violence", "privacy", "scam", "spam", "malware", "regulated_goods", "profanity"];
+  const warningCategory = warning.find(c => result.categories.includes(c));
+  return warningCategory ? { action: "remove_and_warn", category: warningCategory } : { action: "manual_review" };
+}
+
+export async function applyReportedTextDecision(input: { messageId: number; authorId: number; result: SafetyResult }): Promise<{ action: ReportedTextDecision["action"]; violationId: number | null }> {
+  const decision = decideReportedTextAction(input.result);
+  if (decision.action === "no_violation" || decision.action === "manual_review") return { action: decision.action, violationId: null };
+  if (decision.action === "remove_and_suspend" && !env.automaticSevereSuspensionEnabled) return { action: "manual_review", violationId: null };
+
+  let violationId: number | null = null;
+  if (decision.action === "remove_and_suspend") {
+    violationId = await handleSevereViolation({ userId: input.authorId, messageId: input.messageId, targetType: "message", category: decision.category, model: input.result.model, policyVersion: env.safetyPolicyVersion, source: "user_report" });
+  } else {
+    try {
+      const inserted = await getDb().insert(schema.violations).values({ userId: input.authorId, messageId: input.messageId, targetType: "message", category: decision.category, severity: "warning", source: "user_report", moderationModel: input.result.model, policyVersion: env.safetyPolicyVersion, status: "confirmed", action: "warning", strikeApplied: false, internalNote: "Ação automática auditável após denúncia e classificação de segurança." }).$returningId();
+      violationId = Number(Object.values(inserted[0] ?? {})[0] ?? 0);
+    } catch {
+      // Idempotência is verified below by resolving the existing occurrence.
+    }
+  }
+  if (!violationId) {
+    const [existing] = await getDb().select({ id: schema.violations.id }).from(schema.violations).where(and(eq(schema.violations.messageId, input.messageId), eq(schema.violations.category, decision.category))).limit(1);
+    violationId = existing?.id ?? null;
+  }
+  if (!violationId) throw new Error("Não foi possível registrar a ação automática.");
+  await removeMessageForModeration(input.messageId, input.authorId);
+  await logSafetyEvent({ event: "reported_text_auto_action", targetUserId: input.authorId, violationId, metadata: { messageId: input.messageId, action: decision.action, category: decision.category } });
+  return { action: decision.action, violationId };
+}
+
+export async function restoreMessageAfterFalsePositive(messageId: number, dismissedViolationId: number): Promise<void> {
+  const [other] = await getDb().select({ id: schema.violations.id }).from(schema.violations).where(and(eq(schema.violations.messageId, messageId), ne(schema.violations.id, dismissedViolationId), inArray(schema.violations.status, ["pending_review", "confirmed"]))).limit(1);
+  if (!other) await getDb().update(schema.messages).set({ tag: null }).where(eq(schema.messages.id, messageId));
 }
 
 /** Ponto de entrada: analisa uma mensagem recém-publicada (fire-and-forget). */

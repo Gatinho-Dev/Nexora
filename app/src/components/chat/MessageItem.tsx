@@ -966,6 +966,7 @@ function SpoilerableImage({
             : att.moderationStatus
         }
         adultOnly={att.adultOnly}
+        allowReveal={att.allowReveal}
         pref={mediaPref}
       />
     );

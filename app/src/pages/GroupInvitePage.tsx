@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Users } from "lucide-react";
 import { GroupAvatar } from "@/components/groups/GroupAvatar";
+import { Seo } from "@/lib/seo";
 
 /**
  * Entrada por link de convite de grupo (itens 19-20).
@@ -47,6 +48,7 @@ export function GroupInvitePage() {
 
   return (
     <main className="flex h-[100dvh] items-center justify-center bg-chat p-4 text-white">
+      <Seo noindex canonicalPath="/invite/group" />
       <Card className="w-full max-w-sm border-black/20 bg-sidebar text-center text-white shadow-[0_24px_64px_rgba(0,0,0,0.34)]">
         <CardHeader>
           <div className="mx-auto mb-3">
