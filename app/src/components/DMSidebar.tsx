@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useMemo, useState } from "react";
-import { BadgeCheck, Inbox, Plus, Search, ShieldCheck, Users } from "lucide-react";
+import { BadgeCheck, Inbox, Plus, ShieldCheck, Users } from "lucide-react";
 import type { ConversationDTO } from "@contracts/types";
 import { trpc } from "@/providers/trpc";
 import { UserPanel } from "./UserPanel";
@@ -54,28 +54,33 @@ export function DMSidebar({
   return (
     <aside
       aria-label="Navegação privada"
-      className="flex h-full w-[260px] shrink-0 flex-col border-r border-border bg-sidebar select-none"
+      className="flex h-full w-60 shrink-0 flex-col border-r border-black/20 bg-sidebar select-none"
     >
-      <div className="border-b border-border p-2.5">
+      <div className="flex h-12 items-center gap-2 border-b border-white/5 px-3">
+        <button
+          onClick={() => navigate("/channels/@me")}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
+            friendsActive
+              ? "bg-act text-foreground"
+              : "text-muted2 hover:bg-hov hover:text-bodyx",
+          )}
+        >
+          <Users className="h-4 w-4" /> Amigos
+        </button>
         <button
           type="button"
-          onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))}
-          className="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-[hsl(var(--input))] px-3 text-left text-xs font-medium text-muted2 transition-colors hover:border-primary/40 hover:text-foreground"
-          aria-label="Encontre ou comece uma conversa"
+          onClick={() => setNewMessageOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-muted2 transition-colors hover:bg-hov hover:text-bodyx"
+          aria-label="Nova mensagem"
+          title="Nova mensagem"
         >
-          <Search className="h-3.5 w-3.5 text-faint" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">Encontre ou comece uma conversa</span>
-          <kbd className="hidden rounded border border-border px-1.5 py-0.5 text-[9px] text-faint xl:inline">Ctrl K</kbd>
+          <Plus className="h-4 w-4" />
+          <span className="hidden xl:inline">Nova</span>
         </button>
       </div>
 
       <nav className="space-y-0.5 px-2 py-2" aria-label="Área privada">
-        <PrivateNavItem
-          icon={<Users />}
-          label="Amigos"
-          active={friendsActive}
-          onClick={() => navigate("/channels/@me/friends")}
-        />
         <PrivateNavItem
           icon={<Inbox />}
           label="Solicitações de mensagens"
@@ -118,7 +123,7 @@ export function DMSidebar({
         )}
       </nav>
 
-      <div className="flex min-h-0 flex-1 flex-col border-t border-border/70">
+      <div className="flex min-h-0 flex-1 flex-col border-t border-white/5">
         <div className="flex h-9 shrink-0 items-center justify-between px-3.5 pt-1">
           <span className="text-[11px] font-semibold text-faint">Mensagens diretas</span>
           <button

@@ -40,7 +40,7 @@ export function ServerRail({
   return (
     <nav
       aria-label="Comunidades"
-      className="z-20 flex w-16 shrink-0 select-none flex-col items-center gap-2 overflow-y-auto border-r border-border bg-rail py-3"
+      className="w-[72px] shrink-0 bg-rail flex flex-col items-center py-3 gap-2 overflow-y-auto z-20 border-r border-black/20 select-none"
     >
       <TooltipProvider delayDuration={100}>
         {/* Nexora Home button */}
@@ -53,7 +53,7 @@ export function ServerRail({
           <NexoraAppIcon className="h-full w-full" decorative />
         </RailButton>
 
-        <div className="my-1 h-px w-7 bg-border" />
+        <div className="w-8 h-[2px] rounded-full bg-white/10 my-1" />
 
         {/* Servers */}
         {servers?.map(server => (
@@ -76,7 +76,7 @@ export function ServerRail({
                 className="h-full w-full object-cover"
               />
             ) : (
-              <span className="text-xs font-semibold tracking-wide text-foreground">
+              <span className="font-semibold text-sm tracking-wide text-white/90">
                 {server.name.slice(0, 2).toUpperCase()}
               </span>
             )}
@@ -134,14 +134,14 @@ function RailButton({
       {/* Left indicator bar */}
       <div
         className={cn(
-          "absolute -left-2.5 w-1 rounded-r-full bg-[var(--dm-unread-indicator)] transition-[height,opacity] duration-200",
+          "absolute -left-3 w-1 rounded-r-full bg-white transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-200",
           active
-            ? "h-8"
+            ? "h-10 bg-white"
             : hovered
-              ? "h-4 opacity-80"
+              ? "h-5 bg-white/80"
               : hasUnread
-                ? "h-2 opacity-70"
-                : "h-0 opacity-0"
+                ? "h-2 bg-white/60"
+                : "h-0 bg-transparent"
         )}
       />
 
@@ -159,15 +159,21 @@ function RailButton({
               "transition-[border-radius,background-color,color,transform,box-shadow] [transition-duration:350ms]",
               "[transition-timing-function:cubic-bezier(0.215,0.61,0.355,1)]",
               active
-                ? "bg-primary text-primary-foreground"
+                ? "rounded-[16px] bg-[#5865F2] text-white"
                 : actionType === "add" || actionType === "explore"
-                  ? "bg-chat text-primary hover:rounded-[11px] hover:bg-primary hover:text-primary-foreground"
-                  : "bg-chat text-foreground hover:rounded-[11px] hover:bg-primary hover:text-primary-foreground"
+                  ? cn(
+                      "bg-chat text-[#23A559] hover:bg-[#23A559] hover:text-white",
+                      hovered ? "rounded-full" : "rounded-[16px]",
+                    )
+                  : cn(
+                      "bg-chat text-foreground hover:bg-[#5865F2] hover:text-white",
+                      hovered ? "rounded-full" : "rounded-[16px]",
+                    )
             )}
           >
             {children}
             {badge !== undefined && badge > 0 && (
-              <span className="absolute -bottom-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-rail bg-[var(--mention-badge)] px-1.5 text-[11px] font-bold text-white">
+              <span className="absolute -bottom-1 -right-1 h-5 min-w-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-bold flex items-center justify-center border-2 border-rail shadow-md">
                 {badge > 99 ? "99+" : badge}
               </span>
             )}
@@ -175,7 +181,7 @@ function RailButton({
         </TooltipTrigger>
         <TooltipContent
           side="right"
-          className="border-border bg-popover font-medium text-popover-foreground"
+          className="bg-popover text-popover-foreground border-black/20 font-medium shadow-xl"
         >
           {label}
         </TooltipContent>

@@ -3,8 +3,6 @@ import { useNavigate } from "react-router";
 import {
   Ban,
   Check,
-  CircleHelp,
-  Info,
   MessageSquare,
   MoreHorizontal,
   Search,
@@ -34,9 +32,9 @@ import { cn } from "@/lib/utils";
 type Tab = "online" | "all" | "pending" | "blocked" | "add";
 
 const tabs: { id: Tab; label: string }[] = [
-  { id: "online", label: "Disponível" },
   { id: "all", label: "Todos" },
-  { id: "pending", label: "Pendente" },
+  { id: "online", label: "Online" },
+  { id: "pending", label: "Pendentes" },
   { id: "blocked", label: "Bloqueados" },
   { id: "add", label: "Adicionar amigo" },
 ];
@@ -47,7 +45,7 @@ export function FriendsPanel({
   onOpenProfile?: (userId: number) => void;
 }) {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("online");
+  const [tab, setTab] = useState<Tab>("all");
   const [search, setSearch] = useState("");
   const friends = trpc.friend.list.useQuery();
   const presence = useAppStore(state => state.presence);
@@ -152,14 +150,10 @@ export function FriendsPanel({
 
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-chat text-foreground">
-      <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-border/80 px-3 md:px-5">
-        <div className="mr-1 hidden items-center gap-2 border-r border-border pr-4 text-sm font-bold sm:flex">
-          <Users className="h-5 w-5 text-primary" aria-hidden="true" />
-          Amigos
-        </div>
+      <header className="flex h-12 shrink-0 items-center gap-2 overflow-x-auto border-b border-black/20 px-4">
         <nav
           aria-label="Categorias de amigos"
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-2"
+          className="flex min-w-0 flex-1 items-center gap-1"
         >
           {tabs.map(item => (
             <button
@@ -167,7 +161,7 @@ export function FriendsPanel({
               type="button"
               onClick={() => setTab(item.id)}
               className={cn(
-                "relative shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "relative shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tab === item.id
                   ? item.id === "add"
                     ? "bg-primary text-primary-foreground"
@@ -186,24 +180,14 @@ export function FriendsPanel({
             </button>
           ))}
         </nav>
-        <button
-          type="button"
-          onClick={() => toast.info("Use a busca e os filtros para organizar seus contatos.")}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted2 transition-colors hover:bg-hov hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Ajuda sobre amigos"
-          title="Ajuda"
-        >
-          <CircleHelp className="h-4 w-4" />
-        </button>
       </header>
 
       {tab === "add" ? (
         <AddFriend onDone={() => setTab("pending")} />
       ) : (
         <div className="flex min-h-0 flex-1">
-          <section className="min-w-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
-            <InfoBanner />
-            <label className="relative mt-4 block max-w-3xl">
+          <section className="min-w-0 flex-1 overflow-y-auto p-6">
+            <label className="relative mx-auto block max-w-2xl">
               <span className="sr-only">Buscar amigos</span>
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted2"
@@ -227,7 +211,7 @@ export function FriendsPanel({
               )}
             </label>
 
-            <div className="mt-5 max-w-3xl">
+            <div className="mx-auto mt-5 max-w-2xl">
               <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint">
                 {tabs.find(item => item.id === tab)?.label} · {visibleFriends.length}
               </p>
@@ -281,44 +265,9 @@ export function FriendsPanel({
             </div>
           </section>
 
-          <ActiveNowPanel
-            friends={online}
-            onMessage={userId => openDm.mutate({ userId })}
-            onOpenProfile={onOpenProfile}
-          />
         </div>
       )}
     </main>
-  );
-}
-
-function InfoBanner() {
-  const [visible, setVisible] = useState(
-    () => localStorage.getItem("nexora:friends-info-dismissed") !== "1",
-  );
-  if (!visible) return null;
-  return (
-    <div className="relative flex max-w-3xl gap-3 rounded-xl border border-primary/25 bg-primary/[0.07] px-4 py-3 pr-11 text-sm">
-      <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-      <div>
-        <p className="font-semibold text-foreground">Seu espaço de contatos</p>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted2">
-          Encontre quem está disponível, retome conversas e gerencie pedidos sem
-          sair da sua caixa privada.
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={() => {
-          localStorage.setItem("nexora:friends-info-dismissed", "1");
-          setVisible(false);
-        }}
-        className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-md text-muted2 hover:bg-primary/10 hover:text-foreground"
-        aria-label="Fechar aviso"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
   );
 }
 
@@ -490,74 +439,6 @@ function FriendRow({
         )}
       </div>
     </article>
-  );
-}
-
-function ActiveNowPanel({
-  friends,
-  onMessage,
-  onOpenProfile,
-}: {
-  friends: FriendDTO[];
-  onMessage: (userId: number) => void;
-  onOpenProfile?: (userId: number) => void;
-}) {
-  return (
-    <aside className="hidden w-[292px] shrink-0 border-l border-border/80 px-5 py-6 xl:block">
-      <h2 className="text-sm font-bold text-foreground">Ativos agora</h2>
-      {friends.length === 0 ? (
-        <div className="mt-12 text-center">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
-            <Users className="h-5 w-5" />
-          </div>
-          <p className="mt-3 text-sm font-semibold">Tudo tranquilo por aqui</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted2">
-            Atividades de amigos disponíveis aparecem neste painel.
-          </p>
-        </div>
-      ) : (
-        <div className="mt-4 space-y-2">
-          {friends.slice(0, 8).map(friend => {
-            const name = friend.user.name ?? friend.user.username ?? "Usuário";
-            return (
-              <article
-                key={friend.friendshipId}
-                className="rounded-xl border border-border bg-card/70 p-3 transition-colors hover:border-primary/30"
-              >
-                <div className="flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => onOpenProfile?.(friend.user.id)}
-                    className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label={`Ver perfil de ${name}`}
-                  >
-                    <Avatar
-                      userId={friend.user.id}
-                      name={name}
-                      src={friend.user.avatar}
-                      size="sm"
-                      showStatus
-                    />
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold">{name}</p>
-                    <RobloxActivityInline userId={friend.user.id} />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onMessage(friend.user.id)}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted2 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label={`Conversar com ${name}`}
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
-    </aside>
   );
 }
 

@@ -9,6 +9,8 @@ import { env } from "./lib/env";
 
 const pool = mysql.createPool(env.databaseUrl);
 
+const PRIVATE_INBOX_MIGRATION = "0018_private_inbox_preferences.sql";
+const PRIVATE_INBOX_MIGRATION_TIMESTAMP = 1788399600000;
 const SERVER_SETTINGS_MIGRATION = "0019_server_settings_control_center.sql";
 const SERVER_SETTINGS_MIGRATION_TIMESTAMP = 1788486000000;
 
@@ -47,6 +49,102 @@ async function ensureColumn(tableName: string, columnName: string, definition: s
 async function ensureIndex(tableName: string, indexName: string, columns: string) {
   if (!await indexExists(tableName, indexName)) {
     await pool.query(`CREATE INDEX \`${indexName}\` ON \`${tableName}\` (${columns})`);
+  }
+}
+
+async function ensureUniqueIndex(tableName: string, indexName: string, columns: string) {
+  if (!await indexExists(tableName, indexName)) {
+    await pool.query(`CREATE UNIQUE INDEX \`${indexName}\` ON \`${tableName}\` (${columns})`);
+  }
+}
+
+/**
+ * The private-inbox SQL file was added after newer migrations had already been
+ * recorded in production. Drizzle orders migrations by timestamp, so those
+ * databases can legitimately skip 0018 and leave dm.list querying a table that
+ * does not exist. Reconcile the required schema before the application starts.
+ */
+async function recoverPrivateInboxMigration(migrationsFolder: string) {
+  if (!await tableExists("__drizzle_migrations")) return;
+
+  const migrationPath = path.join(migrationsFolder, PRIVATE_INBOX_MIGRATION);
+  const migrationHash = createHash("sha256")
+    .update(await readFile(migrationPath))
+    .digest("hex");
+  const migrationApplied = await queryExists(
+    "SELECT 1 FROM __drizzle_migrations WHERE hash = ? LIMIT 1",
+    [migrationHash],
+  );
+
+  // These columns belong to the conversation model consumed by dm.list. Keep
+  // them here as well because an interrupted older group migration can leave
+  // the table usable for basic DMs but incompatible with the current query.
+  await ensureColumn("conversation_members", "role", "enum('owner','admin','member') NOT NULL DEFAULT 'member'");
+  await ensureColumn("conversation_members", "nickname", "varchar(64)");
+  await ensureColumn("conversation_members", "mutedUntil", "timestamp NULL");
+  await ensureColumn("conversation_members", "notificationLevel", "enum('all','mentions','muted') NOT NULL DEFAULT 'all'");
+
+  if (!await tableExists("conversation_preferences")) {
+    await pool.query(`CREATE TABLE \`conversation_preferences\` (
+      \`id\` serial AUTO_INCREMENT NOT NULL,
+      \`conversationId\` bigint unsigned NOT NULL,
+      \`userId\` bigint unsigned NOT NULL,
+      \`pinnedAt\` timestamp NULL,
+      \`hiddenAt\` timestamp NULL,
+      \`mutedUntil\` timestamp NULL,
+      \`mutedForever\` boolean NOT NULL DEFAULT false,
+      \`requestState\` enum('pending','accepted','ignored','spam'),
+      \`privateNote\` text,
+      \`friendNickname\` varchar(64),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE NOW(),
+      CONSTRAINT \`conversation_preferences_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`cp_user_conversation_uniq\` UNIQUE(\`userId\`,\`conversationId\`)
+    )`);
+  }
+  await ensureColumn("conversation_preferences", "pinnedAt", "timestamp NULL");
+  await ensureColumn("conversation_preferences", "hiddenAt", "timestamp NULL");
+  await ensureColumn("conversation_preferences", "mutedUntil", "timestamp NULL");
+  await ensureColumn("conversation_preferences", "mutedForever", "boolean NOT NULL DEFAULT false");
+  await ensureColumn("conversation_preferences", "requestState", "enum('pending','accepted','ignored','spam')");
+  await ensureColumn("conversation_preferences", "privateNote", "text");
+  await ensureColumn("conversation_preferences", "friendNickname", "varchar(64)");
+  await ensureColumn("conversation_preferences", "updatedAt", "timestamp NOT NULL DEFAULT (now()) ON UPDATE NOW()");
+  if (!await indexExists("conversation_preferences", "cp_user_conversation_uniq")) {
+    await pool.query(`DELETE older FROM \`conversation_preferences\` older
+      INNER JOIN \`conversation_preferences\` newer
+        ON older.\`userId\` = newer.\`userId\`
+        AND older.\`conversationId\` = newer.\`conversationId\`
+        AND older.\`id\` < newer.\`id\``);
+  }
+  await ensureUniqueIndex("conversation_preferences", "cp_user_conversation_uniq", "`userId`,`conversationId`");
+  await ensureIndex("conversation_preferences", "cp_user_pinned_idx", "`userId`,`pinnedAt`");
+
+  if (await tableExists("channel_reads")) {
+    const needsChannelIndex = !await indexExists("channel_reads", "cr_user_channel_uniq");
+    const needsConversationIndex = !await indexExists("channel_reads", "cr_user_conversation_uniq");
+    if (needsChannelIndex || needsConversationIndex) {
+      await pool.query(`DELETE older FROM \`channel_reads\` older
+        INNER JOIN \`channel_reads\` newer
+          ON older.\`userId\` = newer.\`userId\`
+          AND (
+            (older.\`channelId\` IS NOT NULL AND older.\`channelId\` = newer.\`channelId\`)
+            OR (older.\`conversationId\` IS NOT NULL AND older.\`conversationId\` = newer.\`conversationId\`)
+          )
+          AND (
+            older.\`lastReadMessageId\` < newer.\`lastReadMessageId\`
+            OR (older.\`lastReadMessageId\` = newer.\`lastReadMessageId\` AND older.\`id\` < newer.\`id\`)
+          )`);
+    }
+    await ensureUniqueIndex("channel_reads", "cr_user_channel_uniq", "`userId`,`channelId`");
+    await ensureUniqueIndex("channel_reads", "cr_user_conversation_uniq", "`userId`,`conversationId`");
+  }
+
+  if (!migrationApplied) {
+    await pool.query(
+      "INSERT INTO __drizzle_migrations (`hash`, `created_at`) VALUES (?, ?)",
+      [migrationHash, PRIVATE_INBOX_MIGRATION_TIMESTAMP],
+    );
+    console.log("[database] Recovered skipped private inbox migration.");
   }
 }
 
@@ -149,11 +247,9 @@ try {
     new URL("./migrations", import.meta.url)
   );
 
+  await recoverPrivateInboxMigration(migrationsFolder);
   await recoverIncompleteServerSettingsMigration(migrationsFolder);
-  await migrate(db, { 
-  migrationsFolder, 
-  baseline: "0004_account_safety_moderation" 
-});
+  await migrate(db, { migrationsFolder });
   console.log("[database] Migrations are up to date.");
 } finally {
   await pool.end();
