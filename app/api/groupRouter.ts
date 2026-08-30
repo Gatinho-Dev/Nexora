@@ -831,7 +831,10 @@ export const groupRouter = createRouter({
         RateLimits.reaction.windowMs,
       );
       const { role } = await requireGroupAccess(ctx.user.id, input.conversationId);
-      if (!canModeratePin(role)) {
+      const conversation = await getDb().query.conversations.findFirst({
+        where: eq(schema.conversations.id, input.conversationId),
+      });
+      if (conversation?.isGroup && !canModeratePin(role)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Somente administradores podem fixar mensagens.",
@@ -866,7 +869,10 @@ export const groupRouter = createRouter({
     .input(z.object({ conversationId: z.number(), messageId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const { role } = await requireGroupAccess(ctx.user.id, input.conversationId);
-      if (!canModeratePin(role)) {
+      const conversation = await getDb().query.conversations.findFirst({
+        where: eq(schema.conversations.id, input.conversationId),
+      });
+      if (conversation?.isGroup && !canModeratePin(role)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Somente administradores podem remover fixações.",

@@ -153,6 +153,7 @@ export function MessageInput({
   const [uploading, setUploading] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [toolbarVisible, setToolbarVisible] = useState(false);
+  const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -230,7 +231,6 @@ export function MessageInput({
       }
     }, 0);
     return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey]);
 
   const saveDraft = (value: string) => {
@@ -263,6 +263,30 @@ export function MessageInput({
     }
   };
 
+  // ── Selection detection for Markdown toolbar ──────────────────
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    const updateSelection = () => {
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      if (start !== end) {
+        setSelection({ start, end });
+      } else {
+        setSelection(null);
+      }
+    };
+
+    el.addEventListener("selectionchange", updateSelection);
+    // Initial check
+    updateSelection();
+
+    return () => {
+      el.removeEventListener("selectionchange", updateSelection);
+    };
+  }, []);
+
   // ── Upload com progresso (XHR) ──────────────────────────────
   const [uploadingItems, setUploadingItems] = useState<
     { tempId: number; name: string; progress: number; xhr: XMLHttpRequest }[]
@@ -288,8 +312,20 @@ export function MessageInput({
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+    // Measuring `scrollHeight` inside the picker row can inherit its temporary
+    // Suspense height. Estimate visual lines from the actual input width so an
+    // empty composer always remains compact and long drafts still expand.
+    const charsPerLine = Math.max(24, Math.floor((el.clientWidth || 320) / 8));
+    const visualLines = Math.max(
+      1,
+      text
+        .split("\n")
+        .reduce(
+          (total, line) => total + Math.max(1, Math.ceil(line.length / charsPerLine)),
+          0,
+        ),
+    );
+    el.style.height = `${Math.min(192, 36 + (visualLines - 1) * 20)}px`;
   }, [text]);
 
   // Focus on reply
@@ -893,6 +929,9 @@ export function MessageInput({
       window.removeEventListener("dragleave", handleDragLeave);
       window.removeEventListener("drop", handleDrop);
     };
+    // Global drag listeners are registered once; uploadFiles only uses stable
+    // refs, state setters and configuration for the lifetime of this composer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Audio recording ─────────────────────────────────────────
@@ -1285,7 +1324,7 @@ export function MessageInput({
       )}
 
       {/* Markdown formatting toolbar */}
-      {toolbarVisible && !recording && !recordedUrl && (
+      {selection && !recording && !recordedUrl && (
         <div
           className="mb-1 flex flex-wrap items-center gap-0.5 rounded-t-lg bg-sidebar px-2 py-1"
           role="toolbar"
@@ -1381,7 +1420,7 @@ export function MessageInput({
       ) : (
         <div
           className={cn(
-            "relative flex min-h-11 items-end gap-1.5 rounded-lg bg-[#383A40] border border-transparent px-3.5 py-2 transition-colors focus-within:border-[#5865F2]",
+            "relative flex min-h-11 items-end gap-1.5 rounded-lg border border-transparent bg-input px-3.5 py-2 transition-colors focus-within:border-primary",
             (replyingTo || files.length > 0 || toolbarVisible) &&
               "rounded-t-none border-t-0"
           )}
@@ -1503,7 +1542,7 @@ export function MessageInput({
           <textarea
             ref={textareaRef}
             rows={1}
-            className="flex-1 bg-transparent outline-none resize-none text-sm text-bodyx py-1.5 max-h-48 placeholder:text-faint disabled:opacity-50"
+            className="min-h-9 max-h-48 flex-1 resize-none bg-transparent py-1.5 text-sm text-bodyx outline-none placeholder:text-faint disabled:opacity-50"
             placeholder={
               pendingCommand
                 ? pendingCommand.args?.[0]?.placeholder ?? "Argumentos do comando…"
@@ -1627,7 +1666,7 @@ export function MessageInput({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="p-1.5 text-[#5865F2] hover:text-[#5865F2] transition-colors disabled:opacity-40"
+                    className="p-1.5 text-primary transition-colors hover:text-primary/80 disabled:opacity-40"
                     disabled={disabled || send.isPending || uploading}
                     onClick={doSend}
                   >

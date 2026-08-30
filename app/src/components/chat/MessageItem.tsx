@@ -35,6 +35,7 @@ import {
   MoreHorizontal,
   Copy,
   Play,
+  Pin,
   Flag,
   type LucideIcon,
 } from "lucide-react";
@@ -92,6 +93,7 @@ type Props = {
   grouped: boolean;
   myId: number;
   canManageMessages: boolean;
+  canPinMessages?: boolean;
   onJumpTo: (messageId: number) => void;
   onOpenProfile?: (userId: number) => void;
 };
@@ -101,6 +103,7 @@ function MessageItemBase({
   grouped,
   myId,
   canManageMessages,
+  canPinMessages = false,
   channelType,
   canPublish,
   onJumpTo,
@@ -141,6 +144,17 @@ function MessageItemBase({
     onSuccess: r =>
       toast.success(`Publicado em ${r.published} servidor(es) seguidor(es).`),
     onError: e => toast.error(e.message),
+  });
+  const pinMessage = trpc.group.pinMessage.useMutation({
+    onSuccess: () => {
+      if (message.conversationId) {
+        void utils.group.listPins.invalidate({
+          conversationId: message.conversationId,
+        });
+      }
+      toast.success("Mensagem fixada.");
+    },
+    onError: error => toast.error(error.message),
   });
 
   const isMine = message.authorId === myId;
@@ -232,7 +246,7 @@ function MessageItemBase({
           onClick={() => onJumpTo(message.replyTo!.id)}
           aria-label="Ir para a mensagem respondida"
         >
-          <CornerUpLeft className="h-3.5 w-3.5 shrink-0 text-[#5865F2]" />
+          <CornerUpLeft className="h-3.5 w-3.5 shrink-0 text-primary" />
           <span className="font-semibold text-white/90">
             @{message.replyTo.author.name ?? message.replyTo.author.username}
           </span>
@@ -292,7 +306,7 @@ function MessageItemBase({
           {isEditing ? (
             <div className="mt-1">
               <textarea
-                className="w-full rounded-lg bg-sidebar border border-[#5865F2] px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-[#5865F2] resize-none"
+                className="w-full resize-none rounded-lg border border-primary bg-sidebar px-3 py-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-ring"
                 rows={Math.min(6, editText.split("\n").length + 1)}
                 value={editText}
                 autoFocus
@@ -316,7 +330,7 @@ function MessageItemBase({
                     <X className="h-3.5 w-3.5" /> Cancelar
                   </button>
                   <button
-                    className="flex items-center gap-1 text-[#5865F2] font-bold hover:underline"
+                    className="flex items-center gap-1 font-bold text-primary hover:underline"
                     onClick={() =>
                       editText.trim() &&
                       edit.mutate({ messageId: message.id, content: editText })
@@ -388,7 +402,7 @@ function MessageItemBase({
               {!grouped && message.threadId != null && !message.replyToId && (
             <a
               href={`/channels/${window.location.pathname.split("/")[2]}/${message.channelId}/t/${message.threadId}`}
-              className="inline-flex items-center gap-1.5 mt-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-[#7383FF] hover:bg-white/[0.08] transition-colors"
+              className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-border bg-primary/[0.06] px-2.5 py-1 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/10"
             >
               🧵 Tópico
               <span className="opacity-60">·</span>
@@ -432,7 +446,7 @@ function MessageItemBase({
                         className={cn(
                           "flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs border transition-[color,background-color,border-color,box-shadow,transform,opacity] active:scale-95",
                           mine
-                            ? "bg-[#5865F2]/20 border-[#5865F2]/60 text-white font-bold"
+                            ? "border-primary/60 bg-primary/15 font-bold text-foreground"
                             : "bg-sidebar border-white/10 text-muted2 hover:border-white/20 hover:text-white"
                         )}
                         title={r.userIds.length + " reação(ões)"}
@@ -552,6 +566,20 @@ function MessageItemBase({
                 >
                   <Copy className="h-3.5 w-3.5 mr-2 text-muted2" /> Copiar ID
                 </DropdownMenuItem>
+                {canPinMessages && message.conversationId && (
+                  <DropdownMenuItem
+                    onClick={() =>
+                      pinMessage.mutate({
+                        conversationId: message.conversationId!,
+                        messageId: message.id,
+                      })
+                    }
+                    className="cursor-pointer hover:bg-white/10"
+                  >
+                    <Pin className="mr-2 h-3.5 w-3.5 text-primary" /> Fixar
+                    mensagem
+                  </DropdownMenuItem>
+                )}
                 {!isMine && (
                   <DropdownMenuItem
                     onClick={() => setReportOpen(true)}
@@ -568,7 +596,7 @@ function MessageItemBase({
                     }}
                     className="hover:bg-white/10 cursor-pointer"
                   >
-                    <Pencil className="h-3.5 w-3.5 mr-2 text-[#5865F2]" />{" "}
+                    <Pencil className="mr-2 h-3.5 w-3.5 text-primary" />{" "}
                     Editar
                   </DropdownMenuItem>
                 )}
@@ -703,6 +731,19 @@ function MessageItemBase({
                   toast.success("Link copiado.");
                 },
               },
+              ...(canPinMessages && message.conversationId
+                ? [
+                    {
+                      label: "Fixar mensagem",
+                      icon: Pin as LucideIcon,
+                      run: () =>
+                        pinMessage.mutate({
+                          conversationId: message.conversationId!,
+                          messageId: message.id,
+                        }),
+                    },
+                  ]
+                : []),
               ...(isMine
                 ? [
                     {
@@ -792,7 +833,7 @@ function MessageItemBase({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="rounded-lg bg-panel border border-white/5 p-3 text-xs text-[#F2F3F5]">
-            <span className="font-bold text-[#5865F2]">
+            <span className="font-bold text-primary">
               {message.author.name ?? message.author.username}:{" "}
             </span>
             {message.content.slice(0, 200)}
@@ -889,7 +930,7 @@ function AttachmentView({
     >
       <span className="text-xl">📄</span>
       <div className="min-w-0">
-        <div className="truncate font-semibold text-[#5865F2] hover:underline">
+        <div className="truncate font-semibold text-primary hover:underline">
           {att.filename}
         </div>
         <div className="text-[11px] text-muted2">{formatSize(att.size)}</div>
@@ -1064,7 +1105,7 @@ function ThreadDialog({
               type="checkbox"
               checked={priv}
               onChange={e => setPriv(e.target.checked)}
-              className="accent-[#5865F2]"
+              className="accent-primary"
             />
             Thread privada
           </label>

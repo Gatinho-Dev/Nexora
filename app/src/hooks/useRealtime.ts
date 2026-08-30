@@ -55,16 +55,28 @@ export function useRealtime(myUserId: number | undefined) {
             }
           } else if (msg.conversationId) {
             utils.dm.list.invalidate();
-            if (view.conversationId === msg.conversationId) {
-              utils.client.message.markRead
+            const isActivelyReading =
+              view.conversationId === msg.conversationId &&
+              document.visibilityState === "visible" &&
+              document.hasFocus();
+            if (isActivelyReading) {
+              void utils.client.message.markRead
                 .mutate({
                   conversationId: msg.conversationId,
                   lastMessageId: msg.id,
                 })
-                .catch(() => {});
+                .then(() => store.clearUnreadConversation(msg.conversationId!))
+                .catch(() => utils.message.unread.invalidate());
             } else if (!isMine) {
               store.bumpUnreadConversation(msg.conversationId);
-              soundManager.play("dm-message");
+              const conversation = utils.dm.list
+                .getData()
+                ?.find(item => item.id === msg.conversationId);
+              const muted =
+                conversation?.mutedForever === true ||
+                (!!conversation?.mutedUntil &&
+                  new Date(conversation.mutedUntil).getTime() > Date.now());
+              if (!muted) soundManager.play("dm-message");
             }
           }
           break;
@@ -138,6 +150,21 @@ export function useRealtime(myUserId: number | undefined) {
           utils.notification.unreadCount.invalidate();
           utils.notification.list.invalidate();
           const n = event.notification;
+          const notificationView = getCurrentView();
+          const isOpenConversation =
+            !!n.conversationId &&
+            notificationView.conversationId === n.conversationId &&
+            document.visibilityState === "visible" &&
+            document.hasFocus();
+          if (isOpenConversation && n.messageId) {
+            void utils.client.message.markRead
+              .mutate({
+                conversationId: n.conversationId!,
+                lastMessageId: n.messageId,
+              })
+              .catch(() => utils.message.unread.invalidate());
+            break;
+          }
           if (n.type === "call_started" && n.conversationId) {
             const storeState = useAppStore.getState();
             const notInThatRoom =
@@ -188,6 +215,9 @@ export function useRealtime(myUserId: number | undefined) {
             desktopNotification.onclick = () => {
               window.focus();
               desktopNotification.close();
+              if (n.conversationId) {
+                window.location.assign(`/channels/@me/${n.conversationId}`);
+              }
             };
           }
           break;
@@ -235,6 +265,14 @@ export function useRealtime(myUserId: number | undefined) {
         case "dm:refresh":
           utils.dm.list.invalidate();
           utils.dm.get.invalidate();
+          break;
+        case "read:update":
+          if (event.userId !== myUserId) break;
+          utils.message.unread.invalidate();
+          if (event.conversationId) {
+            utils.dm.list.invalidate();
+            utils.dm.get.invalidate({ conversationId: event.conversationId });
+          }
           break;
         case "group:update":
           // Atualiza listas e o grupo aberto (renome, membros, etc).

@@ -90,7 +90,7 @@ export function UserPanel() {
             <span
               className={cn(
                 "flex items-center gap-1 font-semibold",
-                wsConnected ? "text-[#23A559]" : "text-amber-400"
+                wsConnected ? "text-[hsl(var(--presence-online))]" : "text-amber-500"
               )}
             >
               {wsConnected ? (
@@ -128,7 +128,7 @@ export function UserPanel() {
         <Popover open={profileOpen} onOpenChange={setProfileOpen}>
           <PopoverTrigger asChild>
             <button
-              className="flex h-full min-h-0 items-center gap-2.5 flex-1 min-w-0 rounded-md hover:bg-hov p-1 transition-colors text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+              className="flex h-full min-h-0 items-center gap-2.5 flex-1 min-w-0 rounded-md hover:bg-hov p-1 transition-colors text-left group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Abrir meu perfil"
               aria-expanded={profileOpen}
               title="Meu perfil"
@@ -172,8 +172,7 @@ export function UserPanel() {
                     decorative
                     className="absolute -right-5 -top-9 h-36 w-36 rotate-6 opacity-[0.13]"
                   />
-                  <div className="absolute bottom-0 left-0 h-1 w-2/3 bg-[#5865F2]" />
-                  <div className="absolute bottom-0 right-0 h-1 w-1/3 bg-[#7383FF]" />
+                  <div className="absolute inset-x-0 bottom-0 h-1 bg-primary" />
                 </>
               )}
             </div>
@@ -193,7 +192,7 @@ export function UserPanel() {
                 <button
                   type="button"
                   onClick={() => openSettings("profile")}
-                  className="mb-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[#5865F2] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#4752C4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                  className="mb-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   Editar perfil
@@ -266,11 +265,11 @@ export function UserPanel() {
                         type="button"
                         onClick={() => setStatus(status)}
                         className={cn(
-                          "flex min-h-9 items-center gap-2 rounded-lg px-2.5 text-left text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]",
+                          "flex min-h-9 items-center gap-2 rounded-lg px-2.5 text-left text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           currentStatus ===
                             (status === "invisible" ? "offline" : status)
                             ? "bg-black/[0.06] text-foreground"
-                            : "text-muted2 hover:bg-white/[0.06] hover:text-white"
+                            : "text-muted2 hover:bg-hov hover:text-foreground"
                         )}
                       >
                         <span
@@ -290,7 +289,7 @@ export function UserPanel() {
                 <button
                   type="button"
                   onClick={() => openSettings("account")}
-                  className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium text-bodyx transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
+                  className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium text-bodyx transition-colors hover:bg-hov focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Settings className="h-4 w-4 text-faint" />
                   Configurações

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";import { TRPCError } from "@trpc/server";
+import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
@@ -27,6 +28,7 @@ import {
 import { assertCanInteract } from "./services/accountSafety";
 import { runAutomodForMessage } from "./services/automod/service";
 import { moderateTextMessage } from "./services/textModeration";
+import { blockedBetween } from "./services/groupService";
 
 // ── DTO assembly ──────────────────────────────────────────────
 // ── DTO assembly ──────────────────────────────────────────────
@@ -356,10 +358,39 @@ async function processMentions(
         eq(schema.conversationMembers.conversationId, msg.conversationId)
       );
 
-    // DMs keep the original behavior: everyone gets a "dm" notification.
+    // Direct-message popups honor per-account mute and request decisions.
+    // The unread state is independent and continues to update in the inbox.
     if (!conversation.isGroup) {
+      const preferences = await db
+        .select()
+        .from(schema.conversationPreferences)
+        .where(
+          eq(
+            schema.conversationPreferences.conversationId,
+            msg.conversationId,
+          ),
+        );
+      const preferenceByUser = new Map(
+        preferences.map(preference => [preference.userId, preference]),
+      );
+      const now = Date.now();
       await notifyUsers(
-        memberRows.map(m => m.userId).filter(id => id !== authorId),
+        memberRows
+          .map(member => member.userId)
+          .filter(userId => {
+            if (userId === authorId) return false;
+            const preference = preferenceByUser.get(userId);
+            if (preference?.mutedForever) return false;
+            if (
+              preference?.mutedUntil &&
+              new Date(preference.mutedUntil).getTime() > now
+            ) {
+              return false;
+            }
+            return !["ignored", "spam"].includes(
+              preference?.requestState ?? "",
+            );
+          }),
         {
           type: "dm",
           actorId: authorId,
@@ -626,6 +657,29 @@ export const messageRouter = createRouter({
         }
       } else {
         await requireConversationAccess(ctx.user.id, input.conversationId!);
+        const conversation = await db.query.conversations.findFirst({
+          where: eq(schema.conversations.id, input.conversationId!),
+        });
+        if (conversation && !conversation.isGroup) {
+          const otherMember = await db.query.conversationMembers.findFirst({
+            where: and(
+              eq(
+                schema.conversationMembers.conversationId,
+                input.conversationId!,
+              ),
+              ne(schema.conversationMembers.userId, ctx.user.id),
+            ),
+          });
+          if (
+            otherMember &&
+            (await blockedBetween(ctx.user.id, otherMember.userId))
+          ) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Esta conversa não pode receber novas mensagens.",
+            });
+          }
+        }
       }
 
       const [{ id }] = await db
@@ -681,22 +735,28 @@ export const messageRouter = createRouter({
         }
       }
 
-      // Author has implicitly read up to their own message
+      // Author has implicitly read up to their own message. The atomic upsert
+      // prevents an older request from moving the read cursor backwards.
       await db
-        .delete(schema.channelReads)
-        .where(
-          and(
-            eq(schema.channelReads.userId, ctx.user.id),
-            input.channelId
-              ? eq(schema.channelReads.channelId, input.channelId)
-              : eq(schema.channelReads.conversationId, input.conversationId!)
-          )
-        );
-      await db.insert(schema.channelReads).values({
+        .insert(schema.channelReads)
+        .values({
+          userId: ctx.user.id,
+          channelId: input.channelId ?? null,
+          conversationId: input.conversationId ?? null,
+          lastReadMessageId: id,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            lastReadMessageId: sql`greatest(lastReadMessageId, values(lastReadMessageId))`,
+            updatedAt: new Date(),
+          },
+        });
+      sendToUsers([ctx.user.id], {
+        t: "read:update",
         userId: ctx.user.id,
-        channelId: input.channelId ?? null,
-        conversationId: input.conversationId ?? null,
-        lastReadMessageId: id,
+        channelId: input.channelId,
+        conversationId: input.conversationId,
+        lastMessageId: id,
       });
 
       // Embeds de links: cria as linhas processing ANTES do DTO (skeleton
@@ -965,22 +1025,39 @@ export const messageRouter = createRouter({
     .input(targetSchema.extend({ lastMessageId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
-      await db
-        .delete(schema.channelReads)
-        .where(
-          and(
-            eq(schema.channelReads.userId, ctx.user.id),
-            input.channelId
-              ? eq(schema.channelReads.channelId, input.channelId)
-              : eq(schema.channelReads.conversationId, input.conversationId!)
-          )
-        );
-      await db.insert(schema.channelReads).values({
-        userId: ctx.user.id,
-        channelId: input.channelId ?? null,
-        conversationId: input.conversationId ?? null,
-        lastReadMessageId: input.lastMessageId,
+      if (input.channelId) {
+        await requireChannelAccess(ctx.user.id, input.channelId);
+      } else {
+        await requireConversationAccess(ctx.user.id, input.conversationId!);
+      }
+      const message = await db.query.messages.findFirst({
+        where: and(
+          eq(schema.messages.id, input.lastMessageId),
+          input.channelId
+            ? eq(schema.messages.channelId, input.channelId)
+            : eq(schema.messages.conversationId, input.conversationId!),
+        ),
       });
+      if (!message) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A mensagem informada não pertence a esta conversa.",
+        });
+      }
+      await db
+        .insert(schema.channelReads)
+        .values({
+          userId: ctx.user.id,
+          channelId: input.channelId ?? null,
+          conversationId: input.conversationId ?? null,
+          lastReadMessageId: input.lastMessageId,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            lastReadMessageId: sql`greatest(lastReadMessageId, values(lastReadMessageId))`,
+            updatedAt: new Date(),
+          },
+        });
       // Clear related notifications
       if (input.channelId) {
         await db
@@ -1003,6 +1080,13 @@ export const messageRouter = createRouter({
             )
           );
       }
+      sendToUsers([ctx.user.id], {
+        t: "read:update",
+        userId: ctx.user.id,
+        channelId: input.channelId,
+        conversationId: input.conversationId,
+        lastMessageId: input.lastMessageId,
+      });
       return { ok: true };
     }),
 
@@ -1013,11 +1097,8 @@ export const messageRouter = createRouter({
       .from(schema.channelReads)
       .where(eq(schema.channelReads.userId, ctx.user.id));
     const readByChannel = new Map<number, number>();
-    const readByConversation = new Map<number, number>();
     for (const r of readRows) {
       if (r.channelId) readByChannel.set(r.channelId, r.lastReadMessageId);
-      if (r.conversationId)
-        readByConversation.set(r.conversationId, r.lastReadMessageId);
     }
 
     const channels: Record<number, number> = {};
@@ -1059,19 +1140,28 @@ export const messageRouter = createRouter({
       .select({ conversationId: schema.conversationMembers.conversationId })
       .from(schema.conversationMembers)
       .where(eq(schema.conversationMembers.userId, ctx.user.id));
-    for (const c of convRows) {
-      const lastRead = readByConversation.get(c.conversationId) ?? 0;
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)` })
+    const conversationIds = convRows.map(row => row.conversationId);
+    if (conversationIds.length > 0) {
+      const unreadConversationRows = await db
+        .select({
+          conversationId: schema.messages.conversationId,
+          count: sql<number>`count(*)`,
+        })
         .from(schema.messages)
         .where(
           and(
-            eq(schema.messages.conversationId, c.conversationId),
-            gt(schema.messages.id, lastRead),
-            ne(schema.messages.authorId, ctx.user.id)
-          )
-        );
-      if (Number(count) > 0) conversations[c.conversationId] = Number(count);
+            inArray(schema.messages.conversationId, conversationIds),
+            ne(schema.messages.authorId, ctx.user.id),
+            sql`${schema.messages.id} > coalesce((select max(cr.lastReadMessageId) from channel_reads cr where cr.userId = ${ctx.user.id} and cr.conversationId = ${schema.messages.conversationId}), 0)`,
+          ),
+        )
+        .groupBy(schema.messages.conversationId);
+      for (const row of unreadConversationRows) {
+        const conversationId = Number(row.conversationId);
+        if (conversationId > 0 && Number(row.count) > 0) {
+          conversations[conversationId] = Number(row.count);
+        }
+      }
     }
 
     return { channels, conversations };

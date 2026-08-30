@@ -57,8 +57,8 @@ export function GroupSearchModal({
     setTimeout(() => {
       const el = document.getElementById(`msg-${messageId}`);
       el?.scrollIntoView({ behavior: "smooth", block: "center" });
-      el?.classList.add("bg-[#5865F2]/20");
-      setTimeout(() => el?.classList.remove("bg-[#5865F2]/20"), 1500);
+      el?.classList.add("bg-primary/10");
+      setTimeout(() => el?.classList.remove("bg-primary/10"), 1500);
     }, 300);
   };
 
@@ -67,7 +67,7 @@ export function GroupSearchModal({
       <DialogContent className="flex max-h-[80dvh] flex-col overflow-hidden sm:max-w-lg">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            <Search className="h-4 w-4 text-primary" aria-hidden /> Buscar no grupo
+            <Search className="h-4 w-4 text-primary" aria-hidden /> Buscar na conversa
           </DialogTitle>
         </DialogHeader>
 

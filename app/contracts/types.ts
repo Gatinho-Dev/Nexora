@@ -199,8 +199,18 @@ export type ConversationDTO = {
     authorId: number;
   } | null;
   unreadCount: number;
+  /** First message that is still unread for the current account. */
+  firstUnreadMessageId?: number | null;
   /** True when the other person is not a friend and I never replied. */
   isRequest?: boolean;
+  /** Message requests explicitly classified as possible spam. */
+  isSpam?: boolean;
+  /** Per-account inbox organization. */
+  pinnedAt?: string | Date | null;
+  hiddenAt?: string | Date | null;
+  mutedForever?: boolean;
+  privateNote?: string | null;
+  friendNickname?: string | null;
   // ── Group conversations ─────────────────────────────────────
   name?: string | null;
   avatarUrl?: string | null;
@@ -568,6 +578,13 @@ export type WSServerEvent =
   | { t: "stage:hands"; channelId?: number; userIds: number[] }
   | { t: "group:update"; conversationId: number }
   | { t: "dm:refresh" }
+  | {
+      t: "read:update";
+      userId: number;
+      lastMessageId: number;
+      channelId?: number;
+      conversationId?: number;
+    }
   | { t: "friends:refresh" }
   | { t: "session:revoked" }
   | {

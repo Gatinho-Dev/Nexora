@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, gt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
@@ -11,128 +11,225 @@ import { assertCanInteract } from "./services/accountSafety";
 import { rateLimit } from "./utils/rateLimit";
 import { notifyConversationUsers } from "./groupRouter";
 
+type InboxConversationDTO = ConversationDTO & { _hidden?: boolean };
+
+async function buildConversationDTOs(
+  conversationIds: number[],
+  viewerId: number,
+): Promise<InboxConversationDTO[]> {
+  const ids = [...new Set(conversationIds)];
+  if (ids.length === 0) return [];
+  const db = getDb();
+  const [conversationRows, memberRows, latestIdRows, unreadRows, sentRows, preferenceRows, friendshipRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(schema.conversations)
+        .where(inArray(schema.conversations.id, ids)),
+      db
+        .select({
+          conversationId: schema.conversationMembers.conversationId,
+          user: schema.users,
+          role: schema.conversationMembers.role,
+          notificationLevel: schema.conversationMembers.notificationLevel,
+          mutedUntil: schema.conversationMembers.mutedUntil,
+        })
+        .from(schema.conversationMembers)
+        .innerJoin(schema.users, eq(schema.users.id, schema.conversationMembers.userId))
+        .where(inArray(schema.conversationMembers.conversationId, ids)),
+      db
+        .select({
+          conversationId: schema.messages.conversationId,
+          id: sql<number>`max(${schema.messages.id})`,
+        })
+        .from(schema.messages)
+        .where(inArray(schema.messages.conversationId, ids))
+        .groupBy(schema.messages.conversationId),
+      db
+        .select({
+          conversationId: schema.messages.conversationId,
+          count: sql<number>`count(*)`,
+          firstUnreadMessageId: sql<number>`min(${schema.messages.id})`,
+        })
+        .from(schema.messages)
+        .where(
+          and(
+            inArray(schema.messages.conversationId, ids),
+            ne(schema.messages.authorId, viewerId),
+            sql`${schema.messages.id} > coalesce((select max(cr.lastReadMessageId) from channel_reads cr where cr.userId = ${viewerId} and cr.conversationId = ${schema.messages.conversationId}), 0)`,
+          ),
+        )
+        .groupBy(schema.messages.conversationId),
+      db
+        .select({
+          conversationId: schema.messages.conversationId,
+          count: sql<number>`count(*)`,
+        })
+        .from(schema.messages)
+        .where(
+          and(
+            inArray(schema.messages.conversationId, ids),
+            eq(schema.messages.authorId, viewerId),
+          ),
+        )
+        .groupBy(schema.messages.conversationId),
+      db
+        .select()
+        .from(schema.conversationPreferences)
+        .where(
+          and(
+            eq(schema.conversationPreferences.userId, viewerId),
+            inArray(schema.conversationPreferences.conversationId, ids),
+          ),
+        ),
+      db
+        .select()
+        .from(schema.friendships)
+        .where(
+          or(
+            eq(schema.friendships.requesterId, viewerId),
+            eq(schema.friendships.addresseeId, viewerId),
+          ),
+        ),
+    ]);
+
+  const latestIds = latestIdRows.map(row => Number(row.id)).filter(Boolean);
+  const lastMessageRows = latestIds.length
+    ? await db.select().from(schema.messages).where(inArray(schema.messages.id, latestIds))
+    : [];
+
+  const membersByConversation = new Map<number, typeof memberRows>();
+  for (const row of memberRows) {
+    const list = membersByConversation.get(row.conversationId) ?? [];
+    list.push(row);
+    membersByConversation.set(row.conversationId, list);
+  }
+  const lastByConversation = new Map(
+    lastMessageRows
+      .filter(row => row.conversationId != null)
+      .map(row => [row.conversationId as number, row]),
+  );
+  const unreadByConversation = new Map(
+    unreadRows
+      .filter(row => row.conversationId != null)
+      .map(row => [
+        row.conversationId as number,
+        {
+          count: Number(row.count),
+          firstUnreadMessageId: Number(row.firstUnreadMessageId),
+        },
+      ]),
+  );
+  const sentByConversation = new Map(
+    sentRows
+      .filter(row => row.conversationId != null)
+      .map(row => [row.conversationId as number, Number(row.count)]),
+  );
+  const preferencesByConversation = new Map(
+    preferenceRows.map(row => [row.conversationId, row]),
+  );
+  const friendshipByOther = new Map<number, (typeof friendshipRows)[number]>();
+  for (const friendship of friendshipRows) {
+    const otherId =
+      friendship.requesterId === viewerId
+        ? friendship.addresseeId
+        : friendship.requesterId;
+    friendshipByOther.set(otherId, friendship);
+  }
+
+  return conversationRows.map(conversation => {
+    const membershipRows = membersByConversation.get(conversation.id) ?? [];
+    const members = membershipRows.map(row => toPublicUser(row.user));
+    const other = conversation.isGroup
+      ? null
+      : (members.find(member => member.id !== viewerId) ?? null);
+    const me = membershipRows.find(row => row.user.id === viewerId);
+    const lastMessage = lastByConversation.get(conversation.id);
+    const unread = unreadByConversation.get(conversation.id);
+    const preference = preferencesByConversation.get(conversation.id);
+    const friendship = other ? friendshipByOther.get(other.id) : undefined;
+    const blocked = friendship?.status === "BLOCKED";
+    const requestState = preference?.requestState ?? null;
+    const inferredRequest =
+      !conversation.isGroup &&
+      !!other &&
+      friendship?.status !== "ACCEPTED" &&
+      !blocked &&
+      (sentByConversation.get(conversation.id) ?? 0) === 0;
+    const isRequest =
+      !conversation.isGroup &&
+      !blocked &&
+      (requestState === "pending" ||
+        requestState === "spam" ||
+        (requestState == null && inferredRequest));
+    const hiddenAt = preference?.hiddenAt ?? null;
+    const hasReopened =
+      !!hiddenAt &&
+      !!lastMessage &&
+      new Date(lastMessage.createdAt).getTime() > new Date(hiddenAt).getTime();
+
+    return {
+      id: conversation.id,
+      isGroup: conversation.isGroup,
+      members,
+      otherUser: other,
+      lastMessage: lastMessage
+        ? {
+            id: lastMessage.id,
+            content: lastMessage.content.slice(0, 80),
+            createdAt: lastMessage.createdAt,
+            authorId: lastMessage.authorId,
+          }
+        : null,
+      unreadCount: unread?.count ?? 0,
+      firstUnreadMessageId: unread?.firstUnreadMessageId ?? null,
+      isRequest,
+      isSpam: requestState === "spam",
+      pinnedAt: preference?.pinnedAt ?? null,
+      hiddenAt,
+      mutedForever:
+        preference?.mutedForever ?? me?.notificationLevel === "muted",
+      privateNote: preference?.privateNote ?? null,
+      friendNickname: preference?.friendNickname ?? null,
+      name: conversation.name,
+      avatarUrl: conversation.avatarUrl,
+      description: conversation.description,
+      ownerId: conversation.ownerId,
+      memberCount: members.length,
+      myRole: conversation.isGroup
+        ? ((me?.role as ConversationDTO["myRole"]) ?? null)
+        : null,
+      updatedAt: conversation.updatedAt,
+      notificationLevel: me?.notificationLevel ?? "all",
+      mutedUntil: preference?.mutedUntil ?? me?.mutedUntil ?? null,
+      _hidden:
+        blocked ||
+        requestState === "ignored" ||
+        (!!hiddenAt && !hasReopened),
+    } satisfies InboxConversationDTO;
+  });
+}
+
 async function buildConversationDTO(
   conversationId: number,
   viewerId: number,
 ): Promise<ConversationDTO | null> {
-  const db = getDb();
-  const conversation = await db.query.conversations.findFirst({
-    where: eq(schema.conversations.id, conversationId),
-  });
+  const [conversation] = await buildConversationDTOs([conversationId], viewerId);
   if (!conversation) return null;
+  const dto = { ...conversation };
+  delete dto._hidden;
+  return dto;
+}
 
-  const memberRows = await db
-    .select({ user: schema.users })
-    .from(schema.conversationMembers)
-    .innerJoin(
-      schema.users,
-      eq(schema.users.id, schema.conversationMembers.userId),
-    )
-    .where(eq(schema.conversationMembers.conversationId, conversationId));
-  const members = memberRows.map(m => toPublicUser(m.user));
-
-  const [lastMessage] = await db
-    .select()
-    .from(schema.messages)
-    .where(eq(schema.messages.conversationId, conversationId))
-    .orderBy(desc(schema.messages.id))
-    .limit(1);
-
-  const readRow = await db.query.channelReads.findFirst({
-    where: and(
-      eq(schema.channelReads.userId, viewerId),
-      eq(schema.channelReads.conversationId, conversationId),
-    ),
-  });
-  const lastRead = readRow?.lastReadMessageId ?? 0;
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(schema.messages)
-    .where(
-      and(
-        eq(schema.messages.conversationId, conversationId),
-        gt(schema.messages.id, lastRead),
-        ne(schema.messages.authorId, viewerId),
-      ),
-    );
-
-  // Message request: 1:1 conversation with a non-friend where the viewer
-  // never sent anything. Once the viewer replies it becomes a normal DM.
-  let isRequest = false;
-  if (!conversation.isGroup) {
-    const other = members.find((m) => m.id !== viewerId);
-    if (other) {
-      const friendship = await db.query.friendships.findFirst({
-        where: or(
-          and(
-            eq(schema.friendships.requesterId, viewerId),
-            eq(schema.friendships.addresseeId, other.id),
-          ),
-          and(
-            eq(schema.friendships.requesterId, other.id),
-            eq(schema.friendships.addresseeId, viewerId),
-          ),
-        ),
-      });
-      const isFriend = friendship?.status === "ACCEPTED";
-      if (!isFriend && friendship?.status !== "BLOCKED") {
-        const [{ count: sentCount }] = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(schema.messages)
-          .where(
-            and(
-              eq(schema.messages.conversationId, conversationId),
-              eq(schema.messages.authorId, viewerId),
-            ),
-          );
-        isRequest = Number(sentCount) === 0;
-      }
-    }
-  }
-
-  // Group fields: role + notification prefs of the viewer inside the group.
-  let myRole: ConversationDTO["myRole"] = null;
-  let notificationLevel: ConversationDTO["notificationLevel"] = undefined;
-  let mutedUntil: Date | null = null;
-  if (conversation.isGroup) {
-    const me = await db.query.conversationMembers.findFirst({
-      where: and(
-        eq(schema.conversationMembers.conversationId, conversationId),
-        eq(schema.conversationMembers.userId, viewerId),
-      ),
-    });
-    myRole = (me?.role as ConversationDTO["myRole"]) ?? null;
-    notificationLevel = me?.notificationLevel ?? "all";
-    mutedUntil = me?.mutedUntil ?? null;
-  }
-
-  return {
-    id: conversation.id,
-    isGroup: conversation.isGroup,
-    members,
-    otherUser: conversation.isGroup
-      ? null
-      : (members.find((m) => m.id !== viewerId) ?? null),
-    lastMessage: lastMessage
-      ? {
-          id: lastMessage.id,
-          content: lastMessage.content.slice(0, 80),
-          createdAt: lastMessage.createdAt,
-          authorId: lastMessage.authorId,
-        }
-      : null,
-    unreadCount: Number(count),
-    isRequest,
-    name: conversation.name,
-    avatarUrl: conversation.avatarUrl,
-    description: conversation.description,
-    ownerId: conversation.ownerId,
-    memberCount: members.length,
-    myRole,
-    updatedAt: conversation.updatedAt,
-    notificationLevel,
-    mutedUntil,
-  };
+async function setConversationPreferences(
+  userId: number,
+  conversationId: number,
+  patch: Partial<typeof schema.conversationPreferences.$inferInsert>,
+) {
+  await getDb()
+    .insert(schema.conversationPreferences)
+    .values({ userId, conversationId, ...patch })
+    .onDuplicateKeyUpdate({ set: { ...patch, updatedAt: new Date() } });
 }
 
 export const dmRouter = createRouter({
@@ -204,7 +301,16 @@ export const dmRouter = createRouter({
           const conv = await db.query.conversations.findFirst({
             where: eq(schema.conversations.id, c.conversationId),
           });
-          if (conv && !conv.isGroup) return { conversationId: conv.id };
+          if (conv && !conv.isGroup) {
+            await setConversationPreferences(ctx.user.id, conv.id, {
+              hiddenAt: null,
+              ...(friendship?.status === "ACCEPTED"
+                ? { requestState: "accepted" as const }
+                : {}),
+            });
+            sendToUsers([ctx.user.id], { t: "dm:refresh" });
+            return { conversationId: conv.id };
+          }
         }
       }
 
@@ -226,17 +332,26 @@ export const dmRouter = createRouter({
       .select({ conversationId: schema.conversationMembers.conversationId })
       .from(schema.conversationMembers)
       .where(eq(schema.conversationMembers.userId, ctx.user.id));
-    const conversations: ConversationDTO[] = [];
-    for (const r of rows) {
-      const dto = await buildConversationDTO(r.conversationId, ctx.user.id);
-      if (dto) conversations.push(dto);
-    }
+    const conversations = (
+      await buildConversationDTOs(
+        rows.map(row => row.conversationId),
+        ctx.user.id,
+      )
+    ).filter(conversation => !conversation._hidden);
     conversations.sort((a, b) => {
+      const pinA = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+      const pinB = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+      if (!!pinA !== !!pinB) return pinB - pinA;
+      if (pinA && pinB) return pinB - pinA;
       const ta = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
       const tb = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
       return tb - ta;
     });
-    return conversations;
+    return conversations.map(conversation => {
+      const dto = { ...conversation };
+      delete dto._hidden;
+      return dto;
+    });
   }),
 
   get: authedQuery
@@ -284,6 +399,189 @@ export const dmRouter = createRouter({
         );
       sendToUsers([ctx.user.id], { t: "dm:refresh" });
       return { ok: true };
+    }),
+
+  setPinned: authedQuery
+    .input(z.object({ conversationId: z.number(), pinned: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireConversationAccess(ctx.user.id, input.conversationId);
+      await setConversationPreferences(ctx.user.id, input.conversationId, {
+        pinnedAt: input.pinned ? new Date() : null,
+      });
+      sendToUsers([ctx.user.id], { t: "dm:refresh" });
+      return { ok: true };
+    }),
+
+  close: authedQuery
+    .input(z.object({ conversationId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireConversationAccess(ctx.user.id, input.conversationId);
+      await setConversationPreferences(ctx.user.id, input.conversationId, {
+        pinnedAt: null,
+        hiddenAt: new Date(),
+      });
+      sendToUsers([ctx.user.id], { t: "dm:refresh" });
+      return { ok: true };
+    }),
+
+  mute: authedQuery
+    .input(
+      z.object({
+        conversationId: z.number(),
+        minutes: z.number().int().min(1).max(60 * 24 * 30).nullable(),
+        forever: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await requireConversationAccess(ctx.user.id, input.conversationId);
+      const mutedUntil = input.minutes
+        ? new Date(Date.now() + input.minutes * 60_000)
+        : null;
+      await setConversationPreferences(ctx.user.id, input.conversationId, {
+        mutedUntil,
+        mutedForever: input.forever,
+      });
+      sendToUsers([ctx.user.id], { t: "dm:refresh" });
+      return { mutedUntil, mutedForever: input.forever };
+    }),
+
+  updatePrivateDetails: authedQuery
+    .input(
+      z.object({
+        conversationId: z.number(),
+        privateNote: z.string().trim().max(500).nullable().optional(),
+        friendNickname: z.string().trim().max(64).nullable().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await requireConversationAccess(ctx.user.id, input.conversationId);
+      await setConversationPreferences(ctx.user.id, input.conversationId, {
+        ...(input.privateNote !== undefined
+          ? { privateNote: input.privateNote || null }
+          : {}),
+        ...(input.friendNickname !== undefined
+          ? { friendNickname: input.friendNickname || null }
+          : {}),
+      });
+      sendToUsers([ctx.user.id], { t: "dm:refresh" });
+      return { ok: true };
+    }),
+
+  requestAction: authedQuery
+    .input(
+      z.object({
+        conversationId: z.number(),
+        action: z.enum(["accept", "ignore", "spam", "block"]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await requireConversationAccess(ctx.user.id, input.conversationId);
+      const db = getDb();
+      const conversation = await db.query.conversations.findFirst({
+        where: eq(schema.conversations.id, input.conversationId),
+      });
+      if (!conversation || conversation.isGroup) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Esta ação só está disponível em mensagens diretas.",
+        });
+      }
+      const otherMember = await db.query.conversationMembers.findFirst({
+        where: and(
+          eq(schema.conversationMembers.conversationId, input.conversationId),
+          ne(schema.conversationMembers.userId, ctx.user.id),
+        ),
+      });
+      if (!otherMember) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado." });
+      }
+
+      if (input.action === "block") {
+        const existing = await db.query.friendships.findFirst({
+          where: or(
+            and(
+              eq(schema.friendships.requesterId, ctx.user.id),
+              eq(schema.friendships.addresseeId, otherMember.userId),
+            ),
+            and(
+              eq(schema.friendships.requesterId, otherMember.userId),
+              eq(schema.friendships.addresseeId, ctx.user.id),
+            ),
+          ),
+        });
+        if (existing) {
+          await db
+            .update(schema.friendships)
+            .set({
+              status: "BLOCKED",
+              requesterId: ctx.user.id,
+              addresseeId: otherMember.userId,
+            })
+            .where(eq(schema.friendships.id, existing.id));
+        } else {
+          await db.insert(schema.friendships).values({
+            requesterId: ctx.user.id,
+            addresseeId: otherMember.userId,
+            status: "BLOCKED",
+          });
+        }
+      }
+
+      const requestState =
+        input.action === "accept"
+          ? "accepted"
+          : input.action === "spam"
+            ? "spam"
+            : "ignored";
+      await setConversationPreferences(ctx.user.id, input.conversationId, {
+        requestState,
+        hiddenAt:
+          input.action === "ignore" || input.action === "block"
+            ? new Date()
+            : null,
+      });
+      sendToUsers([ctx.user.id, otherMember.userId], { t: "dm:refresh" });
+      if (input.action === "block") {
+        sendToUsers([ctx.user.id, otherMember.userId], { t: "friends:refresh" });
+      }
+      return { ok: true };
+    }),
+
+  markUnread: authedQuery
+    .input(z.object({ conversationId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await requireConversationAccess(ctx.user.id, input.conversationId);
+      const db = getDb();
+      const [lastMessage] = await db
+        .select({ id: schema.messages.id })
+        .from(schema.messages)
+        .where(
+          and(
+            eq(schema.messages.conversationId, input.conversationId),
+            ne(schema.messages.authorId, ctx.user.id),
+          ),
+        )
+        .orderBy(desc(schema.messages.id))
+        .limit(1);
+      if (!lastMessage) return { ok: true, lastMessageId: 0 };
+      const lastMessageId = Math.max(0, lastMessage.id - 1);
+      await db
+        .insert(schema.channelReads)
+        .values({
+          userId: ctx.user.id,
+          conversationId: input.conversationId,
+          lastReadMessageId: lastMessageId,
+        })
+        .onDuplicateKeyUpdate({
+          set: { lastReadMessageId: lastMessageId, updatedAt: new Date() },
+        });
+      sendToUsers([ctx.user.id], {
+        t: "read:update",
+        userId: ctx.user.id,
+        conversationId: input.conversationId,
+        lastMessageId,
+      });
+      return { ok: true, lastMessageId };
     }),
 
   // ── Calls ────────────────────────────────────────────────────

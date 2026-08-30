@@ -158,6 +158,7 @@ export function AppLayout() {
   const inServer =
     location.pathname.startsWith("/channels/") &&
     !location.pathname.startsWith("/channels/@me");
+  const inPrivateArea = location.pathname.startsWith("/channels/@me");
   // Top bar mobile só onde não há header próprio com menu/voltar.
   const inDmConversation = /^\/channels\/@me\/\d+/.test(location.pathname);
   const showMobileTopBar = !inServer && !inDmConversation;
@@ -188,7 +189,12 @@ export function AppLayout() {
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-rail select-none text-[#F2F3F5]">
+    <div
+      className={cn(
+        "flex h-[100dvh] flex-col overflow-hidden bg-rail select-none text-foreground",
+        inPrivateArea && "nexora-private-shell",
+      )}
+    >
       <MigrationBanner />
       <GlobalMessageBanner />
 

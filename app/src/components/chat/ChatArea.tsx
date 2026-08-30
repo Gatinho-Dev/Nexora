@@ -199,6 +199,38 @@ export function ChatArea({
       .map(([, entry]) => entry.name);
   }, [typingMap, myId, now]);
 
+  // Compute unread bar using useMemo to avoid JSX nesting issues
+  const unreadBar = useMemo(() => {
+    if (!unreadBoundary || !messages) return null;
+    const unreadMsgs = messages.slice(messages.findIndex(m => m.id === unreadBoundary));
+    const count = unreadMsgs.length;
+    return (
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-black/20 bg-sidebar text-foreground select-none relative">
+        <div className="h-px flex-1 bg-[var(--dm-unread-divider)]" />
+        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--dm-unread-divider)]">
+          {count} mensagem{count === 1 ? "" : "s"} nova{count === 1 ? "" : "s"}
+        </span>
+        <div className="h-px flex-1 bg-[var(--dm-unread-divider)]" />
+        <button
+          onClick={() => {
+            if (channelId) {
+              utils.client.message.markRead.mutate({ channelId, lastMessageId: messages[messages.length - 1]?.id });
+              useAppStore.getState().clearUnreadChannel(channelId);
+            } else if (conversationId) {
+              utils.client.message.markRead.mutate({ conversationId, lastMessageId: messages[messages.length - 1]?.id });
+              useAppStore.getState().clearUnreadConversation(conversationId);
+            }
+          }}
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--dm-unread-divider)] hover:bg-white/10 transition-colors"
+        >
+          Marcar como lida
+        </button>
+      </div>
+    );
+  }, [unreadBoundary, messages, channelId, conversationId, channelId, utils, channelId]);
+
+  // Última mensagem própria (não-sistema) para o recibo "Visto por N".
+
   // Última mensagem própria (não-sistema) para o recibo "Visto por N".
   const lastOwnMessageId = useMemo(() => {
     if (!showReadReceipts || !messages) return null;
@@ -212,6 +244,9 @@ export function ChatArea({
   return (
     <main className="flex-1 flex flex-col min-w-0 h-full bg-chat relative select-text">
       {header}
+
+      {/* Unread Messages Bar */}
+      {unreadBar}
 
       {/* Messages area */}
       <div

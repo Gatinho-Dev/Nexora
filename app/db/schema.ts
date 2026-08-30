@@ -278,6 +278,43 @@ export const conversationMembers = mysqlTable(
   }),
 );
 
+// Per-user preferences for private conversations. These values never leak to
+// the other participant and keep inbox organization separate from messages.
+export const conversationPreferences = mysqlTable(
+  "conversation_preferences",
+  {
+    id: serial("id").primaryKey(),
+    conversationId: bigint("conversationId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    pinnedAt: timestamp("pinnedAt"),
+    hiddenAt: timestamp("hiddenAt"),
+    mutedUntil: timestamp("mutedUntil"),
+    mutedForever: boolean("mutedForever").default(false).notNull(),
+    requestState: mysqlEnum("requestState", [
+      "pending",
+      "accepted",
+      "ignored",
+      "spam",
+    ]),
+    privateNote: text("privateNote"),
+    friendNickname: varchar("friendNickname", { length: 64 }),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    userConversationIdx: uniqueIndex("cp_user_conversation_uniq").on(
+      table.userId,
+      table.conversationId,
+    ),
+    userPinnedIdx: index("cp_user_pinned_idx").on(table.userId, table.pinnedAt),
+  }),
+);
+
 // ── Group invites ─────────────────────────────────────────────
 // Invite links for group conversations. The raw token is never stored —
 // only its sha256 hash, mirroring the webhook secret pattern.
@@ -391,6 +428,14 @@ export const channelReads = mysqlTable(
   },
   (table) => ({
     userIdx: index("cr_user_idx").on(table.userId),
+    userChannelIdx: uniqueIndex("cr_user_channel_uniq").on(
+      table.userId,
+      table.channelId,
+    ),
+    userConversationIdx: uniqueIndex("cr_user_conversation_uniq").on(
+      table.userId,
+      table.conversationId,
+    ),
   }),
 );
 
