@@ -9,7 +9,7 @@ import { env } from "./lib/env";
 
 const pool = mysql.createPool(env.databaseUrl);
 
-const SERVER_SETTINGS_MIGRATION = "0021_server_settings_control_center.sql";
+const SERVER_SETTINGS_MIGRATION = "0019_server_settings_control_center.sql";
 const SERVER_SETTINGS_MIGRATION_TIMESTAMP = 1788486000000;
 
 async function queryExists(sql: string, params: unknown[]) {
