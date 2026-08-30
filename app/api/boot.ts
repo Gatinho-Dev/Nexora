@@ -90,6 +90,17 @@ app.use("/api/*", async (c, next) => {
   c.res.headers.set("X-Robots-Tag", "noindex");
 });
 
+// ── IndexNow (opcional) ────────────────────────────────────────
+// Ping de indexação para Bing/Yandex/Seznam. Defina INDEXNOW_KEY e o
+// arquivo de verificação {chave}.txt passa a ser servido na raiz — a chave
+// é pública por design (não é secret). Sem a env, nada é exposto.
+const indexNowKey = process.env.INDEXNOW_KEY ?? "";
+if (indexNowKey && /^[a-z0-9-]{8,128}$/i.test(indexNowKey)) {
+  app.get(`/${indexNowKey}.txt`, c => {
+    return c.text(indexNowKey);
+  });
+}
+
 const maxUploadMb = parseInt(
   process.env.MAX_UPLOAD_MB || String(MAX_UPLOAD_MB)
 );

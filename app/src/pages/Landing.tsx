@@ -349,7 +349,7 @@ export default function Landing() {
     <div className="nexora-landing">
       <Seo
         canonicalPath="/"
-        description="Nexora é uma plataforma de comunicação para conversar com amigos, criar comunidades, participar de chamadas de voz e vídeo e compartilhar momentos em um só lugar."
+        description="Conheça a Nexora, a plataforma para conversar online, criar comunidades e se conectar com pessoas por mensagens, voz e vídeo — direto no navegador."
       />
       <a className="landing-skip-link" href="#conteudo">
         Pular para o conteúdo
