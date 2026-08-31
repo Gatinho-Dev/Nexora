@@ -3,7 +3,7 @@ import type { Server as HttpServer } from "http";
 import type { IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import * as cookie from "cookie";
-import { and, eq, ne, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { Session, type UserStatus } from "@contracts/constants";
 import type {
   VoiceParticipant,
@@ -15,7 +15,11 @@ import { resolveActiveSession } from "./auth/sessions";
 import { findUserByUnionId } from "./queries/users";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
-import { getMemberPermissions, toPublicUser } from "./utils/permissions";
+import {
+  getEffectiveChannelPermissions,
+  getMemberPermissions,
+  toPublicUser,
+} from "./utils/permissions";
 import { env } from "./lib/env";
 import { randomUUID } from "node:crypto";
 
@@ -130,10 +134,17 @@ export function broadcastToAll(event: WSServerEvent) {
 }
 
 async function serverMemberIds(serverId: number): Promise<number[]> {
+  const connectedUserIds = [...byUser.keys()];
+  if (connectedUserIds.length === 0) return [];
   const rows = await getDb()
     .select({ userId: schema.serverMembers.userId })
     .from(schema.serverMembers)
-    .where(eq(schema.serverMembers.serverId, serverId));
+    .where(
+      and(
+        eq(schema.serverMembers.serverId, serverId),
+        inArray(schema.serverMembers.userId, connectedUserIds),
+      ),
+    );
   return rows.map(r => r.userId);
 }
 
@@ -230,6 +241,28 @@ export function getVoiceParticipants(roomKey: string): VoiceParticipant[] {
   return [...(voiceRooms.get(roomKey)?.values() ?? [])];
 }
 
+/**
+ * Compact server-rail summary. Callers must pass only channel ids the viewer
+ * is allowed to see; this function deliberately knows nothing about ACLs.
+ */
+export function getVoiceSummaryForChannels(channelIds: Iterable<number>) {
+  const participants = new Map<number, VoiceParticipant>();
+  for (const channelId of channelIds) {
+    for (const participant of getVoiceParticipants(channelRoomKey(channelId))) {
+      participants.set(participant.userId, participant);
+    }
+  }
+  const visible = [...participants.values()];
+  return {
+    activeVoiceCount: visible.length,
+    voicePreviewMembers: visible.slice(0, 4).map(({ userId, name, avatar }) => ({
+      userId,
+      name,
+      avatar,
+    })),
+  };
+}
+
 /** Flip a user between stage speaker and audience while they are connected. */
 export async function setLiveStageSpeaker(
   channelId: number,
@@ -259,11 +292,56 @@ async function broadcastVoiceParticipants(roomKey: string) {
   const participants = getVoiceParticipants(roomKey);
   if (roomKey.startsWith("c:")) {
     const channelId = Number(roomKey.slice(2));
-    await broadcastToChannel(channelId, {
-      t: "voice:participants",
-      channelId,
-      participants,
+    const channel = await getDb().query.channels.findFirst({
+      where: eq(schema.channels.id, channelId),
     });
+    if (!channel) return;
+    const [memberIds, serverVoiceChannels] = await Promise.all([
+      serverMemberIds(channel.serverId),
+      getDb()
+        .select()
+        .from(schema.channels)
+        .where(
+          and(
+            eq(schema.channels.serverId, channel.serverId),
+            or(
+              eq(schema.channels.type, "VOICE"),
+              eq(schema.channels.type, "STAGE"),
+            ),
+          ),
+        ),
+    ]);
+    await Promise.all(
+      memberIds.map(async userId => {
+        const permissions = await getMemberPermissions(userId, channel.serverId);
+        const visibleChannelIds: number[] = [];
+        for (const voiceChannel of serverVoiceChannels) {
+          if (
+            permissions?.has("ADMINISTRATOR") ||
+            permissions?.has("MANAGE_CHANNELS")
+          ) {
+            visibleChannelIds.push(voiceChannel.id);
+            continue;
+          }
+          const effective = await getEffectiveChannelPermissions(
+            userId,
+            voiceChannel,
+          );
+          if (effective?.has("VIEW_CHANNEL")) {
+            visibleChannelIds.push(voiceChannel.id);
+          }
+        }
+        if (!visibleChannelIds.includes(channelId)) return;
+        const summary = getVoiceSummaryForChannels(visibleChannelIds);
+        sendToUsers([userId], {
+          t: "voice:participants",
+          channelId,
+          serverId: channel.serverId,
+          participants,
+          ...summary,
+        });
+      }),
+    );
   } else {
     const conversationId = Number(roomKey.slice(3));
     await broadcastToConversation(conversationId, {
@@ -316,12 +394,16 @@ async function voiceJoin(
       });
       return;
     }
-    const perms = await getMemberPermissions(client.userId, channel.serverId);
-    if (!perms || !perms.has("CONNECT")) {
+    const perms = await getEffectiveChannelPermissions(client.userId, channel);
+    if (
+      !perms ||
+      !perms.has("VIEW_CHANNEL") ||
+      !perms.has("CONNECT")
+    ) {
       send(client, {
         t: "voice:denied",
         channelId: target.channelId,
-        reason: "Você não tem permissão para entrar neste canal de voz.",
+        reason: "Você não tem permissão para acessar este canal de voz.",
       });
       return;
     }

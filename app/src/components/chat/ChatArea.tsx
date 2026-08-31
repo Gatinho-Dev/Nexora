@@ -63,8 +63,6 @@ export function ChatArea({
   const [loadError, setLoadError] = useState<Error | TRPCError | false>(false);
   const [reloadTick, setReloadTick] = useState(0);
   const [newBelowCount, setNewBelowCount] = useState(0);
-  // ChatArea recebe key={conversationId}; o divisor permanece fixo nesta sessão.
-  const [unreadBoundary] = useState(firstUnreadMessageId);
   const seenCountRef = useRef(0);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -74,6 +72,43 @@ export function ChatArea({
   const stickToBottom = useRef(true);
   const setReplyingTo = useChatUIStore(s => s.setReplyingTo);
   const setEditing = useChatUIStore(s => s.setEditing);
+  const unreadQuery = trpc.message.unread.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
+  const unreadState = channelId
+    ? unreadQuery.data?.channelDetails[channelId]
+    : unreadQuery.data?.conversationDetails[conversationId!];
+  const [localReadState, setLocalReadState] = useState(() => ({
+    key,
+    messageId: 0,
+  }));
+  const locallyReadThrough =
+    localReadState.key === key ? localReadState.messageId : 0;
+  const visibleUnreadState =
+    unreadState && unreadState.latestMessageId > locallyReadThrough
+      ? unreadState
+      : null;
+
+  const markReadThrough = useCallback(
+    (lastMessageId: number) => {
+      if (!lastMessageId) return;
+      setLocalReadState({ key, messageId: lastMessageId });
+      utils.client.message.markRead
+        .mutate({ channelId, conversationId, lastMessageId })
+        .then(() => {
+          if (channelId) useAppStore.getState().clearUnreadChannel(channelId);
+          if (conversationId) {
+            useAppStore.getState().clearUnreadConversation(conversationId);
+          }
+          void utils.message.unread.invalidate();
+        })
+        .catch(() => {
+          setLocalReadState({ key, messageId: 0 });
+          void utils.message.unread.invalidate();
+        });
+    },
+    [channelId, conversationId, key, utils],
+  );
 
   const scrollToBottom = (instant = false) => {
     const el = scrollRef.current;
@@ -87,9 +122,12 @@ export function ChatArea({
 
   // Load messages + track current view
   useEffect(() => {
+    if (!unreadQuery.isSuccess) return;
     let cancelled = false;
-    // Nova conversa: começa colada no presente, sem contador herdado.
-    stickToBottom.current = true;
+    const initialUnreadMessageId =
+      unreadState?.firstUnreadMessageId ?? firstUnreadMessageId ?? undefined;
+    // Com unread real, começamos no divisor; sem unread, no presente.
+    stickToBottom.current = !initialUnreadMessageId;
     seenCountRef.current = 0;
     const timeout = setTimeout(() => {
       if (!cancelled) {
@@ -103,31 +141,26 @@ export function ChatArea({
     setEditing(null);
 
     utils.client.message.list
-      .query({ channelId, conversationId, limit: 50 })
+      .query({
+        channelId,
+        conversationId,
+        limit: initialUnreadMessageId ? 100 : 50,
+        around: initialUnreadMessageId,
+      })
       .then(res => {
         if (cancelled) return;
         useAppStore.getState().setMessages(key, res.messages, res.hasMore);
         setLoading(false);
-        const last = res.messages.at(-1);
-        const isActivelyReading =
-          document.visibilityState === "visible" && document.hasFocus();
-        if (last && isActivelyReading) {
-          void utils.client.message.markRead
-            .mutate({ channelId, conversationId, lastMessageId: last.id })
-            .then(() => {
-              if (channelId) {
-                useAppStore.getState().clearUnreadChannel(channelId);
-              }
-              if (conversationId) {
-                useAppStore.getState().clearUnreadConversation(conversationId);
-              }
-            })
-            .catch(() => {
-              void utils.message.unread.invalidate();
-              if (conversationId) void utils.dm.list.invalidate();
-            });
-        }
-        requestAnimationFrame(() => scrollToBottom(true));
+        requestAnimationFrame(() => {
+          if (initialUnreadMessageId) {
+            const boundary = document.getElementById(
+              `unread-${initialUnreadMessageId}`,
+            );
+            boundary?.scrollIntoView({ block: "center", behavior: "auto" });
+            return;
+          }
+          scrollToBottom(true);
+        });
       })
       .catch(err => {
         if (!cancelled) {
@@ -142,12 +175,14 @@ export function ChatArea({
       setCurrentView({});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, conversationId, reloadTick]);
+  }, [channelId, conversationId, reloadTick, unreadQuery.isSuccess]);
 
-  // Uma conversa em segundo plano continua não lida até voltar ao foco.
+  // Uma conversa em segundo plano continua não lida até voltar ao foco. Só
+  // marcamos como lida se o usuário já estava no presente do histórico.
   useEffect(() => {
     const markVisibleMessagesAsRead = () => {
       if (
+        !stickToBottom.current ||
         document.visibilityState !== "visible" ||
         !document.hasFocus()
       ) {
@@ -156,17 +191,7 @@ export function ChatArea({
 
       const last = useAppStore.getState().messages[key]?.at(-1);
       if (!last) return;
-
-      void utils.client.message.markRead
-        .mutate({ channelId, conversationId, lastMessageId: last.id })
-        .then(() => {
-          if (channelId) useAppStore.getState().clearUnreadChannel(channelId);
-          if (conversationId) {
-            useAppStore.getState().clearUnreadConversation(conversationId);
-            void utils.dm.list.invalidate();
-          }
-        })
-        .catch(() => void utils.message.unread.invalidate());
+      markReadThrough(last.id);
     };
 
     window.addEventListener("focus", markVisibleMessagesAsRead);
@@ -178,9 +203,7 @@ export function ChatArea({
         markVisibleMessagesAsRead,
       );
     };
-    // O cliente tRPC é estável; os identificadores definem a conversa ativa.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, conversationId, key]);
+  }, [key, markReadThrough]);
 
   // Typing indicator expiry tick
   useEffect(() => {
@@ -204,6 +227,23 @@ export function ChatArea({
     }
   }, [messages?.length]);
 
+  // Uma mensagem recém-renderizada só vira lida quando o usuário realmente
+  // está no presente, com a aba visível e focada.
+  useEffect(() => {
+    if (
+      !visibleUnreadState?.latestMessageId ||
+      !stickToBottom.current ||
+      document.visibilityState !== "visible" ||
+      !document.hasFocus()
+    ) {
+      return;
+    }
+    const frame = requestAnimationFrame(() =>
+      markReadThrough(visibleUnreadState.latestMessageId),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [markReadThrough, messages?.length, visibleUnreadState?.latestMessageId]);
+
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
@@ -213,6 +253,13 @@ export function ChatArea({
     if (isAtBottom) {
       seenCountRef.current = messages?.length ?? 0;
       setNewBelowCount(0);
+      if (
+        visibleUnreadState?.latestMessageId &&
+        document.visibilityState === "visible" &&
+        document.hasFocus()
+      ) {
+        markReadThrough(visibleUnreadState.latestMessageId);
+      }
     }
 
     if (
@@ -253,6 +300,29 @@ export function ChatArea({
       .map(([, entry]) => entry.name);
   }, [typingMap, myId, now]);
 
+  // Barra fixa logo abaixo do header, alimentada pelo read state do backend.
+  const unreadBar = useMemo(() => {
+    if (!visibleUnreadState) return null;
+    const count = visibleUnreadState.count;
+    return (
+      <div className="relative flex min-h-9 items-center gap-3 border-b border-[#4654D8]/45 bg-[#4654D8] px-4 text-white shadow-[0_1px_0_rgb(255_255_255/0.08)_inset] select-none">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+          {count === 1 ? "1 mensagem nova" : `${count} mensagens novas`}
+          {visibleUnreadState.firstUnreadAt
+            ? ` desde ${formatUnreadSince(visibleUnreadState.firstUnreadAt)}`
+            : ""}
+        </span>
+        <button
+          onClick={() => markReadThrough(visibleUnreadState.latestMessageId)}
+          className="shrink-0 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/15 active:scale-[0.98]"
+        >
+          Marcar como lida
+        </button>
+      </div>
+    );
+  }, [markReadThrough, visibleUnreadState]);
+
+  // Última mensagem própria (não-sistema) para o recibo "Visto por N".
   // Última mensagem própria (não-sistema) para o recibo "Visto por N".
   const lastOwnMessageId = useMemo(() => {
     if (!showReadReceipts || !messages) return null;
@@ -266,6 +336,7 @@ export function ChatArea({
   return (
     <main className="flex-1 flex flex-col min-w-0 h-full bg-chat relative select-text">
       {header}
+      {unreadBar}
 
       {/* Messages area */}
       <div
@@ -335,12 +406,12 @@ export function ChatArea({
               messages,
               myId,
               canManageMessages,
-              canPinMessages,
               channelType,
               canPublish,
-              unreadBoundary,
+              canPinMessages,
               jumpTo,
-              onOpenProfile
+              onOpenProfile,
+              visibleUnreadState?.firstUnreadMessageId ?? null,
             )}
           </div>
         )}
@@ -359,7 +430,9 @@ export function ChatArea({
           <ArrowDown className="h-3.5 w-3.5" />
           <span>
             {newBelowCount > 0
-              ? `${newBelowCount} nova${newBelowCount === 1 ? "" : "s"} mensagem${newBelowCount === 1 ? "" : "s"}`
+              ? newBelowCount === 1
+                ? "1 nova mensagem"
+                : `${newBelowCount} novas mensagens`
               : "Ir para o presente"}
           </span>
         </button>
@@ -412,12 +485,12 @@ function renderMessages(
   >,
   myId: number,
   canManage: boolean,
-  canPin: boolean,
   channelType: string | undefined,
   canPublish: boolean | undefined,
-  firstUnreadMessageId: number | null,
+  canPinMessages: boolean,
   jumpTo: (id: number) => void,
-  onOpenProfile?: (userId: number) => void
+  onOpenProfile?: (userId: number) => void,
+  unreadBoundary?: number | null,
 ) {
   const items: React.ReactNode[] = [];
   let lastDay = "";
@@ -425,6 +498,24 @@ function renderMessages(
   let lastTime = 0;
 
   for (const msg of messages) {
+    if (msg.id === unreadBoundary) {
+      items.push(
+        <div
+          id={`unread-${msg.id}`}
+          key={`unread-${msg.id}`}
+          className="flex items-center gap-3 px-4 py-2 select-none"
+          role="separator"
+          aria-label="Novas mensagens"
+        >
+          <div className="h-px flex-1 bg-[#7383FF]/70" />
+          <span className="text-[11px] font-semibold text-[#7383FF]">
+            Novas mensagens
+          </span>
+          <div className="h-px flex-1 bg-[#7383FF]/70" />
+        </div>,
+      );
+      lastAuthor = -1;
+    }
     const date = new Date(msg.createdAt);
     const day = date.toLocaleDateString("pt-BR", {
       day: "numeric",
@@ -448,24 +539,6 @@ function renderMessages(
       lastAuthor = -1;
     }
 
-    if (msg.id === firstUnreadMessageId) {
-      items.push(
-        <div
-          key={`unread-${msg.id}`}
-          className="flex items-center gap-3 px-4 py-2 select-none"
-          role="separator"
-          aria-label="Novas mensagens"
-        >
-          <div className="h-px flex-1 bg-[var(--dm-unread-divider)]" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--dm-unread-divider)]">
-            Novas mensagens
-          </span>
-          <div className="h-px flex-1 bg-[var(--dm-unread-divider)]" />
-        </div>,
-      );
-      lastAuthor = -1;
-    }
-
     const grouped =
       lastAuthor === msg.authorId &&
       date.getTime() - lastTime < 5 * 60 * 1000 &&
@@ -478,9 +551,9 @@ function renderMessages(
         grouped={grouped}
         myId={myId}
         canManageMessages={canManage}
-        canPinMessages={canPin}
         channelType={channelType}
         canPublish={canPublish}
+        canPinMessages={canPinMessages}
         onJumpTo={jumpTo}
         onOpenProfile={onOpenProfile}
       />
@@ -492,6 +565,24 @@ function renderMessages(
     }
   }
   return items;
+}
+
+function formatUnreadSince(value: string | Date) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  return sameDay
+    ? date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 }
 
 function SkeletonChatLoader() {

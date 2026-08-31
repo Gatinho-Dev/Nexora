@@ -46,12 +46,11 @@ export function useRealtime(myUserId: number | undefined) {
           store.addMessage(msg);
           const isMine = msg.authorId === myUserId;
           if (msg.channelId) {
-            if (view.channelId === msg.channelId) {
-              utils.client.message.markRead
-                .mutate({ channelId: msg.channelId, lastMessageId: msg.id })
-                .catch(() => {});
-            } else if (!isMine) {
-              store.bumpUnreadChannel(msg.channelId);
+            if (!isMine) {
+              if (view.channelId !== msg.channelId) {
+                store.bumpUnreadChannel(msg.channelId);
+              }
+              void utils.message.unread.invalidate();
             }
           } else if (msg.conversationId) {
             utils.dm.list.invalidate();
@@ -125,6 +124,13 @@ export function useRealtime(myUserId: number | undefined) {
             ? `c:${event.channelId}`
             : `dm:${event.conversationId}`;
           store.setVoiceParticipants(roomKey, event.participants);
+          if (event.serverId) {
+            store.setServerVoiceSummary(
+              event.serverId,
+              event.activeVoiceCount ?? event.participants.length,
+              event.voicePreviewMembers ?? event.participants,
+            );
+          }
           voiceManager.syncParticipants(roomKey, event.participants);
           break;
         }
@@ -150,6 +156,9 @@ export function useRealtime(myUserId: number | undefined) {
           utils.notification.unreadCount.invalidate();
           utils.notification.list.invalidate();
           const n = event.notification;
+          if (n.type === "mention" && n.channelId) {
+            void utils.message.unread.invalidate();
+          }
           const notificationView = getCurrentView();
           const isOpenConversation =
             !!n.conversationId &&

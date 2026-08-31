@@ -172,6 +172,10 @@ export type ServerDTO = {
   name: string;
   iconUrl: string | null;
   bannerUrl?: string | null;
+  /** Parceria oficial persistida no servidor. */
+  partnered: boolean;
+  /** Badges reais derivados de features persistidas do servidor. */
+  badges?: ServerBadgeType[];
   vanitySlug?: string | null;
   description: string | null;
   tags?: string[];
@@ -182,7 +186,20 @@ export type ServerDTO = {
   rules?: string[];
   communityEnabled?: boolean;
   ownerId: number;
+  /** Permissões efetivas do usuário atual, presentes nos resumos da rail. */
+  myPermissions?: Permission[];
+  /** Resumo de voz já filtrado por canais que o usuário pode visualizar. */
+  activeVoiceCount?: number;
+  voicePreviewMembers?: VoicePreviewMember[];
   createdAt: string | Date;
+};
+
+export type ServerBadgeType = "partner";
+
+export type VoicePreviewMember = {
+  userId: number;
+  name: string;
+  avatar: string | null;
 };
 
 export type ServerDetailsDTO = {
@@ -559,7 +576,10 @@ export type WSServerEvent =
       t: "voice:participants";
       channelId?: number;
       conversationId?: number;
+      serverId?: number;
       participants: VoiceParticipant[];
+      activeVoiceCount?: number;
+      voicePreviewMembers?: VoicePreviewMember[];
     }
   | {
       t: "voice:ready";

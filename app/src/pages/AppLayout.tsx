@@ -122,7 +122,11 @@ export function AppLayout() {
     if (unread.data) {
       useAppStore
         .getState()
-        .setUnread(unread.data.channels, unread.data.conversations);
+        .setUnread(
+          unread.data.channels,
+          unread.data.conversations,
+          unread.data.channelDetails,
+        );
     }
   }, [unread.data]);
 
@@ -181,7 +185,7 @@ export function AppLayout() {
 
   const handleOpenContextMenu = (
     e: React.MouseEvent,
-    type: "user" | "channel" | "server",
+    type: "user" | "channel",
     id: number
   ) => {
     e.preventDefault();
@@ -197,7 +201,7 @@ export function AppLayout() {
       <div className="flex min-h-0 flex-1">
       {/* Desktop Rail */}
       <div className="hidden md:flex h-full">
-        <ServerRail onOpenContextMenu={handleOpenContextMenu} />
+        <ServerRail />
       </div>
 
       {/* Mobile Drawer */}
@@ -208,7 +212,7 @@ export function AppLayout() {
             onClick={() => setMobileNavOpen(false)}
           />
           <div className="absolute left-0 top-0 flex h-full shadow-2xl">
-            <ServerRail onOpenContextMenu={handleOpenContextMenu} />
+            <ServerRail />
             <div id="mobile-sidebar-slot" className="flex h-full" />
           </div>
         </div>
