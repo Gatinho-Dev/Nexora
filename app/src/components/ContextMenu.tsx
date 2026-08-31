@@ -15,8 +15,6 @@ import {
   Flag,
   Trash2,
   Link,
-  Settings,
-  LogOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
@@ -25,7 +23,7 @@ import { OPEN_REPORT_EVENT } from "./safety/ReportHost";
 export type ContextMenuState = {
   x: number;
   y: number;
-  type: "user" | "channel" | "server";
+  type: "user" | "channel";
   id: number;
   name?: string;
 } | null;
@@ -223,54 +221,6 @@ export function ContextMenu({
             icon={<Copy className="h-4 w-4 text-muted2" />}
             label="Copiar ID"
             onClick={() => copyToClipboard(String(menuState.id), "ID do canal")}
-          />
-        </>
-      )}
-
-      {menuState.type === "server" && (
-        <>
-          <MenuItem
-            icon={<CheckCheck className="h-4 w-4 text-emerald-400" />}
-            label="Marcar como lido"
-            onClick={() => {
-              toast.success("Servidor marcado como lido!");
-              onClose();
-            }}
-          />
-          <MenuItem
-            icon={<UserPlus className="h-4 w-4 text-[#5865F2]" />}
-            label="Convidar pessoas"
-            onClick={() => {
-              toast.info("Compartilhe o link de convite.");
-              onClose();
-            }}
-          />
-          <MenuItem
-            icon={<BellOff className="h-4 w-4 text-muted2" />}
-            label="Silenciar servidor"
-            onClick={() => {
-              toast.info("Servidor silenciado.");
-              onClose();
-            }}
-          />
-          <MenuDivider />
-          <MenuItem
-            icon={<Settings className="h-4 w-4 text-muted2" />}
-            label="Configurações"
-            onClick={() => {
-              toast.info("Abrindo configurações do servidor...");
-              onClose();
-            }}
-          />
-          <MenuDivider />
-          <MenuItem
-            icon={<LogOut className="h-4 w-4 text-red-400" />}
-            label="Sair do servidor"
-            danger
-            onClick={() => {
-              toast.warning("Sair do servidor acionado.");
-              onClose();
-            }}
           />
         </>
       )}

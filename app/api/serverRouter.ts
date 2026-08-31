@@ -11,7 +11,12 @@ import {
   PERMISSIONS,
   RateLimits,
 } from "@contracts/constants";
-import type { MemberDTO, RoleDTO, ServerDetailsDTO } from "@contracts/types";
+import type {
+  MemberDTO,
+  RoleDTO,
+  ServerDetailsDTO,
+  ServerDTO,
+} from "@contracts/types";
 import { rateLimit } from "./utils/rateLimit";
 import {
   getEffectiveChannelPermissions,
@@ -23,7 +28,12 @@ import {
   toPublicUser,
 } from "./utils/permissions";
 import { logServerAudit } from "./services/serverAudit";
-import { broadcastToServer, sendToUsers, setLiveStageSpeaker } from "./realtime";
+import {
+  broadcastToServer,
+  getVoiceSummaryForChannels,
+  sendToUsers,
+  setLiveStageSpeaker,
+} from "./realtime";
 import { assertCanInteract } from "./services/accountSafety";
 import { moderatePublicFieldAsync } from "./services/profileModeration";
 import {
@@ -69,21 +79,59 @@ async function refreshServer(serverId: number) {
 }
 
 export const serverRouter = createRouter({
-  list: authedQuery.query(async ({ ctx }) => {
+  list: authedQuery.query(async ({ ctx }): Promise<ServerDTO[]> => {
     const db = getDb();
     const memberships = await db
-      .select({ serverId: schema.serverMembers.serverId })
+      .select({ server: schema.servers })
       .from(schema.serverMembers)
+      .innerJoin(
+        schema.servers,
+        eq(schema.serverMembers.serverId, schema.servers.id),
+      )
       .where(eq(schema.serverMembers.userId, ctx.user.id));
     if (memberships.length === 0) return [];
-    const result = [];
-    for (const m of memberships) {
-      const server = await db.query.servers.findFirst({
-        where: eq(schema.servers.id, m.serverId),
-      });
-      if (server) result.push(server);
-    }
-    return result;
+    const serverIds = memberships.map(row => row.server.id);
+    const voiceChannels = await db
+      .select()
+      .from(schema.channels)
+      .where(
+        and(
+          inArray(schema.channels.serverId, serverIds),
+          inArray(schema.channels.type, ["VOICE", "STAGE"]),
+        ),
+      );
+
+    return Promise.all(
+      memberships.map(async ({ server }) => {
+        const permissions = await getMemberPermissions(ctx.user.id, server.id);
+        const candidateChannels = voiceChannels.filter(
+          channel => channel.serverId === server.id,
+        );
+        const visibleVoiceChannelIds: number[] = [];
+        for (const channel of candidateChannels) {
+          if (
+            permissions?.has("ADMINISTRATOR") ||
+            permissions?.has("MANAGE_CHANNELS")
+          ) {
+            visibleVoiceChannelIds.push(channel.id);
+            continue;
+          }
+          const effective = await getEffectiveChannelPermissions(
+            ctx.user.id,
+            channel,
+          );
+          if (effective?.has("VIEW_CHANNEL")) {
+            visibleVoiceChannelIds.push(channel.id);
+          }
+        }
+        return {
+          ...server,
+          badges: server.partnered ? ["partner"] : [],
+          myPermissions: permissions ? [...permissions] : [],
+          ...getVoiceSummaryForChannels(visibleVoiceChannelIds),
+        };
+      }),
+    );
   }),
 
   create: authedQuery
@@ -574,6 +622,99 @@ export const serverRouter = createRouter({
         );
       await refreshServer(input.serverId);
       return { ok: true };
+    }),
+
+  /** Marca, de uma só vez, apenas os canais visíveis deste servidor. */
+  markRead: authedQuery
+    .input(z.object({ serverId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const permissions = await getMemberPermissions(ctx.user.id, input.serverId);
+      if (!permissions) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Você não é membro deste servidor.",
+        });
+      }
+      const db = getDb();
+      const channelRows = await db
+        .select()
+        .from(schema.channels)
+        .where(
+          and(
+            eq(schema.channels.serverId, input.serverId),
+            inArray(schema.channels.type, [
+              "TEXT",
+              "ANNOUNCEMENT",
+              "FORUM",
+              "MEDIA",
+            ]),
+          ),
+        );
+      const visibleChannelIds: number[] = [];
+      for (const channel of channelRows) {
+        if (
+          permissions.has("ADMINISTRATOR") ||
+          permissions.has("MANAGE_CHANNELS")
+        ) {
+          visibleChannelIds.push(channel.id);
+          continue;
+        }
+        const effective = await getEffectiveChannelPermissions(
+          ctx.user.id,
+          channel,
+        );
+        if (effective?.has("VIEW_CHANNEL")) visibleChannelIds.push(channel.id);
+      }
+      if (visibleChannelIds.length === 0) return { channelIds: [] as number[] };
+
+      const latestRows = await db
+        .select({
+          channelId: schema.messages.channelId,
+          lastMessageId: sql<number>`max(${schema.messages.id})`,
+        })
+        .from(schema.messages)
+        .where(inArray(schema.messages.channelId, visibleChannelIds))
+        .groupBy(schema.messages.channelId);
+
+      await db.transaction(async tx => {
+        for (const row of latestRows) {
+          if (!row.channelId || !row.lastMessageId) continue;
+          await tx
+            .insert(schema.channelReads)
+            .values({
+              userId: ctx.user.id,
+              channelId: row.channelId,
+              conversationId: null,
+              lastReadMessageId: Number(row.lastMessageId),
+            })
+            .onDuplicateKeyUpdate({
+              set: {
+                lastReadMessageId: sql`greatest(lastReadMessageId, values(lastReadMessageId))`,
+                updatedAt: new Date(),
+              },
+            });
+        }
+        await tx
+          .update(schema.notifications)
+          .set({ isRead: true })
+          .where(
+            and(
+              eq(schema.notifications.userId, ctx.user.id),
+              eq(schema.notifications.serverId, input.serverId),
+            ),
+          );
+      });
+
+      for (const row of latestRows) {
+        if (!row.channelId || !row.lastMessageId) continue;
+        sendToUsers([ctx.user.id], {
+          t: "read:update",
+          userId: ctx.user.id,
+          channelId: row.channelId,
+          lastMessageId: Number(row.lastMessageId),
+        });
+      }
+      return { channelIds: visibleChannelIds };
     }),
 
   // ── Channels & categories ───────────────────────────────────

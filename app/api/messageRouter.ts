@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { createRouter, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
@@ -16,6 +16,8 @@ import type {
 } from "@contracts/types";
 import { rateLimit } from "./utils/rateLimit";
 import {
+  getEffectiveChannelPermissions,
+  getMemberPermissions,
   requireChannelAccess,
   requireConversationAccess,
   toPublicUser,
@@ -570,6 +572,8 @@ export const messageRouter = createRouter({
     .input(
       targetSchema.extend({
         before: z.number().optional(),
+        /** Carrega contexto ao redor da primeira mensagem não lida. */
+        around: z.number().optional(),
         threadId: z.number().optional(),
         limit: z.number().min(1).max(100).default(50),
       })
@@ -593,21 +597,57 @@ export const messageRouter = createRouter({
             : eq(schema.messages.threadId, input.threadId)
         );
       }
-      if (input.before)
+      if (input.before && !input.around)
         conditions.push(sql`${schema.messages.id} < ${input.before}`);
 
-      const rows = await db
-        .select()
-        .from(schema.messages)
-        .where(and(...conditions))
-        .orderBy(desc(schema.messages.id))
-        .limit(input.limit);
+      let rows: (typeof schema.messages.$inferSelect)[];
+      let hasMore: boolean;
+      if (input.around) {
+        const contextBefore = Math.min(10, Math.max(0, input.limit - 1));
+        const [beforeRows, unreadRows] = await Promise.all([
+          contextBefore > 0
+            ? db
+                .select()
+                .from(schema.messages)
+                .where(
+                  and(
+                    ...conditions,
+                    sql`${schema.messages.id} < ${input.around}`,
+                  ),
+                )
+                .orderBy(desc(schema.messages.id))
+                .limit(contextBefore)
+            : Promise.resolve([] as (typeof schema.messages.$inferSelect)[]),
+          db
+            .select()
+            .from(schema.messages)
+            .where(
+              and(
+                ...conditions,
+                sql`${schema.messages.id} >= ${input.around}`,
+              ),
+            )
+            .orderBy(asc(schema.messages.id))
+            .limit(Math.max(1, input.limit - contextBefore)),
+        ]);
+        rows = [...beforeRows.reverse(), ...unreadRows];
+        hasMore = beforeRows.length === contextBefore;
+      } else {
+        const latestRows = await db
+          .select()
+          .from(schema.messages)
+          .where(and(...conditions))
+          .orderBy(desc(schema.messages.id))
+          .limit(input.limit);
+        rows = latestRows.reverse();
+        hasMore = latestRows.length === input.limit;
+      }
 
       // Batch: ~8 queries totais em vez de ~7 por mensagem (N+1 eliminado).
       const messages = await buildMessageDTOs(rows);
       return {
-        messages: messages.reverse(),
-        hasMore: rows.length === input.limit,
+        messages,
+        hasMore,
       };
     }),
 
@@ -1084,46 +1124,125 @@ export const messageRouter = createRouter({
 
   unread: authedQuery.query(async ({ ctx }) => {
     const db = getDb();
-    const readRows = await db
-      .select()
-      .from(schema.channelReads)
-      .where(eq(schema.channelReads.userId, ctx.user.id));
-    const readByChannel = new Map<number, number>();
-    for (const r of readRows) {
-      if (r.channelId) readByChannel.set(r.channelId, r.lastReadMessageId);
-    }
-
     const channels: Record<number, number> = {};
     const conversations: Record<number, number> = {};
+    const channelDetails: Record<
+      number,
+      {
+        serverId: number;
+        count: number;
+        mentionCount: number;
+        firstUnreadMessageId: number;
+        firstUnreadAt: Date;
+        latestMessageId: number;
+      }
+    > = {};
+    const conversationDetails: Record<
+      number,
+      {
+        count: number;
+        firstUnreadMessageId: number;
+        firstUnreadAt: Date;
+        latestMessageId: number;
+      }
+    > = {};
 
     // Channels from my servers
     const memberships = await db
       .select({ serverId: schema.serverMembers.serverId })
       .from(schema.serverMembers)
       .where(eq(schema.serverMembers.userId, ctx.user.id));
-    for (const m of memberships) {
+    const serverIds = memberships.map(row => row.serverId);
+    if (serverIds.length > 0) {
       const channelRows = await db
         .select()
         .from(schema.channels)
         .where(
           and(
-            eq(schema.channels.serverId, m.serverId),
-            eq(schema.channels.type, "TEXT")
-          )
+            inArray(schema.channels.serverId, serverIds),
+            inArray(schema.channels.type, [
+              "TEXT",
+              "ANNOUNCEMENT",
+              "FORUM",
+              "MEDIA",
+            ]),
+          ),
         );
+      const permissionsByServer = new Map<number, Awaited<ReturnType<typeof getMemberPermissions>>>();
+      const visibleChannels: typeof channelRows = [];
       for (const ch of channelRows) {
-        const lastRead = readByChannel.get(ch.id) ?? 0;
-        const [{ count }] = await db
-          .select({ count: sql<number>`count(*)` })
-          .from(schema.messages)
-          .where(
-            and(
-              eq(schema.messages.channelId, ch.id),
-              gt(schema.messages.id, lastRead),
-              ne(schema.messages.authorId, ctx.user.id)
+        let permissions = permissionsByServer.get(ch.serverId);
+        if (permissions === undefined) {
+          permissions = await getMemberPermissions(ctx.user.id, ch.serverId);
+          permissionsByServer.set(ch.serverId, permissions);
+        }
+        if (
+          permissions?.has("ADMINISTRATOR") ||
+          permissions?.has("MANAGE_CHANNELS")
+        ) {
+          visibleChannels.push(ch);
+          continue;
+        }
+        const effective = await getEffectiveChannelPermissions(ctx.user.id, ch);
+        if (effective?.has("VIEW_CHANNEL")) visibleChannels.push(ch);
+      }
+
+      const visibleIds = visibleChannels.map(channel => channel.id);
+      if (visibleIds.length > 0) {
+        const [unreadRows, mentionRows] = await Promise.all([
+          db
+            .select({
+              channelId: schema.messages.channelId,
+              count: sql<number>`count(*)`,
+              firstUnreadMessageId: sql<number>`min(${schema.messages.id})`,
+              firstUnreadAt: sql<Date>`min(${schema.messages.createdAt})`,
+              latestMessageId: sql<number>`max(${schema.messages.id})`,
+            })
+            .from(schema.messages)
+            .where(
+              and(
+                inArray(schema.messages.channelId, visibleIds),
+                ne(schema.messages.authorId, ctx.user.id),
+                sql`${schema.messages.id} > coalesce((select max(cr.lastReadMessageId) from channel_reads cr where cr.userId = ${ctx.user.id} and cr.channelId = ${schema.messages.channelId}), 0)`,
+              ),
             )
-          );
-        if (Number(count) > 0) channels[ch.id] = Number(count);
+            .groupBy(schema.messages.channelId),
+          db
+            .select({
+              channelId: schema.notifications.channelId,
+              count: sql<number>`count(*)`,
+            })
+            .from(schema.notifications)
+            .where(
+              and(
+                eq(schema.notifications.userId, ctx.user.id),
+                eq(schema.notifications.isRead, false),
+                eq(schema.notifications.type, "mention"),
+                inArray(schema.notifications.channelId, visibleIds),
+              ),
+            )
+            .groupBy(schema.notifications.channelId),
+        ]);
+        const mentionsByChannel = new Map(
+          mentionRows.map(row => [Number(row.channelId), Number(row.count)]),
+        );
+        const serverByChannel = new Map(
+          visibleChannels.map(channel => [channel.id, channel.serverId]),
+        );
+        for (const row of unreadRows) {
+          const channelId = Number(row.channelId);
+          const count = Number(row.count);
+          if (!channelId || count <= 0) continue;
+          channels[channelId] = count;
+          channelDetails[channelId] = {
+            serverId: serverByChannel.get(channelId)!,
+            count,
+            mentionCount: mentionsByChannel.get(channelId) ?? 0,
+            firstUnreadMessageId: Number(row.firstUnreadMessageId),
+            firstUnreadAt: row.firstUnreadAt,
+            latestMessageId: Number(row.latestMessageId),
+          };
+        }
       }
     }
 
@@ -1138,6 +1257,9 @@ export const messageRouter = createRouter({
         .select({
           conversationId: schema.messages.conversationId,
           count: sql<number>`count(*)`,
+          firstUnreadMessageId: sql<number>`min(${schema.messages.id})`,
+          firstUnreadAt: sql<Date>`min(${schema.messages.createdAt})`,
+          latestMessageId: sql<number>`max(${schema.messages.id})`,
         })
         .from(schema.messages)
         .where(
@@ -1152,11 +1274,17 @@ export const messageRouter = createRouter({
         const conversationId = Number(row.conversationId);
         if (conversationId > 0 && Number(row.count) > 0) {
           conversations[conversationId] = Number(row.count);
+          conversationDetails[conversationId] = {
+            count: Number(row.count),
+            firstUnreadMessageId: Number(row.firstUnreadMessageId),
+            firstUnreadAt: row.firstUnreadAt,
+            latestMessageId: Number(row.latestMessageId),
+          };
         }
       }
     }
 
-    return { channels, conversations };
+    return { channels, conversations, channelDetails, conversationDetails };
   }),
 });
 

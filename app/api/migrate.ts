@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -243,9 +244,15 @@ async function recoverIncompleteServerSettingsMigration(migrationsFolder: string
 
 try {
   const db = drizzle(pool);
-  const migrationsFolder = fileURLToPath(
-    new URL("./migrations", import.meta.url)
+  const bundledMigrationsFolder = fileURLToPath(
+    new URL("./migrations", import.meta.url),
   );
+  const sourceMigrationsFolder = fileURLToPath(
+    new URL("../db/migrations", import.meta.url),
+  );
+  const migrationsFolder = existsSync(bundledMigrationsFolder)
+    ? bundledMigrationsFolder
+    : sourceMigrationsFolder;
 
   await recoverPrivateInboxMigration(migrationsFolder);
   await recoverIncompleteServerSettingsMigration(migrationsFolder);

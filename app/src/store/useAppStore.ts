@@ -11,6 +11,20 @@ export const dmKey = (id: number) => `dm:${id}`;
 
 type TypingEntry = { name: string; until: number };
 
+export type ChannelUnreadDetail = {
+  serverId: number;
+  count: number;
+  mentionCount: number;
+  firstUnreadMessageId: number;
+  firstUnreadAt: string | Date;
+  latestMessageId: number;
+};
+
+type ServerVoiceSummary = {
+  count: number;
+  preview: Pick<VoiceParticipant, "userId" | "name" | "avatar">[];
+};
+
 export type VoiceConnectionStatus =
   "idle" | "connecting" | "connected" | "reconnecting" | "failed";
 
@@ -25,7 +39,14 @@ type AppState = {
   setSensitiveMediaPref: (pref: "hide" | "warn" | "auto") => void;
   // rail unread aggregation per server
   serverUnread: Record<number, number>;
+  serverMentions: Record<number, number>;
   setServerUnread: (serverId: number, count: number) => void;
+  serverVoiceSummaries: Record<number, ServerVoiceSummary>;
+  setServerVoiceSummary: (
+    serverId: number,
+    count: number,
+    preview: Pick<VoiceParticipant, "userId" | "name" | "avatar">[],
+  ) => void;
   stageHandsByRoom: Record<string, number[]>;
   setStageHands: (roomKey: string, userIds: number[]) => void;
   quickSwitcherOpen: boolean;
@@ -37,6 +58,7 @@ type AppState = {
   setRobloxActivity: (userId: number, activity: RobloxActivityDTO | null) => void;
   unreadChannels: Record<number, number>;
   unreadConversations: Record<number, number>;
+  channelUnreadDetails: Record<number, ChannelUnreadDetail>;
   // voice
   voiceParticipants: Record<string, VoiceParticipant[]>;
   voiceChannelId: number | null;
@@ -82,7 +104,8 @@ type AppState = {
   setPresenceBulk: (entries: Record<number, string>) => void;
   setUnread: (
     channels: Record<number, number>,
-    conversations: Record<number, number>
+    conversations: Record<number, number>,
+    channelDetails?: Record<number, ChannelUnreadDetail>,
   ) => void;
   bumpUnreadChannel: (id: number) => void;
   bumpUnreadConversation: (id: number) => void;
@@ -131,10 +154,13 @@ export const useAppStore = create<AppState>(set => ({
   robloxActivity: {},
   sensitiveMediaPref: "warn",
   serverUnread: {},
+  serverMentions: {},
+  serverVoiceSummaries: {},
   stageHandsByRoom: {},
   quickSwitcherOpen: false,
   unreadChannels: {},
   unreadConversations: {},
+  channelUnreadDetails: {},
   voiceParticipants: {},
   voiceChannelId: null,
   voiceConversationId: null,
@@ -258,8 +284,24 @@ export const useAppStore = create<AppState>(set => ({
   setPresenceBulk: entries =>
     set(s => ({ presence: { ...s.presence, ...entries } })),
 
-  setUnread: (channels, conversations) =>
-    set({ unreadChannels: channels, unreadConversations: conversations }),
+  setUnread: (channels, conversations, channelDetails = {}) =>
+    set(() => {
+      const serverUnread: Record<number, number> = {};
+      const serverMentions: Record<number, number> = {};
+      for (const detail of Object.values(channelDetails)) {
+        serverUnread[detail.serverId] =
+          (serverUnread[detail.serverId] ?? 0) + detail.count;
+        serverMentions[detail.serverId] =
+          (serverMentions[detail.serverId] ?? 0) + detail.mentionCount;
+      }
+      return {
+        unreadChannels: channels,
+        unreadConversations: conversations,
+        channelUnreadDetails: channelDetails,
+        serverUnread,
+        serverMentions,
+      };
+    }),
 
   setSensitiveMediaPref: pref => {
     set({ sensitiveMediaPref: pref });
@@ -277,6 +319,16 @@ export const useAppStore = create<AppState>(set => ({
         ? state
         : { serverUnread: { ...state.serverUnread, [serverId]: count } }
     ),
+  setServerVoiceSummary: (serverId, count, preview) =>
+    set(state => ({
+      serverVoiceSummaries: {
+        ...state.serverVoiceSummaries,
+        [serverId]: {
+          count,
+          preview: preview.slice(0, 4),
+        },
+      },
+    })),
   bumpUnreadChannel: id =>
     set(s => ({
       unreadChannels: {
@@ -296,8 +348,27 @@ export const useAppStore = create<AppState>(set => ({
   clearUnreadChannel: id =>
     set(s => {
       const next = { ...s.unreadChannels };
+      const details = { ...s.channelUnreadDetails };
+      const detail = details[id];
       delete next[id];
-      return { unreadChannels: next };
+      delete details[id];
+      if (!detail) return { unreadChannels: next, channelUnreadDetails: details };
+      const serverUnread = { ...s.serverUnread };
+      const serverMentions = { ...s.serverMentions };
+      serverUnread[detail.serverId] = Math.max(
+        0,
+        (serverUnread[detail.serverId] ?? 0) - detail.count,
+      );
+      serverMentions[detail.serverId] = Math.max(
+        0,
+        (serverMentions[detail.serverId] ?? 0) - detail.mentionCount,
+      );
+      return {
+        unreadChannels: next,
+        channelUnreadDetails: details,
+        serverUnread,
+        serverMentions,
+      };
     }),
 
   clearUnreadConversation: id =>

@@ -37,7 +37,7 @@ import {
   revoke,
 } from "./services/badgeService";
 import { toPublicUser } from "./utils/permissions";
-import { broadcastToAll } from "./realtime";
+import { broadcastToAll, broadcastToServer } from "./realtime";
 import {
   addInternalNote,
   confirmViolation,
@@ -770,6 +770,10 @@ export const adminRouter = createRouter({
           partneredAt: input.partnered ? new Date() : null,
         })
         .where(eq(schema.servers.id, input.serverId));
+      await broadcastToServer(server.id, {
+        t: "server:refresh",
+        serverId: server.id,
+      });
       await recordEvent(
         input.partnered ? "SERVER_PARTNERED" : "SERVER_UNPARTNERED",
         server.ownerId,
