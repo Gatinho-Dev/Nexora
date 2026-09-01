@@ -515,8 +515,16 @@ export type WSClientEvent =
   | { t: "presence"; status: UserStatus }
   | { t: "group:update"; conversationId: number }
   | { t: "stage:hand"; channelId?: number; raised: boolean }
-  | { t: "voice:join"; channelId?: number; conversationId?: number }
+  | {
+      t: "voice:join";
+      channelId?: number;
+      conversationId?: number;
+      /** True only for the user gesture that starts a fresh DM call. */
+      initiated?: boolean;
+      video?: boolean;
+    }
   | { t: "voice:leave"; voiceSessionId?: string }
+  | { t: "call:decline"; conversationId: number }
   | {
       t: "voice:state";
       muted?: boolean;
@@ -592,6 +600,17 @@ export type WSServerEvent =
       channelId?: number;
       conversationId?: number;
       reason: string;
+    }
+  | {
+      t: "call:state";
+      conversationId: number;
+      callId: string;
+      state: "ringing" | "connected" | "ended";
+      startedAt: string;
+      unansweredDeadline?: string;
+      video: boolean;
+      initiatorId: number;
+      reason?: "unanswered" | "declined" | "cancelled" | "completed";
     }
   | {
       t: "signal";

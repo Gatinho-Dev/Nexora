@@ -14,10 +14,13 @@ export function microphoneConstraints(
   prefs: DevicePrefs
 ): MediaTrackConstraints {
   const mode = prefs.audioProcessing ?? "standard";
+  const nativeProcessing = mode === "standard";
   return {
-    echoCancellation: mode !== "off",
-    noiseSuppression: mode === "standard",
-    autoGainControl: mode === "standard",
+    echoCancellation: mode === "off" ? false : (prefs.echoCancellation ?? true),
+    noiseSuppression: nativeProcessing
+      ? (prefs.noiseSuppression ?? true)
+      : false,
+    autoGainControl: nativeProcessing ? (prefs.autoGainControl ?? true) : false,
     channelCount: { ideal: 1 },
     sampleRate: { ideal: 48_000 },
     // "ideal" e não "exact": um deviceId salvo no desktop não existe no

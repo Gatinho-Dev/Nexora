@@ -33,4 +33,19 @@ describe("microphoneConstraints", () => {
       autoGainControl: false,
     });
   });
+
+  it("respects saved native processing preferences", () => {
+    expect(
+      microphoneConstraints({
+        audioProcessing: "standard",
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      })
+    ).toMatchObject({
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    });
+  });
 });

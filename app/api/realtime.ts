@@ -22,6 +22,13 @@ import {
 } from "./utils/permissions";
 import { env } from "./lib/env";
 import { randomUUID } from "node:crypto";
+import {
+  allInviteesDeclined,
+  DM_UNANSWERED_TIMEOUT_MS,
+  hasUnansweredCallExpired,
+  isDmCallAnswered,
+} from "./voice/dmCallPolicy";
+import { insertSystemMessage } from "./services/groupService";
 
 // ── Connection registry ───────────────────────────────────────
 type Client = {
@@ -43,6 +50,20 @@ const voiceRooms = new Map<string, Map<number, VoiceParticipant>>();
 const userVoiceRoom = new Map<number, string>();
 const voiceClientByUser = new Map<number, Client>();
 const voiceSessionByUser = new Map<number, string>();
+type DmCallSession = {
+  callId: string;
+  conversationId: number;
+  initiatorId: number;
+  startedAt: number;
+  video: boolean;
+  answered: boolean;
+  participantsEver: Set<number>;
+  invitedUserIds: Set<number>;
+  declinedUserIds: Set<number>;
+  timeout: ReturnType<typeof setTimeout> | null;
+  emptyRoomTimeout: ReturnType<typeof setTimeout> | null;
+};
+const dmCallSessions = new Map<number, DmCallSession>();
 /** Raised hands per stage room: roomKey → Set<userId>. */
 const stageHands = new Map<string, Set<number>>();
 /** Max simultaneous video transmitters on a stage (camera or screen). */
@@ -59,6 +80,167 @@ function channelRoomKey(channelId: number) {
 }
 function dmRoomKey(conversationId: number) {
   return `dm:${conversationId}`;
+}
+
+function callStateEvent(
+  session: DmCallSession,
+  state: "ringing" | "connected" | "ended",
+  reason?: "unanswered" | "declined" | "cancelled" | "completed"
+): WSServerEvent {
+  return {
+    t: "call:state",
+    conversationId: session.conversationId,
+    callId: session.callId,
+    state,
+    startedAt: new Date(session.startedAt).toISOString(),
+    unansweredDeadline:
+      !session.answered && state !== "ended"
+        ? new Date(session.startedAt + DM_UNANSWERED_TIMEOUT_MS).toISOString()
+        : undefined,
+    video: session.video,
+    initiatorId: session.initiatorId,
+    reason,
+  };
+}
+
+async function endDmCall(
+  conversationId: number,
+  reason: "unanswered" | "declined" | "cancelled" | "completed"
+) {
+  const session = dmCallSessions.get(conversationId);
+  if (!session) return;
+  dmCallSessions.delete(conversationId);
+  if (session.timeout) clearTimeout(session.timeout);
+  session.timeout = null;
+  if (session.emptyRoomTimeout) clearTimeout(session.emptyRoomTimeout);
+  session.emptyRoomTimeout = null;
+
+  try {
+    await broadcastToConversation(
+      conversationId,
+      callStateEvent(session, "ended", reason)
+    );
+  } catch (error) {
+    console.error("[voice] failed to broadcast call end", error);
+  }
+
+  if (reason === "unanswered") {
+    try {
+      const db = getDb();
+      const messageId = await insertSystemMessage(
+        db,
+        conversationId,
+        session.initiatorId,
+        "Chamada não atendida"
+      );
+      const message = await db.query.messages.findFirst({
+        where: eq(schema.messages.id, messageId),
+      });
+      if (message) {
+        // Dynamic import avoids an eager realtime ↔ messageRouter cycle.
+        const { buildMessageDTO } = await import("./messageRouter");
+        await broadcastToConversation(conversationId, {
+          t: "message:new",
+          message: await buildMessageDTO(message),
+        });
+      }
+    } catch (error) {
+      console.error("[voice] failed to persist missed call", error);
+    }
+  }
+
+  const room = voiceRooms.get(dmRoomKey(conversationId));
+  const activeClients = room
+    ? [...room.keys()]
+        .map(userId => voiceClientByUser.get(userId))
+        .filter((client): client is Client => !!client)
+    : [];
+  await Promise.all(activeClients.map(client => voiceLeave(client)));
+}
+
+async function joinDmCallSession(input: {
+  conversationId: number;
+  userId: number;
+  initiated: boolean;
+  video: boolean;
+}) {
+  let session = dmCallSessions.get(input.conversationId);
+  if (!session) {
+    const members = await getDb()
+      .select({ userId: schema.conversationMembers.userId })
+      .from(schema.conversationMembers)
+      .where(
+        eq(schema.conversationMembers.conversationId, input.conversationId)
+      );
+    const startedAt = Date.now();
+    session = {
+      callId: randomUUID(),
+      conversationId: input.conversationId,
+      initiatorId: input.userId,
+      startedAt,
+      video: input.video,
+      answered: false,
+      participantsEver: new Set(),
+      invitedUserIds: new Set(
+        members
+          .map(member => member.userId)
+          .filter(userId => userId !== input.userId)
+      ),
+      declinedUserIds: new Set(),
+      timeout: null,
+      emptyRoomTimeout: null,
+    };
+    dmCallSessions.set(input.conversationId, session);
+    const callId = session.callId;
+    session.timeout = setTimeout(() => {
+      const current = dmCallSessions.get(input.conversationId);
+      if (
+        current?.callId === callId &&
+        hasUnansweredCallExpired({
+          answered: current.answered,
+          startedAt: current.startedAt,
+          now: Date.now(),
+        })
+      ) {
+        void endDmCall(input.conversationId, "unanswered");
+      }
+    }, DM_UNANSWERED_TIMEOUT_MS);
+    session.timeout.unref?.();
+  }
+
+  if (session.emptyRoomTimeout) clearTimeout(session.emptyRoomTimeout);
+  session.emptyRoomTimeout = null;
+
+  session.participantsEver.add(input.userId);
+  if (!session.answered && isDmCallAnswered(session.participantsEver)) {
+    session.answered = true;
+    if (session.timeout) clearTimeout(session.timeout);
+    session.timeout = null;
+    await broadcastToConversation(
+      input.conversationId,
+      callStateEvent(session, "connected")
+    );
+    return;
+  }
+  await broadcastToConversation(
+    input.conversationId,
+    callStateEvent(session, session.answered ? "connected" : "ringing")
+  );
+}
+
+async function declineDmCall(client: Client, conversationId: number) {
+  const member = await getDb().query.conversationMembers.findFirst({
+    where: and(
+      eq(schema.conversationMembers.conversationId, conversationId),
+      eq(schema.conversationMembers.userId, client.userId)
+    ),
+  });
+  const session = dmCallSessions.get(conversationId);
+  if (!member || !session || session.answered) return;
+  session.declinedUserIds.add(client.userId);
+  if (allInviteesDeclined(session.invitedUserIds, session.declinedUserIds)) {
+    await endDmCall(conversationId, "declined");
+  }
 }
 
 function addClient(client: Client) {
@@ -142,8 +324,8 @@ async function serverMemberIds(serverId: number): Promise<number[]> {
     .where(
       and(
         eq(schema.serverMembers.serverId, serverId),
-        inArray(schema.serverMembers.userId, connectedUserIds),
-      ),
+        inArray(schema.serverMembers.userId, connectedUserIds)
+      )
     );
   return rows.map(r => r.userId);
 }
@@ -255,11 +437,13 @@ export function getVoiceSummaryForChannels(channelIds: Iterable<number>) {
   const visible = [...participants.values()];
   return {
     activeVoiceCount: visible.length,
-    voicePreviewMembers: visible.slice(0, 4).map(({ userId, name, avatar }) => ({
-      userId,
-      name,
-      avatar,
-    })),
+    voicePreviewMembers: visible
+      .slice(0, 4)
+      .map(({ userId, name, avatar }) => ({
+        userId,
+        name,
+        avatar,
+      })),
   };
 }
 
@@ -306,14 +490,17 @@ async function broadcastVoiceParticipants(roomKey: string) {
             eq(schema.channels.serverId, channel.serverId),
             or(
               eq(schema.channels.type, "VOICE"),
-              eq(schema.channels.type, "STAGE"),
-            ),
-          ),
+              eq(schema.channels.type, "STAGE")
+            )
+          )
         ),
     ]);
     await Promise.all(
       memberIds.map(async userId => {
-        const permissions = await getMemberPermissions(userId, channel.serverId);
+        const permissions = await getMemberPermissions(
+          userId,
+          channel.serverId
+        );
         const visibleChannelIds: number[] = [];
         for (const voiceChannel of serverVoiceChannels) {
           if (
@@ -325,7 +512,7 @@ async function broadcastVoiceParticipants(roomKey: string) {
           }
           const effective = await getEffectiveChannelPermissions(
             userId,
-            voiceChannel,
+            voiceChannel
           );
           if (effective?.has("VIEW_CHANNEL")) {
             visibleChannelIds.push(voiceChannel.id);
@@ -340,7 +527,7 @@ async function broadcastVoiceParticipants(roomKey: string) {
           participants,
           ...summary,
         });
-      }),
+      })
     );
   } else {
     const conversationId = Number(roomKey.slice(3));
@@ -367,7 +554,9 @@ function broadcastStageHands(roomKey: string) {
   }
 }
 
-async function countTransmitters(room: Map<number, VoiceParticipant>): Promise<number> {
+async function countTransmitters(
+  room: Map<number, VoiceParticipant>
+): Promise<number> {
   let n = 0;
   for (const p of room.values()) if (p.camera || p.screen) n++;
   return n;
@@ -375,7 +564,12 @@ async function countTransmitters(room: Map<number, VoiceParticipant>): Promise<n
 
 async function voiceJoin(
   client: Client,
-  target: { channelId?: number; conversationId?: number }
+  target: {
+    channelId?: number;
+    conversationId?: number;
+    initiated?: boolean;
+    video?: boolean;
+  }
 ) {
   const db = getDb();
   let roomKey: string;
@@ -395,11 +589,7 @@ async function voiceJoin(
       return;
     }
     const perms = await getEffectiveChannelPermissions(client.userId, channel);
-    if (
-      !perms ||
-      !perms.has("VIEW_CHANNEL") ||
-      !perms.has("CONNECT")
-    ) {
+    if (!perms || !perms.has("VIEW_CHANNEL") || !perms.has("CONNECT")) {
       send(client, {
         t: "voice:denied",
         channelId: target.channelId,
@@ -492,6 +682,15 @@ async function voiceJoin(
     voiceSessionId,
   });
 
+  if (target.conversationId) {
+    await joinDmCallSession({
+      conversationId: target.conversationId,
+      userId: client.userId,
+      initiated: target.initiated === true,
+      video: target.video === true,
+    });
+  }
+
   // Audit row for server voice channels (best-effort).
   if (target.channelId) {
     db.insert(schema.voiceSessions)
@@ -502,7 +701,7 @@ async function voiceJoin(
   await broadcastVoiceParticipants(roomKey);
 }
 
-async function voiceLeave(client: Client) {
+async function voiceLeave(client: Client, intentional = false) {
   const activeVoiceClient = voiceClientByUser.get(client.userId);
   if (activeVoiceClient && activeVoiceClient !== client) return;
   const roomKey = userVoiceRoom.get(client.userId);
@@ -521,6 +720,31 @@ async function voiceLeave(client: Client) {
   if (room) {
     room.delete(client.userId);
     if (room.size === 0) voiceRooms.delete(roomKey);
+  }
+  if (roomKey.startsWith("dm:")) {
+    const conversationId = Number(roomKey.slice(3));
+    const session = dmCallSessions.get(conversationId);
+    if (session && !voiceRooms.get(roomKey)?.size) {
+      if (intentional) {
+        await endDmCall(
+          conversationId,
+          session.answered ? "completed" : "cancelled"
+        );
+      } else {
+        if (session.emptyRoomTimeout) clearTimeout(session.emptyRoomTimeout);
+        const callId = session.callId;
+        session.emptyRoomTimeout = setTimeout(() => {
+          const current = dmCallSessions.get(conversationId);
+          if (current?.callId === callId && !voiceRooms.get(roomKey)?.size) {
+            void endDmCall(
+              conversationId,
+              current.answered ? "completed" : "cancelled"
+            );
+          }
+        }, 20_000);
+        session.emptyRoomTimeout.unref?.();
+      }
+    }
   }
   if (roomKey.startsWith("c:")) {
     getDb()
@@ -635,8 +859,11 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       break;
     case "voice:leave":
       if (event.voiceSessionId === voiceSessionByUser.get(client.userId)) {
-        await voiceLeave(client);
+        await voiceLeave(client, true);
       }
+      break;
+    case "call:decline":
+      await declineDmCall(client, event.conversationId);
       break;
     case "voice:state":
       await voiceStateUpdate(client, event);
@@ -760,7 +987,8 @@ export function attachRealtime(server: HttpServer) {
         const claim = token ? await verifySessionToken(token) : null;
         // Sessão deve existir e estar ativa (revogação remota funciona aqui).
         const session = claim ? await resolveActiveSession(claim.sid) : null;
-        const user = claim && session ? await findUserByUnionId(claim.unionId) : null;
+        const user =
+          claim && session ? await findUserByUnionId(claim.unionId) : null;
         if (!user || !session) {
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
           socket.destroy();
@@ -789,7 +1017,12 @@ export function attachRealtime(server: HttpServer) {
 
   wss.on(
     "connection",
-    async (ws: WebSocket, _req: IncomingMessage, userId: number, sid: string | null) => {
+    async (
+      ws: WebSocket,
+      _req: IncomingMessage,
+      userId: number,
+      sid: string | null
+    ) => {
       const client: Client = { ws, userId, sid: sid ?? null, alive: true };
       addClient(client);
       send(client, { t: "ready", userId });

@@ -4,13 +4,11 @@ import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { DMSidebar } from "@/components/DMSidebar";
 import { ChatArea } from "@/components/chat/ChatArea";
-import { VoiceView } from "@/components/VoiceView";
+import { DMCallPanel } from "@/components/voice/DMCallPanel";
 import { SidebarPortal } from "@/components/SidebarPortal";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { Avatar } from "@/components/Avatar";
-import {
-  CreateGroupModal,
-} from "@/components/groups/CreateGroupModal";
+import { CreateGroupModal } from "@/components/groups/CreateGroupModal";
 import { GroupAvatar } from "@/components/groups/GroupAvatar";
 import { groupDisplayName } from "@/lib/groupDisplayName";
 import { GroupInfoModal } from "@/components/groups/GroupInfoModal";
@@ -70,16 +68,19 @@ export function DMConversation() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [callCompact, setCallCompact] = useState(isMobile);
 
   const isGroup = conversation.data?.isGroup === true;
   const other = conversation.data?.otherUser;
   const inCall = voiceConversationId === conversationId;
-  const ongoingParticipants = useAppStore(
-    s => s.voiceParticipants[`dm:${conversationId}`]
-  )?.filter(p => p.userId !== me?.id) ?? [];
+  const ongoingParticipants =
+    useAppStore(s => s.voiceParticipants[`dm:${conversationId}`])?.filter(
+      p => p.userId !== me?.id
+    ) ?? [];
   const isRequest = !isGroup && conversation.data?.isRequest === true;
   const utils = trpc.useUtils();
-  const startCallNotify = trpc.group.startCall.useMutation();
+  const startGroupCallNotify = trpc.group.startCall.useMutation();
+  const startDmCallNotify = trpc.dm.notifyCallStart.useMutation();
   const createInviteMutation = trpc.group.createInvite.useMutation({
     onSuccess: data => {
       const url = `${window.location.origin}${data.url}`;
@@ -110,17 +111,29 @@ export function DMConversation() {
     return () => window.removeEventListener("nexora:left-group", onLeft);
   }, [navigate]);
 
-  const startCall = async (withCamera: boolean) => {
+  const startCall = async (withCamera: boolean, initiated = true) => {
     if (!me) return;
     setJoining(true);
     try {
-      await voiceManager.join({ conversationId, myId: me.id });
+      await voiceManager.join({
+        conversationId,
+        myId: me.id,
+        initiated,
+        video: withCamera,
+      });
       useAppStore.getState().setIncomingCall(null);
       soundManager.stopRingtone();
       if (withCamera) await voiceManager.toggleCamera();
-      // Avisa os outros participantes (DM 1:1 toca o telefone deles;
-      // grupos recebem a notificação de chamada).
-      startCallNotify.mutate({ conversationId });
+      if (initiated && voiceManager.currentRoomKey === `dm:${conversationId}`) {
+        await (isGroup ? startGroupCallNotify : startDmCallNotify)
+          .mutateAsync({ conversationId, video: withCamera })
+          .catch(error => {
+            console.error("[VOICE] Falha ao avisar participantes", error);
+            toast.error(
+              "A chamada começou, mas não foi possível avisar todos."
+            );
+          });
+      }
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "Não foi possível iniciar a chamada."
@@ -230,7 +243,7 @@ export function DMConversation() {
 
         {!isGroup && ongoingParticipants.length > 0 && !inCall && (
           <button
-            onClick={() => void startCall(false)}
+            onClick={() => void startCall(false, false)}
             disabled={joining}
             className="flex items-center gap-1.5 rounded-lg bg-[hsl(var(--presence-online)/0.15)] px-2.5 py-1.5 text-xs font-bold text-[hsl(var(--presence-online))] transition-colors hover:bg-[hsl(var(--presence-online)/0.25)] disabled:opacity-50"
             title="Entrar na chamada em andamento"
@@ -244,29 +257,41 @@ export function DMConversation() {
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={() => startCall(false)}
-                disabled={joining || inCall}
-                aria-label="Iniciar chamada de voz"
+                onClick={() =>
+                  inCall ? setCallCompact(false) : void startCall(false)
+                }
+                disabled={joining}
+                aria-label={
+                  inCall ? "Expandir chamada" : "Iniciar chamada de voz"
+                }
                 className="rounded-lg p-1.5 text-muted2 hover:bg-hov hover:text-foreground transition-colors disabled:opacity-50"
               >
                 <Phone className="h-4 w-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Iniciar chamada de voz</TooltipContent>
+            <TooltipContent side="bottom">
+              {inCall ? "Expandir chamada" : "Iniciar chamada de voz"}
+            </TooltipContent>
           </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={() => startCall(true)}
-                disabled={joining || inCall}
-                aria-label="Iniciar chamada de vídeo"
+                onClick={() =>
+                  inCall ? setCallCompact(false) : void startCall(true)
+                }
+                disabled={joining}
+                aria-label={
+                  inCall ? "Expandir chamada" : "Iniciar chamada de vídeo"
+                }
                 className="rounded-lg p-1.5 text-muted2 hover:bg-hov hover:text-foreground transition-colors disabled:opacity-50"
               >
                 <Video className="h-4 w-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Iniciar chamada de vídeo</TooltipContent>
+            <TooltipContent side="bottom">
+              {inCall ? "Expandir chamada" : "Iniciar chamada de vídeo"}
+            </TooltipContent>
           </Tooltip>
         </TooltipProvider>
 
@@ -280,25 +305,33 @@ export function DMConversation() {
                 <MoreVertical className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52 border-border bg-panel text-xs text-foreground">
+            <DropdownMenuContent
+              align="end"
+              className="w-52 border-border bg-panel text-xs text-foreground"
+            >
               <DropdownMenuItem
                 className="cursor-pointer hover:bg-hov"
                 onClick={() => setInfoOpen(true)}
               >
-                <Info className="mr-2 h-3.5 w-3.5 text-muted2" /> Informações do grupo
+                <Info className="mr-2 h-3.5 w-3.5 text-muted2" /> Informações do
+                grupo
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer hover:bg-hov"
                 onClick={() => setSearchOpen(true)}
               >
-                <Search className="mr-2 h-3.5 w-3.5 text-muted2" /> Buscar no grupo
+                <Search className="mr-2 h-3.5 w-3.5 text-muted2" /> Buscar no
+                grupo
               </DropdownMenuItem>
               {isManager && (
                 <DropdownMenuItem
                   className="cursor-pointer hover:bg-hov"
-                  onClick={() => createInviteMutation.mutate({ conversationId })}
+                  onClick={() =>
+                    createInviteMutation.mutate({ conversationId })
+                  }
                 >
-                  <UserPlus className="mr-2 h-3.5 w-3.5 text-primary" /> Gerar link de convite
+                  <UserPlus className="mr-2 h-3.5 w-3.5 text-primary" /> Gerar
+                  link de convite
                 </DropdownMenuItem>
               )}
               {myRole !== "owner" && (
@@ -316,7 +349,8 @@ export function DMConversation() {
                     className="cursor-pointer hover:bg-hov"
                     onClick={() => setInfoOpen(true)}
                   >
-                    <Settings className="mr-2 h-3.5 w-3.5 text-muted2" /> Editar grupo
+                    <Settings className="mr-2 h-3.5 w-3.5 text-muted2" /> Editar
+                    grupo
                   </DropdownMenuItem>
                 </>
               )}
@@ -336,11 +370,14 @@ export function DMConversation() {
         <span className="font-bold">
           {other?.name ?? other?.username ?? "Alguém"}
         </span>{" "}
-        está fora da sua lista. Aceite para manter a conversa na caixa principal.
+        está fora da sua lista. Aceite para manter a conversa na caixa
+        principal.
       </p>
       <button
         type="button"
-        onClick={() => requestAction.mutate({ conversationId, action: "accept" })}
+        onClick={() =>
+          requestAction.mutate({ conversationId, action: "accept" })
+        }
         disabled={requestAction.isPending}
         className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
       >
@@ -351,7 +388,7 @@ export function DMConversation() {
         onClick={() => {
           requestAction.mutate(
             { conversationId, action: "ignore" },
-            { onSuccess: () => navigate("/channels/@me/requests") },
+            { onSuccess: () => navigate("/channels/@me/requests") }
           );
         }}
         disabled={requestAction.isPending}
@@ -366,7 +403,7 @@ export function DMConversation() {
           if (!window.confirm(`Bloquear ${name}?`)) return;
           requestAction.mutate(
             { conversationId, action: "block" },
-            { onSuccess: () => navigate("/channels/@me/requests") },
+            { onSuccess: () => navigate("/channels/@me/requests") }
           );
         }}
         disabled={requestAction.isPending}
@@ -393,21 +430,14 @@ export function DMConversation() {
           <div className="flex flex-1 items-center justify-center bg-chat">
             <NexoraAppIcon className="h-10 w-10 animate-pulse" />
           </div>
-        ) : inCall ? (
-          <>
-            {header}
-            <VoiceView
-              conversationId={conversationId}
-              title={isGroup ? groupName : (other?.name ?? "Chamada")}
-              onOpenProfile={onOpenProfile}
-            />
-          </>
         ) : (
           <ChatArea
             key={conversationId}
             conversationId={conversationId}
             placeholder={
-              isGroup ? `Conversar em ${groupName}` : `Conversar com @${other?.username ?? ""}`
+              isGroup
+                ? `Conversar em ${groupName}`
+                : `Conversar com @${other?.username ?? ""}`
             }
             members={conversation.data.members.map(m => ({
               id: m.id,
@@ -425,6 +455,17 @@ export function DMConversation() {
                 {header}
                 {requestBanner}
               </>
+            }
+            topPanel={
+              inCall ? (
+                <DMCallPanel
+                  conversationId={conversationId}
+                  title={isGroup ? groupName : (other?.name ?? "Chamada")}
+                  compact={callCompact}
+                  onCompactChange={setCallCompact}
+                  onOpenProfile={onOpenProfile}
+                />
+              ) : null
             }
           />
         )}
@@ -446,12 +487,14 @@ export function DMConversation() {
         open={searchOpen}
         onOpenChange={setSearchOpen}
         conversationId={conversationId}
-        members={conversation.data?.members.map(m => ({
-          id: m.id,
-          name: m.name,
-          username: m.username,
-          avatar: m.avatar,
-        })) ?? []}
+        members={
+          conversation.data?.members.map(m => ({
+            id: m.id,
+            name: m.name,
+            username: m.username,
+            avatar: m.avatar,
+          })) ?? []
+        }
       />
 
       <CreateGroupModal open={createOpen} onOpenChange={setCreateOpen} />

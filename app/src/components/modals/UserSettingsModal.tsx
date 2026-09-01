@@ -133,7 +133,7 @@ export function UserSettingsModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="h-[100dvh] w-[100vw] max-w-none gap-0 overflow-hidden rounded-none border-0 bg-chat p-0 text-white select-none sm:h-[min(760px,calc(100dvh-1rem))] sm:w-[min(1120px,calc(100vw-1rem))] sm:rounded-2xl sm:border-white/10"
+        className="h-[100dvh] w-[100vw] max-w-none gap-0 overflow-hidden rounded-none border-0 bg-chat p-0 text-white select-none sm:h-[min(760px,calc(100dvh-1rem))] sm:!w-[min(1120px,calc(100vw-1rem))] sm:!max-w-none sm:rounded-2xl sm:border-white/10"
       >
         <DialogTitle className="sr-only">
           Configurações do Usuário Nexora
@@ -173,116 +173,112 @@ function SettingsShell({
 
   return (
     <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden sm:flex-row">
-          {/* Left Navigation Sidebar */}
-          <aside
-            className={cn(
-              "flex w-full min-w-0 max-w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-white/5 bg-sidebar p-2 sm:block sm:h-full sm:w-56 sm:overflow-x-hidden sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-4",
-              isMobile && entered && "hidden"
-            )}
-          >
-            <div className="mb-4 hidden px-2 sm:block">
-              <NexoraLogo className="h-6 w-auto" surface="dark" />
-            </div>
+      {/* Left Navigation Sidebar */}
+      <aside
+        className={cn(
+          "flex w-full min-w-0 max-w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-white/5 bg-sidebar p-2 sm:block sm:h-full sm:w-56 sm:overflow-x-hidden sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-4",
+          isMobile && entered && "hidden"
+        )}
+      >
+        <div className="mb-4 hidden px-2 sm:block">
+          <NexoraLogo className="h-6 w-auto" surface="dark" />
+        </div>
 
-            {MENU_GROUPS.map(group => (
-              <div key={group.title} className="w-full shrink-0 sm:mb-4">
-                <p className="hidden px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted2 sm:block">
-                  {group.title}
-                </p>
-                <nav className="flex gap-1 sm:block sm:space-y-0.5">
-                  {group.items.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => enterTab(t.id)}
-                      aria-current={tab === t.id ? "true" : undefined}
-                      className={cn(
-                        "flex w-auto items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors sm:w-full sm:py-1.5",
-                        tab === t.id
-                          ? "bg-[#5865F2]/20 text-[#5865F2]"
-                          : "text-muted2 hover:bg-white/5 hover:text-white",
-                        // Lista vertical confortável no celular (página inicial).
-                        isMobile &&
-                          !entered &&
-                          "min-h-[48px] w-full justify-between px-4 text-sm text-white hover:bg-white/5 active:bg-white/10"
-                      )}
-                    >
-                      <span>{t.label}</span>
-                      {isMobile && !entered && (
-                        <ChevronRight
-                          className="h-4 w-4 shrink-0 text-faint"
-                          aria-hidden
-                        />
-                      )}
-                    </button>
-                  ))}
-                </nav>
-              </div>
-            ))}
-          </aside>
-
-          {/* Right Main Content */}
-          <div
-            className={cn(
-              "relative min-h-0 min-w-0 flex-1 bg-chat",
-              isMobile && !entered && "hidden"
-            )}
-          >
-            {/* Navegação empilhada (mobile): voltar para a lista */}
-            {isMobile && (
-              <div className="absolute top-3 left-3 z-20 sm:hidden">
+        {MENU_GROUPS.map(group => (
+          <div key={group.title} className="w-full shrink-0 sm:mb-4">
+            <p className="hidden px-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted2 sm:block">
+              {group.title}
+            </p>
+            <nav className="flex gap-1 sm:block sm:space-y-0.5">
+              {group.items.map(t => (
                 <button
-                  onClick={() => setEntered(false)}
-                  aria-label="Voltar às configurações"
-                  className="flex h-9 items-center gap-1 rounded-full pl-1 pr-3 text-sm font-bold text-white transition-colors active:bg-white/10"
+                  key={t.id}
+                  onClick={() => enterTab(t.id)}
+                  aria-current={tab === t.id ? "true" : undefined}
+                  className={cn(
+                    "flex w-auto items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors sm:w-full sm:py-1.5",
+                    tab === t.id
+                      ? "bg-[#5865F2]/20 text-[#5865F2]"
+                      : "text-muted2 hover:bg-white/5 hover:text-white",
+                    // Lista vertical confortável no celular (página inicial).
+                    isMobile &&
+                      !entered &&
+                      "min-h-[48px] w-full justify-between px-4 text-sm text-white hover:bg-white/5 active:bg-white/10"
+                  )}
                 >
-                  <ArrowLeft className="h-5 w-5" />
-                  Configurações
+                  <span>{t.label}</span>
+                  {isMobile && !entered && (
+                    <ChevronRight
+                      className="h-4 w-4 shrink-0 text-faint"
+                      aria-hidden
+                    />
+                  )}
                 </button>
-              </div>
-            )}
-
-            {/* ESC close button */}
-            <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 sm:top-5 sm:right-6">
-              <button
-                onClick={() => onOpenChange(false)}
-                className="flex items-center justify-center h-8 w-8 rounded-full border border-white/20 text-muted2 hover:bg-white/10 hover:text-white transition-colors"
-                title="Fechar (ESC)"
-                aria-label="Fechar configurações"
-              >
-                <X className="h-4 w-4" />
-              </button>
-              <span className="hidden text-[10px] font-bold text-muted2 uppercase tracking-wider sm:inline">
-                ESC
-              </span>
-            </div>
-
-            <ScrollArea className="h-full">
-              <div className="mx-auto w-full min-w-0 max-w-3xl p-4 pt-14 pr-14 sm:p-8 sm:pt-8 sm:pr-20">
-                {isMobile && (
-                  <p className="sr-only">{activeLabel}</p>
-                )}
-                {tab === "account" && <AccountTab />}
-                {tab === "profile" && <ProfileTab />}
-                {tab === "devices" && <DevicesSection />}
-                {tab === "security" && (
-                  <SecurityCenter onNavigate={enterTab} />
-                )}
-                {tab === "standing" && <StandingTab />}
-                {tab === "sensitive" && <SensitiveContentTab />}
-                {tab === "my-reports" && <MyReportsTab />}
-                {tab === "appeals" && <AppealsTab />}
-                {tab === "privacy" && <PrivacyTab />}
-                {tab === "connections" && <ConnectionsSection />}
-                {tab === "appearance" && <AppearanceTab />}
-                {tab === "accessibility" && <AccessibilityTab />}
-                {tab === "voice" && <VoiceTab />}
-                {tab === "notifications" && <NotificationsTab />}
-                {tab === "shortcuts" && <ShortcutsTab />}
-                {tab === "language" && <LanguageTab />}
-                {tab === "advanced" && <AdvancedTab />}
-              </div>
-            </ScrollArea>
+              ))}
+            </nav>
           </div>
+        ))}
+      </aside>
+
+      {/* Right Main Content */}
+      <div
+        className={cn(
+          "relative min-h-0 min-w-0 flex-1 bg-chat",
+          isMobile && !entered && "hidden"
+        )}
+      >
+        {/* Navegação empilhada (mobile): voltar para a lista */}
+        {isMobile && (
+          <div className="absolute top-3 left-3 z-20 sm:hidden">
+            <button
+              onClick={() => setEntered(false)}
+              aria-label="Voltar às configurações"
+              className="flex h-9 items-center gap-1 rounded-full pl-1 pr-3 text-sm font-bold text-white transition-colors active:bg-white/10"
+            >
+              <ArrowLeft className="h-5 w-5" />
+              Configurações
+            </button>
+          </div>
+        )}
+
+        {/* ESC close button */}
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 sm:top-5 sm:right-6">
+          <button
+            onClick={() => onOpenChange(false)}
+            className="flex items-center justify-center h-8 w-8 rounded-full border border-white/20 text-muted2 hover:bg-white/10 hover:text-white transition-colors"
+            title="Fechar (ESC)"
+            aria-label="Fechar configurações"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <span className="hidden text-[10px] font-bold text-muted2 uppercase tracking-wider sm:inline">
+            ESC
+          </span>
+        </div>
+
+        <ScrollArea className="h-full">
+          <div className="mx-auto w-full min-w-0 max-w-3xl p-4 pt-14 pr-14 sm:p-8 sm:pt-8 sm:pr-20">
+            {isMobile && <p className="sr-only">{activeLabel}</p>}
+            {tab === "account" && <AccountTab />}
+            {tab === "profile" && <ProfileTab />}
+            {tab === "devices" && <DevicesSection />}
+            {tab === "security" && <SecurityCenter onNavigate={enterTab} />}
+            {tab === "standing" && <StandingTab />}
+            {tab === "sensitive" && <SensitiveContentTab />}
+            {tab === "my-reports" && <MyReportsTab />}
+            {tab === "appeals" && <AppealsTab />}
+            {tab === "privacy" && <PrivacyTab />}
+            {tab === "connections" && <ConnectionsSection />}
+            {tab === "appearance" && <AppearanceTab />}
+            {tab === "accessibility" && <AccessibilityTab />}
+            {tab === "voice" && <VoiceTab />}
+            {tab === "notifications" && <NotificationsTab />}
+            {tab === "shortcuts" && <ShortcutsTab />}
+            {tab === "language" && <LanguageTab />}
+            {tab === "advanced" && <AdvancedTab />}
+          </div>
+        </ScrollArea>
+      </div>
     </div>
   );
 }
@@ -573,9 +569,7 @@ function ProfileTab() {
             <p className="truncate text-[11px] text-faint">
               @{username || user?.username || "sem-usuario"}
             </p>
-            <p className="mt-1 text-[10px] text-faint">
-              PNG, JPG, WEBP ou GIF
-            </p>
+            <p className="mt-1 text-[10px] text-faint">PNG, JPG, WEBP ou GIF</p>
           </div>
         </div>
       </div>
@@ -699,9 +693,7 @@ function NotificationsTab() {
   const supported = typeof Notification !== "undefined";
   const [permission, setPermission] = useState<
     "granted" | "denied" | "default" | "unsupported"
-  >(() =>
-    supported ? Notification.permission : "unsupported"
-  );
+  >(() => (supported ? Notification.permission : "unsupported"));
 
   const updateSound = (
     patch: Partial<ReturnType<typeof soundManager.getPrefs>>
@@ -854,6 +846,7 @@ function VoiceTab() {
   const [recording, setRecording] = useState(false);
   const [level, setLevel] = useState(0);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [recordingKey, setRecordingKey] = useState(false);
   const testSessionRef = useRef<AudioProcessingSession | null>(null);
   const testContextRef = useRef<AudioContext | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -953,7 +946,12 @@ function VoiceTab() {
         await voiceManager.switchAudioInput(patch.audioInputId);
       } else if ("videoInputId" in patch) {
         await voiceManager.switchVideoInput(patch.videoInputId);
-      } else if ("audioProcessing" in patch) {
+      } else if (
+        "audioProcessing" in patch ||
+        "echoCancellation" in patch ||
+        "noiseSuppression" in patch ||
+        "autoGainControl" in patch
+      ) {
         await voiceManager.reconfigureAudioProcessing();
       }
     } catch (error) {
@@ -964,6 +962,25 @@ function VoiceTab() {
       );
     }
   };
+
+  useEffect(() => {
+    if (!recordingKey) return;
+    const captureKeybind = (event: KeyboardEvent) => {
+      event.preventDefault();
+      const key = event.key === " " ? "Space" : event.key;
+      const modifiers: string[] = [];
+      if (event.ctrlKey) modifiers.push("Ctrl");
+      if (event.shiftKey) modifiers.push("Shift");
+      if (event.altKey) modifiers.push("Alt");
+      if (event.metaKey) modifiers.push("Meta");
+      const keybind = [...modifiers, key].join("+");
+      setPrefs(current => ({ ...current, pushToTalkKeybind: keybind }));
+      setDevicePrefs({ pushToTalkKeybind: keybind });
+      setRecordingKey(false);
+    };
+    window.addEventListener("keydown", captureKeybind);
+    return () => window.removeEventListener("keydown", captureKeybind);
+  }, [recordingKey]);
 
   const recordSample = async () => {
     if (!testSessionRef.current) await startTest();
@@ -1054,6 +1071,34 @@ function VoiceTab() {
             </button>
           ))}
         </div>
+        <div className="grid gap-2 border-t border-white/[0.07] pt-3 sm:grid-cols-3">
+          {(
+            [
+              ["noiseSuppression", "Redução de ruído"],
+              ["echoCancellation", "Supressão de eco"],
+              ["autoGainControl", "Ganho automático"],
+            ] as const
+          ).map(([key, label]) => (
+            <label
+              key={key}
+              className="flex min-h-11 items-center justify-between gap-3 rounded-lg bg-black/10 px-3 text-xs text-bodyx"
+            >
+              <span>{label}</span>
+              <Switch
+                disabled={prefs.audioProcessing !== "standard"}
+                checked={prefs[key] ?? true}
+                onCheckedChange={checked => void updatePref({ [key]: checked })}
+                aria-label={label}
+              />
+            </label>
+          ))}
+        </div>
+        {prefs.audioProcessing !== "standard" && (
+          <p className="text-[10px] text-faint">
+            Os controles nativos ficam disponíveis no modo Padrão; o ClearVoice
+            usa seu próprio pipeline para evitar processamento duplicado.
+          </p>
+        )}
       </section>
 
       <div className="space-y-2">
@@ -1222,132 +1267,103 @@ function VoiceTab() {
               }}
             />
           </div>
-)}
+        )}
       </div>
-    </div>
-  );
 
-  // Push-to-talk keybind section
-  const [recordingKey, setRecordingKey] = useState(false);
-
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (recordingKey) {
-      e.preventDefault();
-      const key = e.key === " " ? "Space" : e.key;
-      const modifiers = [];
-      if (e.ctrlKey) modifiers.push("Ctrl");
-      if (e.shiftKey) modifiers.push("Shift");
-      if (e.altKey) modifiers.push("Alt");
-      if (e.metaKey) modifiers.push("Meta");
-      const keybind = [...modifiers, key].join("+");
-      updatePref({ pushToTalkKeybind: keybind });
-      setRecordingKey(false);
-    }
-  };
-
-  useEffect(() => {
-    if (recordingKey) {
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [recordingKey]);
-
-  return (
-    <div className="space-y-5">
-      {/* Existing content... */}
-      {/* Push-to-talk keybind section */}
       <section
-        className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 space-y-3"
+        className="space-y-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-5"
         aria-labelledby="ptt-heading"
       >
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#5865F2] text-white">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#4654D8] text-white">
             <Keyboard className="h-4 w-4" aria-hidden="true" />
           </span>
           <div>
             <p id="ptt-heading" className="text-sm font-bold text-white">
-              Push-to-talk (Push-to-talk)
+              Push-to-talk
             </p>
             <p className="mt-1 text-[11px] leading-relaxed text-muted2">
-              Pressione e segure a tecla para falar. Solte para silenciar.
+              Pressione e segure a combinação para falar; ao soltar, o microfone
+              volta ao silêncio.
             </p>
           </div>
         </div>
         <div className="flex items-center justify-between gap-4">
           <button
             type="button"
-            role="button"
             onClick={() => setRecordingKey(true)}
             className={cn(
-              "flex-1 min-h-12 rounded-lg border px-4 py-2 text-left transition-colors font-mono text-sm",
+              "min-h-12 flex-1 rounded-lg border px-4 py-2 text-left font-mono text-sm transition-colors",
               recordingKey
-                ? "border-[#5865F2] bg-[#5865F2]/20 text-[#5865F2] animate-pulse"
+                ? "border-[#7383FF] bg-[#4654D8]/20 text-[#9aa5ff]"
                 : "border-white/[0.08] bg-[#24252b] text-[#aeb1bd] hover:border-white/20 hover:text-white"
             )}
             aria-pressed={recordingKey}
           >
             {recordingKey
-              ? "Pressione a combinação de teclas..."
-              : prefs.pushToTalkKeybind
-                ? prefs.pushToTalkKeybind
-                : "Não configurado"}
+              ? "Pressione a combinação…"
+              : (prefs.pushToTalkKeybind ?? "Não configurado")}
           </button>
           {prefs.pushToTalkKeybind && (
             <button
               type="button"
-              onClick={() => updatePref({ pushToTalkKeybind: undefined })}
-              className="text-xs text-red-400 hover:text-red-300 font-medium"
+              onClick={() => {
+                setPrefs(current => ({
+                  ...current,
+                  pushToTalkKeybind: undefined,
+                }));
+                setDevicePrefs({ pushToTalkKeybind: undefined });
+              }}
+              className="min-h-11 text-xs font-medium text-red-400 hover:text-red-300"
             >
               Limpar
             </button>
           )}
         </div>
-        <p className="text-[11px] text-[#8f93a1]">
-          Pressione a combinação de teclas desejada. Use Ctrl, Shift, Alt ou Meta
-          (Cmd/Win) como modificadores.
-        </p>
       </section>
 
-      {/* Stream quality selector section */}
       <section
-        className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 space-y-3"
+        className="space-y-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-5"
         aria-labelledby="stream-quality-heading"
       >
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#5865F2] text-white">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#4654D8] text-white">
             <Monitor className="h-4 w-4" aria-hidden="true" />
           </span>
           <div>
-            <p id="stream-quality-heading" className="text-sm font-bold text-white">
-              Qualidade do Stream (Screen Share)
+            <p
+              id="stream-quality-heading"
+              className="text-sm font-bold text-white"
+            >
+              Qualidade do compartilhamento
             </p>
             <p className="mt-1 text-[11px] leading-relaxed text-muted2">
-              Qualidade maior consome mais banda. Ajuste conforme sua conexão.
+              Escolha uma resolução compatível com sua banda disponível.
             </p>
           </div>
         </div>
         <div
           className="grid grid-cols-1 gap-2 sm:grid-cols-3"
           role="radiogroup"
-          aria-label="Qualidade do stream"
+          aria-label="Qualidade do compartilhamento de tela"
         >
           {(
             [
-              ["720p30", "720p 30fps", "Baixa banda (recomendado para conexões lentas)"],
-              ["1080p30", "1080p 30fps", "Qualidade padrão (HD)"],
-              ["1080p60", "1080p 60fps", "Alta qualidade (requer banda alta)"],
+              ["720p30", "720p 30 fps", "Menor uso de banda"],
+              ["1080p30", "1080p 30 fps", "Nitidez equilibrada"],
+              ["1080p60", "1080p 60 fps", "Movimento mais fluido"],
             ] as const
           ).map(([value, label, description]) => (
             <button
               key={value}
               type="button"
               role="radio"
-              aria-checked={prefs.streamQuality === value}
-              onClick={() => updatePref({ streamQuality: value })}
+              aria-checked={(prefs.streamQuality ?? "720p30") === value}
+              onClick={() => void updatePref({ streamQuality: value })}
               className={cn(
                 "min-h-16 rounded-lg border px-3 py-2 text-left transition-colors",
-                prefs.streamQuality === value
-                  ? "border-[#7383FF] bg-[#5865F2]/25 text-white"
+                (prefs.streamQuality ?? "720p30") === value
+                  ? "border-[#7383FF] bg-[#4654D8]/25 text-white"
                   : "border-white/[0.08] bg-[#24252b] text-[#aeb1bd] hover:border-white/20 hover:text-white"
               )}
             >
@@ -1609,9 +1625,21 @@ const SENSITIVE_OPTIONS: {
   label: string;
   desc: string;
 }[] = [
-  { value: "hide", label: "Sempre ocultar", desc: "Mídia sensível nunca é revelada por você." },
-  { value: "warn", label: "Mostrar com aviso", desc: "Mídia +18 aparece borrada até você clicar em mostrar." },
-  { value: "auto", label: "Mostrar automaticamente", desc: "Disponível apenas para contas elegíveis." },
+  {
+    value: "hide",
+    label: "Sempre ocultar",
+    desc: "Mídia sensível nunca é revelada por você.",
+  },
+  {
+    value: "warn",
+    label: "Mostrar com aviso",
+    desc: "Mídia +18 aparece borrada até você clicar em mostrar.",
+  },
+  {
+    value: "auto",
+    label: "Mostrar automaticamente",
+    desc: "Disponível apenas para contas elegíveis.",
+  },
 ];
 
 function SensitiveContentTab() {

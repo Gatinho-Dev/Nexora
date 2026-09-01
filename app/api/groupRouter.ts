@@ -688,7 +688,12 @@ export const groupRouter = createRouter({
 
   // ── Calls ────────────────────────────────────────────────────
   startCall: authedQuery
-    .input(z.object({ conversationId: z.number() }))
+    .input(
+      z.object({
+        conversationId: z.number(),
+        video: z.boolean().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       await assertCanInteract(ctx.user.id);
       rateLimit(`call:${ctx.user.id}`, 5, 60_000);
@@ -701,7 +706,7 @@ export const groupRouter = createRouter({
         type: "call_started",
         actorId: ctx.user.id,
         conversationId: input.conversationId,
-        content: `${actor} iniciou uma chamada.`,
+        content: `${actor} iniciou uma chamada${input.video ? " de vídeo" : ""}.`,
         skip: [...inRoom],
       });
       return { ok: true };
