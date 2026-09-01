@@ -2,14 +2,14 @@ import { useLocation, useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { cn } from "@/lib/utils";
-import { Users, Bell, Home } from "lucide-react";
+import { Users, Inbox, Home } from "lucide-react";
 import { NexoraAppIcon } from "../NexoraBrand";
 
 type TabId = "home" | "servers" | "notifications" | "you";
 
 /**
  * Fixed bottom navigation (mobile only). Four areas: Início, Comunidades,
- * Notificações e Você. Respects the iPhone safe area.
+ * Caixa de entrada e Você. Respects the iPhone safe area.
  */
 export function BottomNav({
   activeTab,
@@ -40,7 +40,10 @@ export function BottomNav({
     undefined,
     { refetchInterval: 60_000, staleTime: 30_000 }
   );
-  const notifBadge = (unreadNotifications.data?.count ?? 0) + friendRequests;
+  const notifBadge = Math.max(
+    unreadNotifications.data?.count ?? 0,
+    friendRequests,
+  );
 
   const inServer = location.pathname.startsWith("/channels/") &&
     !location.pathname.startsWith("/channels/@me");
@@ -48,7 +51,7 @@ export function BottomNav({
   const items: { id: TabId; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "home", label: "Início", icon: <Home className="h-[22px] w-[22px]" />, badge: homeUnread },
     { id: "servers", label: "Comunidades", icon: <Users className="h-[22px] w-[22px]" /> },
-    { id: "notifications", label: "Notificações", icon: <Bell className="h-[22px] w-[22px]" />, badge: notifBadge },
+    { id: "notifications", label: "Caixa", icon: <Inbox className="h-[22px] w-[22px]" />, badge: notifBadge },
     { id: "you", label: "Você", icon: <NexoraAppIcon className="h-6 w-6" decorative /> },
   ];
 

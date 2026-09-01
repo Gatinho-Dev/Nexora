@@ -331,6 +331,11 @@ export function DMConversationMenu({
       <DropdownMenuItem onSelect={() => setEditMode("note")}>
         <NotebookPen /> Adicionar nota
       </DropdownMenuItem>
+      {other && (
+        <DropdownMenuItem onSelect={() => setEditMode("nickname")}>
+          <NotebookPen /> Apelido privado
+        </DropdownMenuItem>
+      )}
       <DropdownMenuSub>
         <DropdownMenuSubTrigger>
           {isMuted ? <BellRing /> : <BellOff />}

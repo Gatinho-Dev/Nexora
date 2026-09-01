@@ -31,12 +31,12 @@ const sizes = {
 // Spec: base dot is 10x10px with a 3px surface-colored border; scale up for
 // larger avatars.
 const dotSizes = {
-  xs: "h-2 w-2 border-2",
-  sm: "h-[10px] w-[10px] border-[3px]",
-  md: "h-[10px] w-[10px] border-[3px]",
-  lg: "h-3 w-3 border-[3px]",
-  xl: "h-4 w-4 border-[3px]",
-  "2xl": "h-5 w-5 border-4",
+  xs: "h-[10px] w-[10px] border-2",
+  sm: "h-[13px] w-[13px] border-[3px]",
+  md: "h-[14px] w-[14px] border-[3px]",
+  lg: "h-4 w-4 border-[3px]",
+  xl: "h-[18px] w-[18px] border-[3px]",
+  "2xl": "h-6 w-6 border-4",
 };
 
 export function Avatar({

@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useMemo, useState } from "react";
-import { BadgeCheck, Inbox, Plus, ShieldCheck, Users } from "lucide-react";
+import { BadgeCheck, Inbox, Plus, Search, ShieldCheck, Users } from "lucide-react";
 import type { ConversationDTO } from "@contracts/types";
 import { trpc } from "@/providers/trpc";
 import { UserPanel } from "./UserPanel";
@@ -9,6 +9,7 @@ import { NexoraAppIcon } from "@/components/NexoraBrand";
 import { NewMessageDialog } from "./private/NewMessageDialog";
 import { DMListItem } from "./private/DMListItem";
 import { organizePrivateInbox } from "@/lib/privateInbox";
+import { useAppStore } from "@/store/useAppStore";
 
 export function DMSidebar({
   onOpenProfile,
@@ -19,6 +20,9 @@ export function DMSidebar({
   const location = useLocation();
   const params = useParams();
   const [newMessageOpen, setNewMessageOpen] = useState(false);
+  const setQuickSwitcherOpen = useAppStore(
+    state => state.setQuickSwitcherOpen,
+  );
   const activeConversationId = params.conversationId
     ? Number(params.conversationId)
     : null;
@@ -56,31 +60,28 @@ export function DMSidebar({
       aria-label="Navegação privada"
       className="flex h-full w-60 shrink-0 flex-col border-r border-black/20 bg-sidebar select-none"
     >
-      <div className="flex h-12 items-center gap-2 border-b border-white/5 px-3">
-        <button
-          onClick={() => navigate("/channels/@me")}
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
-            friendsActive
-              ? "bg-act text-foreground"
-              : "text-muted2 hover:bg-hov hover:text-bodyx",
-          )}
-        >
-          <Users className="h-4 w-4" /> Amigos
-        </button>
+      <div className="flex h-12 items-center border-b border-white/5 px-2.5">
         <button
           type="button"
-          onClick={() => setNewMessageOpen(true)}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold text-muted2 transition-colors hover:bg-hov hover:text-bodyx"
-          aria-label="Nova mensagem"
-          title="Nova mensagem"
+          onClick={() => setQuickSwitcherOpen(true)}
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-input px-3 text-left text-[11px] font-semibold text-muted2 shadow-sm transition-colors hover:bg-hov hover:text-foreground"
+          aria-label="Encontre ou comece uma conversa"
         >
-          <Plus className="h-4 w-4" />
-          <span className="hidden xl:inline">Nova</span>
+          <Search className="h-3.5 w-3.5 shrink-0 text-faint" />
+          <span className="truncate">Encontre ou comece uma conversa</span>
+          <kbd className="ml-auto hidden rounded bg-black/10 px-1.5 py-0.5 text-[9px] text-faint dark:bg-white/5 xl:inline">
+            Ctrl K
+          </kbd>
         </button>
       </div>
 
       <nav className="space-y-0.5 px-2 py-2" aria-label="Área privada">
+        <PrivateNavItem
+          icon={<Users />}
+          label="Amigos"
+          active={friendsActive}
+          onClick={() => navigate("/channels/@me")}
+        />
         <PrivateNavItem
           icon={<Inbox />}
           label="Solicitações de mensagens"

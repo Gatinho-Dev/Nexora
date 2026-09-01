@@ -8,7 +8,6 @@ import { DMCallPanel } from "@/components/voice/DMCallPanel";
 import { SidebarPortal } from "@/components/SidebarPortal";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { Avatar } from "@/components/Avatar";
-import { CreateGroupModal } from "@/components/groups/CreateGroupModal";
 import { GroupAvatar } from "@/components/groups/GroupAvatar";
 import { groupDisplayName } from "@/lib/groupDisplayName";
 import { GroupInfoModal } from "@/components/groups/GroupInfoModal";
@@ -67,11 +66,15 @@ export function DMConversation() {
   const [joining, setJoining] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
   const [callCompact, setCallCompact] = useState(isMobile);
 
   const isGroup = conversation.data?.isGroup === true;
   const other = conversation.data?.otherUser;
+  const dmDisplayName =
+    conversation.data?.friendNickname ??
+    other?.name ??
+    other?.username ??
+    "Conversa";
   const inCall = voiceConversationId === conversationId;
   const ongoingParticipants =
     useAppStore(s => s.voiceParticipants[`dm:${conversationId}`])?.filter(
@@ -196,7 +199,7 @@ export function DMConversation() {
                 type="button"
                 onClick={() => onOpenProfile(other.id)}
                 className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={`Ver perfil de ${other.name ?? other.username ?? "usuário"}`}
+                aria-label={`Ver perfil de ${dmDisplayName}`}
                 title="Ver perfil"
               >
                 <Avatar
@@ -209,7 +212,7 @@ export function DMConversation() {
               </button>
             ) : null}
             <span className="truncate font-bold text-sm">
-              {other?.name ?? other?.username ?? "Conversa"}
+              {dmDisplayName}
             </span>
             {other?.username && (
               <span className="hidden truncate text-xs text-muted2 font-medium sm:inline">
@@ -460,7 +463,7 @@ export function DMConversation() {
               inCall ? (
                 <DMCallPanel
                   conversationId={conversationId}
-                  title={isGroup ? groupName : (other?.name ?? "Chamada")}
+                  title={isGroup ? groupName : dmDisplayName}
                   compact={callCompact}
                   onCompactChange={setCallCompact}
                   onOpenProfile={onOpenProfile}
@@ -497,7 +500,6 @@ export function DMConversation() {
         }
       />
 
-      <CreateGroupModal open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

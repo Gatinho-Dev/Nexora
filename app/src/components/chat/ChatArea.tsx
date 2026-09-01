@@ -325,13 +325,18 @@ export function ChatArea({
     );
   }, [markReadThrough, visibleUnreadState]);
 
-  // Última mensagem própria (não-sistema) para o recibo "Visto por N".
-  // Última mensagem própria (não-sistema) para o recibo "Visto por N".
+  // Última mensagem própria (não-evento) para o recibo "Visto por N".
   const lastOwnMessageId = useMemo(() => {
     if (!showReadReceipts || !messages) return null;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (m.authorId === myId && m.tag !== "system") return m.id;
+      if (
+        m.authorId === myId &&
+        m.tag !== "system" &&
+        m.tag !== "call"
+      ) {
+        return m.id;
+      }
     }
     return null;
   }, [messages, myId, showReadReceipts]);
@@ -547,7 +552,8 @@ function renderMessages(
       lastAuthor === msg.authorId &&
       date.getTime() - lastTime < 5 * 60 * 1000 &&
       !msg.replyTo &&
-      msg.tag !== "system";
+      msg.tag !== "system" &&
+      msg.tag !== "call";
     items.push(
       <MessageItem
         key={msg.id}
@@ -562,8 +568,8 @@ function renderMessages(
         onOpenProfile={onOpenProfile}
       />
     );
-    // Eventos de sistema não participam do agrupamento visual.
-    if (msg.tag !== "system") {
+    // Eventos de sistema/chamada não participam do agrupamento visual.
+    if (msg.tag !== "system" && msg.tag !== "call") {
       lastAuthor = msg.authorId;
       lastTime = date.getTime();
     }

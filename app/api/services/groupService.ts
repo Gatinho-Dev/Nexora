@@ -50,6 +50,7 @@ export async function insertSystemMessage(
   conversationId: number,
   authorId: number,
   content: string,
+  tag = "system",
 ) {
   const [{ id }] = await executor
     .insert(schema.messages)
@@ -57,7 +58,7 @@ export async function insertSystemMessage(
       conversationId,
       authorId,
       content: content.slice(0, 4000),
-      tag: "system",
+      tag: tag.slice(0, 24),
     })
     .$returningId();
   return id;

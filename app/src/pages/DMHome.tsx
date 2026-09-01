@@ -9,9 +9,9 @@ import { useAppStore } from "@/store/useAppStore";
 import { trpc } from "@/providers/trpc";
 import { Avatar } from "@/components/Avatar";
 import { cn } from "@/lib/utils";
-import { BellOff, Inbox, Pin, Search, UserPlus, Users, UsersRound } from "lucide-react";
+import { BellOff, Inbox, MessageSquarePlus, Pin, Search, UserPlus, Users } from "lucide-react";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
-import { CreateGroupModal } from "@/components/groups/CreateGroupModal";
+import { NewMessageDialog } from "@/components/private/NewMessageDialog";
 import { GroupAvatar } from "@/components/groups/GroupAvatar";
 import { groupDisplayName } from "@/lib/groupDisplayName";
 import { UnreadIndicator } from "@/components/private/UnreadIndicator";
@@ -48,7 +48,7 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
   const friends = trpc.friend.list.useQuery();
   const me = trpc.auth.me.useQuery().data;
   const unreadConversations = useAppStore(s => s.unreadConversations);
-  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [newMessageOpen, setNewMessageOpen] = useState(false);
   const [renderedAt] = useState(() => Date.now());
   const acceptedFriendIds = new Set(
     (friends.data ?? [])
@@ -76,9 +76,9 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
           onClick={() => navigate("/channels/@me/requests")}
         />
         <QuickAction
-          icon={<UsersRound className="h-5 w-5" />}
-          label="Criar grupo"
-          onClick={() => setCreateGroupOpen(true)}
+          icon={<MessageSquarePlus className="h-5 w-5" />}
+          label="Nova conversa"
+          onClick={() => setNewMessageOpen(true)}
         />
       </div>
 
@@ -106,13 +106,13 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
             <NexoraAppIcon className="h-12 w-12 opacity-40" />
             <p className="text-sm font-semibold">Nenhuma conversa ainda</p>
             <p className="max-w-[240px] text-xs text-muted2">
-              Adicione amigos ou crie um grupo para conversar com várias pessoas ao mesmo tempo.
+              Selecione uma pessoa para uma DM ou várias para conversar em grupo.
             </p>
             <button
-              onClick={() => setCreateGroupOpen(true)}
+              onClick={() => setNewMessageOpen(true)}
               className="mt-1 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary/90"
             >
-              Criar grupo
+              Nova conversa
             </button>
           </li>
         )}
@@ -222,7 +222,7 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
         })}
       </ul>
 
-      <CreateGroupModal open={createGroupOpen} onOpenChange={setCreateGroupOpen} />
+      <NewMessageDialog open={newMessageOpen} onOpenChange={setNewMessageOpen} />
     </div>
   );
 }

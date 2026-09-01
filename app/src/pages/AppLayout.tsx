@@ -13,6 +13,7 @@ import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VoiceMediaRenderer } from "@/components/voice/VoiceMediaRenderer";
 import { IncomingCallToast } from "@/components/voice/IncomingCallToast";
+import { NotificationPopupHost } from "@/components/NotificationPopupHost";
 import { VoiceConnectionBar } from "@/components/mobile/VoiceConnectionBar";
 import { useVoiceCallView } from "@/hooks/useVoiceCallView";
 import { PermanentBanScreen } from "@/components/safety/PermanentBanScreen";
@@ -321,6 +322,7 @@ export function AppLayout() {
         initialTab={settingsTab}
       />
       <IncomingCallToast />
+      <NotificationPopupHost />
       <VoiceMediaRenderer myUserId={user.id} />
       {sessionRevoked && <SessionRevokedScreen />}
       </div>
