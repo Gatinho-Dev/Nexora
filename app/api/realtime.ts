@@ -27,8 +27,10 @@ import {
   DM_UNANSWERED_TIMEOUT_MS,
   hasUnansweredCallExpired,
   isDmCallAnswered,
+  formatDmCallHistory,
+  type DmCallEndReason,
 } from "./voice/dmCallPolicy";
-import { insertSystemMessage } from "./services/groupService";
+import { insertSystemMessage, userName } from "./services/groupService";
 
 // ── Connection registry ───────────────────────────────────────
 type Client = {
@@ -105,7 +107,7 @@ function callStateEvent(
 
 async function endDmCall(
   conversationId: number,
-  reason: "unanswered" | "declined" | "cancelled" | "completed"
+  reason: DmCallEndReason
 ) {
   const session = dmCallSessions.get(conversationId);
   if (!session) return;
@@ -124,29 +126,35 @@ async function endDmCall(
     console.error("[voice] failed to broadcast call end", error);
   }
 
-  if (reason === "unanswered") {
-    try {
-      const db = getDb();
-      const messageId = await insertSystemMessage(
-        db,
-        conversationId,
-        session.initiatorId,
-        "Chamada não atendida"
-      );
-      const message = await db.query.messages.findFirst({
-        where: eq(schema.messages.id, messageId),
+  try {
+    const db = getDb();
+    const initiatorName = await userName(session.initiatorId);
+    const content = formatDmCallHistory({
+      initiatorName,
+      reason,
+      startedAt: session.startedAt,
+      endedAt: Date.now(),
+    });
+    const messageId = await insertSystemMessage(
+      db,
+      conversationId,
+      session.initiatorId,
+      content,
+      "call",
+    );
+    const message = await db.query.messages.findFirst({
+      where: eq(schema.messages.id, messageId),
+    });
+    if (message) {
+      // Dynamic import avoids an eager realtime ↔ messageRouter cycle.
+      const { buildMessageDTO } = await import("./messageRouter");
+      await broadcastToConversation(conversationId, {
+        t: "message:new",
+        message: await buildMessageDTO(message),
       });
-      if (message) {
-        // Dynamic import avoids an eager realtime ↔ messageRouter cycle.
-        const { buildMessageDTO } = await import("./messageRouter");
-        await broadcastToConversation(conversationId, {
-          t: "message:new",
-          message: await buildMessageDTO(message),
-        });
-      }
-    } catch (error) {
-      console.error("[voice] failed to persist missed call", error);
     }
+  } catch (error) {
+    console.error("[voice] failed to persist call history", error);
   }
 
   const room = voiceRooms.get(dmRoomKey(conversationId));

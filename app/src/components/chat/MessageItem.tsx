@@ -37,6 +37,7 @@ import {
   Play,
   Pin,
   Flag,
+  PhoneCall,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -160,6 +161,7 @@ function MessageItemBase({
   const isMine = message.authorId === myId;
   const isEditing = editing?.id === message.id;
   const isSystem = message.tag === "system";
+  const isCall = message.tag === "call";
   // Mensagem removida pela moderação: conteúdo substituído por aviso e
   // ações (reagir/responder/editar/excluir) desabilitadas.
   const isRemoved = message.tag === "removed";
@@ -183,6 +185,30 @@ function MessageItemBase({
           {formatTime(message.createdAt)}
         </span>
         <div className="h-px flex-1 bg-white/[0.07]" />
+      </div>
+    );
+  }
+
+  if (isCall) {
+    return (
+      <div
+        id={`msg-${message.id}`}
+        className="group flex items-center gap-3 rounded-lg px-4 py-2 transition-colors hover:bg-white/[0.025] select-none"
+        role="note"
+        aria-label={message.content}
+      >
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[hsl(var(--presence-online)/0.14)] text-[hsl(var(--presence-online))]">
+          <PhoneCall className="h-4 w-4" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1 text-[13px] text-muted2">
+          <span className="font-semibold text-bodyx">{message.content}</span>
+        </span>
+        <span
+          className="shrink-0 text-[10px] text-faint"
+          title={formatFullDate(message.createdAt)}
+        >
+          {formatTime(message.createdAt)}
+        </span>
       </div>
     );
   }

@@ -8,6 +8,7 @@ import { soundManager } from "@/lib/sound";
 import { toast } from "sonner";
 import { queryClient } from "@/providers/trpc";
 import type { WSServerEvent } from "@contracts/types";
+import { showNotificationPopup } from "@/lib/notificationDisplay";
 
 /** Connects the realtime socket and routes events to stores/queries. */
 export function useRealtime(myUserId: number | undefined) {
@@ -216,6 +217,9 @@ export function useRealtime(myUserId: number | undefined) {
               });
               break;
             }
+          }
+          if (document.visibilityState === "visible") {
+            showNotificationPopup(n);
           }
           soundManager.play("notification");
           // Browser notification when the tab is hidden and permission granted

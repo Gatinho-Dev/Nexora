@@ -196,7 +196,7 @@ export function NewMessageDialog({
             onClick={submit}
             disabled={selected.length === 0 || openDm.isPending || createGroup.isPending}
           >
-            {selected.length >= 2 ? "Criar grupo" : "Abrir conversa"}
+            Criar mensagem
           </Button>
         </DialogFooter>
       </DialogContent>

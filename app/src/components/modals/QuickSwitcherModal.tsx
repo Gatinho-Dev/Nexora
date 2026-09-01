@@ -1,9 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
+import { Compass, Search } from "lucide-react";
 import { trpc } from "@/providers/trpc";
-import { User, Search, Compass, Users } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { groupDisplayName } from "@/lib/groupDisplayName";
+import { Avatar } from "@/components/Avatar";
+import { GroupAvatar } from "@/components/groups/GroupAvatar";
+
+type SearchScope = "all" | "people" | "servers";
+
+function parseQuery(value: string): { scope: SearchScope; query: string } {
+  const trimmed = value.trimStart();
+  if (trimmed.startsWith("@")) {
+    return { scope: "people", query: trimmed.slice(1).trim() };
+  }
+  if (trimmed.startsWith("!")) {
+    return { scope: "servers", query: trimmed.slice(1).trim() };
+  }
+  return { scope: "all", query: trimmed.trim() };
+}
 
 export function QuickSwitcherModal({
   open,
@@ -14,15 +29,14 @@ export function QuickSwitcherModal({
 }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const { data: servers } = trpc.server.list.useQuery(undefined, {
-    enabled: open,
-  });
-  const { data: dms } = trpc.dm.list.useQuery(undefined, { enabled: open });
+  const servers = trpc.server.list.useQuery(undefined, { enabled: open });
+  const dms = trpc.dm.list.useQuery(undefined, { enabled: open });
+  const parsed = parseQuery(query);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
         onOpenChange(true);
       }
     };
@@ -30,93 +44,166 @@ export function QuickSwitcherModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onOpenChange]);
 
-  if (!open) return null;
+  const filteredDMs = useMemo(() => {
+    if (parsed.scope === "servers") return [];
+    const term = parsed.query.toLocaleLowerCase("pt-BR");
+    return (dms.data ?? [])
+      .filter(conversation => !conversation.isRequest)
+      .filter(conversation => {
+        const name = conversation.isGroup
+          ? groupDisplayName(conversation)
+          : (conversation.friendNickname ??
+            conversation.otherUser?.name ??
+            conversation.otherUser?.username ??
+            "");
+        return name.toLocaleLowerCase("pt-BR").includes(term);
+      });
+  }, [dms.data, parsed.query, parsed.scope]);
 
-  const filteredServers = (servers ?? []).filter(s =>
-    s.name.toLowerCase().includes(query.toLowerCase())
-  );
+  const filteredServers = useMemo(() => {
+    if (parsed.scope === "people") return [];
+    const term = parsed.query.toLocaleLowerCase("pt-BR");
+    return (servers.data ?? []).filter(server =>
+      server.name.toLocaleLowerCase("pt-BR").includes(term),
+    );
+  }, [parsed.query, parsed.scope, servers.data]);
 
-  const filteredDMs = (dms ?? []).filter(d => {
-    const name = d.isGroup
-      ? groupDisplayName(d)
-      : (d.otherUser?.name ?? d.otherUser?.username ?? "");
-    return name.toLowerCase().includes(query.toLowerCase());
-  });
+  const go = (path: string) => {
+    navigate(path);
+    onOpenChange(false);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden bg-sidebar border border-white/10 text-white rounded-2xl shadow-2xl select-none">
-        <DialogTitle className="sr-only">Quick Switcher Nexora</DialogTitle>
-        <div className="p-3 border-b border-white/10 flex items-center gap-2 bg-chat">
-          <Search className="h-4 w-4 text-[#5865F2] shrink-0" />
-          <input
-            autoFocus
-            className="w-full bg-transparent outline-none text-sm text-white placeholder:text-muted2"
-            placeholder="Para onde você quer ir na Nexora? (digite o nome da DM ou servidor)"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
+    <Dialog
+      open={open}
+      onOpenChange={nextOpen => {
+        if (!nextOpen) setQuery("");
+        onOpenChange(nextOpen);
+      }}
+    >
+      <DialogContent className="gap-0 overflow-hidden rounded-2xl border-border bg-panel p-0 text-foreground shadow-2xl sm:max-w-[680px]">
+        <DialogTitle className="sr-only">Busca rápida do Nexora</DialogTitle>
+        <div className="p-4 pb-3">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-primary" />
+            <input
+              autoFocus
+              className="h-16 w-full rounded-xl border border-border bg-input pl-12 pr-4 text-base font-medium text-foreground outline-none placeholder:text-muted2 focus:border-primary focus:ring-2 focus:ring-primary/20"
+              placeholder="Aonde você gostaria de ir?"
+              value={query}
+              onChange={event => setQuery(event.target.value)}
+              aria-label="Buscar conversas e comunidades"
+            />
+          </label>
         </div>
 
-        <div className="max-h-80 overflow-y-auto p-2 space-y-2 text-xs">
-          {/* DMs */}
+        <div className="max-h-[430px] min-h-72 overflow-y-auto px-3 pb-3">
           {filteredDMs.length > 0 && (
-            <div>
-              <div className="px-2 py-1 text-[10px] font-bold uppercase text-muted2">
-                MENSAGENS
-              </div>
-              {filteredDMs.slice(0, 5).map(d => (
+            <section aria-label="Conversas recentes">
+              <p className="px-2 pb-1.5 pt-2 text-[10px] font-bold uppercase tracking-wide text-faint">
+                Conversas recentes
+              </p>
+              {filteredDMs.slice(0, 10).map(conversation => {
+                const name = conversation.isGroup
+                  ? groupDisplayName(conversation)
+                  : (conversation.friendNickname ??
+                    conversation.otherUser?.name ??
+                    conversation.otherUser?.username ??
+                    "Conversa");
+                return (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => go(`/channels/@me/${conversation.id}`)}
+                    className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-hov focus:bg-hov"
+                  >
+                    {conversation.isGroup ? (
+                      <GroupAvatar
+                        users={conversation.members}
+                        src={conversation.avatarUrl}
+                        name={name}
+                        size="sm"
+                      />
+                    ) : (
+                      <Avatar
+                        userId={conversation.otherUser?.id}
+                        name={name}
+                        src={conversation.otherUser?.avatar}
+                        size="sm"
+                        showStatus
+                        statusOverride={conversation.otherUser?.status}
+                      />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">
+                        {name}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted2">
+                        {conversation.isGroup
+                          ? `${conversation.memberCount ?? conversation.members.length} participantes`
+                          : `@${conversation.otherUser?.username ?? "usuário"}`}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </section>
+          )}
+
+          {filteredServers.length > 0 && (
+            <section aria-label="Comunidades">
+              <p className="px-2 pb-1.5 pt-3 text-[10px] font-bold uppercase tracking-wide text-faint">
+                Comunidades
+              </p>
+              {filteredServers.slice(0, 10).map(server => (
                 <button
-                  key={d.id}
-                  onClick={() => {
-                    navigate(`/channels/@me/${d.id}`);
-                    onOpenChange(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/10 text-left transition-colors"
+                  key={server.id}
+                  type="button"
+                  onClick={() => go(`/channels/${server.id}/first`)}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-hov focus:bg-hov"
                 >
-                  {d.isGroup ? (
-                    <Users className="h-4 w-4 shrink-0 text-[#5865F2]" />
+                  {server.iconUrl ? (
+                    <img
+                      src={server.iconUrl}
+                      alt=""
+                      className="h-8 w-8 rounded-xl object-cover"
+                    />
                   ) : (
-                    <User className="h-4 w-4 shrink-0 text-[#5865F2]" />
+                    <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/15 text-primary">
+                      <Compass className="h-4 w-4" />
+                    </span>
                   )}
-                  <span className="font-bold text-white truncate">
-                    {d.isGroup
-                      ? groupDisplayName(d)
-                      : (d.otherUser?.name ?? d.otherUser?.username ?? "Usuário")}
+                  <span className="truncate text-sm font-semibold">
+                    {server.name}
                   </span>
                 </button>
               ))}
-            </div>
+            </section>
           )}
 
-          {/* Servers */}
-          {filteredServers.length > 0 && (
-            <div>
-              <div className="px-2 py-1 text-[10px] font-bold uppercase text-muted2">
-                COMUNIDADES
+          {!servers.isLoading &&
+            !dms.isLoading &&
+            filteredDMs.length === 0 &&
+            filteredServers.length === 0 && (
+              <div className="flex min-h-64 flex-col items-center justify-center gap-2 px-6 text-center">
+                <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                  <Search className="h-5 w-5" />
+                </span>
+                <p className="text-sm font-bold">Nenhum resultado</p>
+                <p className="text-xs text-muted2">
+                  Tente outro nome ou remova o filtro da busca.
+                </p>
               </div>
-              {filteredServers.slice(0, 5).map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => {
-                    navigate(`/channels/${s.id}/first`);
-                    onOpenChange(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/10 text-left transition-colors"
-                >
-                  <Compass className="h-4 w-4 text-amber-400" />
-                  <span className="font-bold text-white">{s.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {filteredDMs.length === 0 && filteredServers.length === 0 && (
-            <div className="p-6 text-center text-muted2">
-              Nenhum canal ou usuário encontrado com &quot;{query}&quot;.
-            </div>
-          )}
+            )}
         </div>
+
+        <footer className="border-t border-border bg-chat/45 px-4 py-2.5 text-[10px] text-muted2">
+          <span className="font-bold text-primary">Dica:</span> use
+          <kbd className="mx-1 rounded bg-hov px-1.5 py-0.5 text-foreground">@</kbd>
+          para conversas e
+          <kbd className="mx-1 rounded bg-hov px-1.5 py-0.5 text-foreground">!</kbd>
+          para comunidades.
+        </footer>
       </DialogContent>
     </Dialog>
   );
