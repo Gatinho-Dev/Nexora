@@ -78,19 +78,26 @@ export function AppLayout() {
     return () => window.removeEventListener("nexora:session-revoked", show);
   }, []);
 
-  // Notificações do PC: pergunta UMA vez (clicável = gesto do usuário).
+  // Solicita a permissão nativa assim que a sessão autenticada estiver pronta.
+  // Alguns navegadores exigem um gesto do usuário; nesses casos, o toast vira
+  // um fallback clicável para abrir o mesmo pedido de permissão.
   useEffect(() => {
+    if (isLoading || !user) return;
     if (
       typeof Notification === "undefined" ||
       Notification.permission !== "default"
     ) {
       return;
     }
-    if (localStorage.getItem("nexora-desktop-notif-asked") === "1") return;
-    localStorage.setItem("nexora-desktop-notif-asked", "1");
-    toast(
-      "Quer receber notificações da Nexora no seu computador?",
-      {
+
+    const sessionKey = "nexora-notification-permission-requested";
+    if (sessionStorage.getItem(sessionKey) === "1") return;
+    sessionStorage.setItem(sessionKey, "1");
+
+    let cancelled = false;
+    const showPermissionFallback = () => {
+      if (cancelled) return;
+      toast("Ative as notificações do Nexora no seu navegador.", {
         duration: 15_000,
         action: {
           label: "Ativar",
@@ -98,9 +105,19 @@ export function AppLayout() {
             void Notification.requestPermission();
           },
         },
-      }
-    );
-  }, []);
+      });
+    };
+
+    void Notification.requestPermission()
+      .then(permission => {
+        if (permission === "default") showPermissionFallback();
+      })
+      .catch(showPermissionFallback);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoading, user]);
   const keyboardOffset = useKeyboardOffset(true);
   const quickSwitcherOpen = useAppStore(st => st.quickSwitcherOpen);
   const wsConnected = useAppStore(st => st.wsConnected);
