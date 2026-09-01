@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  shouldIgnoreCandidate,
-  shouldIgnoreOffer,
-} from "./perfectNegotiation";
+import { shouldIgnoreCandidate, shouldIgnoreOffer } from "./perfectNegotiation";
 
 describe("WebRTC perfect negotiation", () => {
   it("ignores a colliding offer only on the impolite peer", () => {
@@ -35,6 +32,18 @@ describe("WebRTC perfect negotiation", () => {
         descriptionType: "offer",
         makingOffer: false,
         signalingState: "stable",
+        polite: false,
+      })
+    ).toBe(false);
+  });
+
+  it("accepts an offer while a remote answer is being applied", () => {
+    expect(
+      shouldIgnoreOffer({
+        descriptionType: "offer",
+        makingOffer: false,
+        signalingState: "have-local-offer",
+        isSettingRemoteAnswerPending: true,
         polite: false,
       })
     ).toBe(false);

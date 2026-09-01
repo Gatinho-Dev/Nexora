@@ -28,6 +28,25 @@ type ServerVoiceSummary = {
 export type VoiceConnectionStatus =
   "idle" | "connecting" | "connected" | "reconnecting" | "failed";
 
+export type VoiceCallPhase =
+  | "idle"
+  | "creating"
+  | "ringing"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "ended"
+  | "failed";
+
+export type VoiceConnectionQuality = {
+  level: "excellent" | "good" | "poor" | "unknown";
+  rttMs: number | null;
+  jitterMs: number | null;
+  packetLossPercent: number | null;
+  bitrateKbps: number | null;
+  candidateType: string | null;
+};
+
 type AppState = {
   wsConnected: boolean;
   // chat
@@ -45,7 +64,7 @@ type AppState = {
   setServerVoiceSummary: (
     serverId: number,
     count: number,
-    preview: Pick<VoiceParticipant, "userId" | "name" | "avatar">[],
+    preview: Pick<VoiceParticipant, "userId" | "name" | "avatar">[]
   ) => void;
   stageHandsByRoom: Record<string, number[]>;
   setStageHands: (roomKey: string, userIds: number[]) => void;
@@ -55,7 +74,10 @@ type AppState = {
   presence: Record<number, string>;
   // atividade Roblox em tempo real (WS activity:update vence a query inicial)
   robloxActivity: Record<number, RobloxActivityDTO | null>;
-  setRobloxActivity: (userId: number, activity: RobloxActivityDTO | null) => void;
+  setRobloxActivity: (
+    userId: number,
+    activity: RobloxActivityDTO | null
+  ) => void;
   unreadChannels: Record<number, number>;
   unreadConversations: Record<number, number>;
   channelUnreadDetails: Record<number, ChannelUnreadDetail>;
@@ -69,6 +91,14 @@ type AppState = {
   cameraOn: boolean;
   screenOn: boolean;
   voiceConnectionStatus: VoiceConnectionStatus;
+  voiceCallPhase: VoiceCallPhase;
+  voiceCallId: string | null;
+  voiceCallStartedAt: number | null;
+  voiceCallConnectedAt: number | null;
+  voiceCallDeadlineAt: number | null;
+  voiceCallEndReason: string | null;
+  voiceQuality: VoiceConnectionQuality;
+  voiceDeviceError: string | null;
   voicePlaybackBlocked: boolean;
   speakingByUser: Record<number, boolean>;
   localStream: MediaStream | null;
@@ -105,7 +135,7 @@ type AppState = {
   setUnread: (
     channels: Record<number, number>,
     conversations: Record<number, number>,
-    channelDetails?: Record<number, ChannelUnreadDetail>,
+    channelDetails?: Record<number, ChannelUnreadDetail>
   ) => void;
   bumpUnreadChannel: (id: number) => void;
   bumpUnreadConversation: (id: number) => void;
@@ -124,6 +154,14 @@ type AppState = {
         | "cameraOn"
         | "screenOn"
         | "voiceConnectionStatus"
+        | "voiceCallPhase"
+        | "voiceCallId"
+        | "voiceCallStartedAt"
+        | "voiceCallConnectedAt"
+        | "voiceCallDeadlineAt"
+        | "voiceCallEndReason"
+        | "voiceQuality"
+        | "voiceDeviceError"
         | "voicePlaybackBlocked"
         | "localStream"
         | "localVideo"
@@ -133,9 +171,7 @@ type AppState = {
   setRemoteStream: (userId: number, stream: MediaStream | null) => void;
   setSpeaking: (userId: number, speaking: boolean) => void;
   resetVoice: () => void;
-  setIncomingCall: (
-    call: AppState["incomingCall"]
-  ) => void;
+  setIncomingCall: (call: AppState["incomingCall"]) => void;
   setMobileNavOpen: (v: boolean) => void;
   setMobileMembersOpen: (v: boolean) => void;
   setMembersOpen: (v: boolean) => void;
@@ -170,6 +206,21 @@ export const useAppStore = create<AppState>(set => ({
   cameraOn: false,
   screenOn: false,
   voiceConnectionStatus: "idle",
+  voiceCallPhase: "idle",
+  voiceCallId: null,
+  voiceCallStartedAt: null,
+  voiceCallConnectedAt: null,
+  voiceCallDeadlineAt: null,
+  voiceCallEndReason: null,
+  voiceQuality: {
+    level: "unknown",
+    rttMs: null,
+    jitterMs: null,
+    packetLossPercent: null,
+    bitrateKbps: null,
+    candidateType: null,
+  },
+  voiceDeviceError: null,
   voicePlaybackBlocked: false,
   speakingByUser: {},
   localStream: null,
@@ -309,9 +360,12 @@ export const useAppStore = create<AppState>(set => ({
   setQuickSwitcherOpen: v => set({ quickSwitcherOpen: v }),
   setStageHands: (roomKey, userIds) =>
     set(state =>
-      JSON.stringify(state.stageHandsByRoom[roomKey]) === JSON.stringify(userIds)
+      JSON.stringify(state.stageHandsByRoom[roomKey]) ===
+      JSON.stringify(userIds)
         ? state
-        : { stageHandsByRoom: { ...state.stageHandsByRoom, [roomKey]: userIds } }
+        : {
+            stageHandsByRoom: { ...state.stageHandsByRoom, [roomKey]: userIds },
+          }
     ),
   setServerUnread: (serverId, count) =>
     set(state =>
@@ -352,16 +406,17 @@ export const useAppStore = create<AppState>(set => ({
       const detail = details[id];
       delete next[id];
       delete details[id];
-      if (!detail) return { unreadChannels: next, channelUnreadDetails: details };
+      if (!detail)
+        return { unreadChannels: next, channelUnreadDetails: details };
       const serverUnread = { ...s.serverUnread };
       const serverMentions = { ...s.serverMentions };
       serverUnread[detail.serverId] = Math.max(
         0,
-        (serverUnread[detail.serverId] ?? 0) - detail.count,
+        (serverUnread[detail.serverId] ?? 0) - detail.count
       );
       serverMentions[detail.serverId] = Math.max(
         0,
-        (serverMentions[detail.serverId] ?? 0) - detail.mentionCount,
+        (serverMentions[detail.serverId] ?? 0) - detail.mentionCount
       );
       return {
         unreadChannels: next,
@@ -412,6 +467,21 @@ export const useAppStore = create<AppState>(set => ({
       cameraOn: false,
       screenOn: false,
       voiceConnectionStatus: "idle",
+      voiceCallPhase: "idle",
+      voiceCallId: null,
+      voiceCallStartedAt: null,
+      voiceCallConnectedAt: null,
+      voiceCallDeadlineAt: null,
+      voiceCallEndReason: null,
+      voiceQuality: {
+        level: "unknown",
+        rttMs: null,
+        jitterMs: null,
+        packetLossPercent: null,
+        bitrateKbps: null,
+        candidateType: null,
+      },
+      voiceDeviceError: null,
       voicePlaybackBlocked: false,
       speakingByUser: {},
       localStream: null,

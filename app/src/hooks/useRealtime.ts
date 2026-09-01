@@ -128,7 +128,7 @@ export function useRealtime(myUserId: number | undefined) {
             store.setServerVoiceSummary(
               event.serverId,
               event.activeVoiceCount ?? event.participants.length,
-              event.voicePreviewMembers ?? event.participants,
+              event.voicePreviewMembers ?? event.participants
             );
           }
           voiceManager.syncParticipants(roomKey, event.participants);
@@ -143,6 +143,32 @@ export function useRealtime(myUserId: number | undefined) {
         }
         case "voice:denied": {
           voiceManager.handleVoiceDenied(event.reason);
+          break;
+        }
+        case "call:state": {
+          const affectsCurrentCall = voiceManager.handleCallState(event);
+          const isIncomingCall =
+            store.incomingCall?.conversationId === event.conversationId;
+          if (event.state === "connected" || event.state === "ended") {
+            if (isIncomingCall) store.setIncomingCall(null);
+            soundManager.stopRingtone();
+          }
+          if (event.state === "connected" && affectsCurrentCall) {
+            soundManager.play("call-connected");
+          }
+          if (
+            event.state === "ended" &&
+            (affectsCurrentCall || isIncomingCall)
+          ) {
+            soundManager.play("call-ended");
+            if (event.reason === "unanswered") {
+              toast.info(
+                "A chamada foi encerrada porque ninguém entrou em 2 minutos."
+              );
+            } else if (event.reason === "declined") {
+              toast.info("A chamada foi recusada.");
+            }
+          }
           break;
         }
         case "signal": {
@@ -183,11 +209,10 @@ export function useRealtime(myUserId: number | undefined) {
               soundManager.startRingtone();
               storeState.setIncomingCall({
                 conversationId: n.conversationId,
-                actorName:
-                  n.actor?.name ?? n.actor?.username ?? "Alguém",
+                actorName: n.actor?.name ?? n.actor?.username ?? "Alguém",
                 actorAvatar: n.actor?.avatar ?? null,
                 notificationId: n.id,
-                video: false,
+                video: n.content?.includes("de vídeo") === true,
               });
               break;
             }
@@ -305,7 +330,9 @@ export function useRealtime(myUserId: number | undefined) {
           const previous = lastAccountStatus.current;
           lastAccountStatus.current = event.accountStatus;
           if (event.accountStatus === "suspended") {
-            toast.error("⛔ Sua conta foi temporariamente suspensa. Confira o Status da Conta.");
+            toast.error(
+              "⛔ Sua conta foi temporariamente suspensa. Confira o Status da Conta."
+            );
           } else if (event.accountStatus === "permanently_banned") {
             toast.error("🚫 Conta banida permanentemente");
           } else if (

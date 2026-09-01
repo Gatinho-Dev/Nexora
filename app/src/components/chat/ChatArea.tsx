@@ -36,6 +36,8 @@ type Props = {
   sendDisabled?: boolean;
   onOpenProfile?: (userId: number) => void;
   header: React.ReactNode;
+  /** Surface kept mounted above the timeline (for example an active DM call). */
+  topPanel?: React.ReactNode;
 };
 
 export function ChatArea({
@@ -53,6 +55,7 @@ export function ChatArea({
   firstUnreadMessageId = null,
   onOpenProfile,
   header,
+  topPanel,
 }: Props) {
   const utils = trpc.useUtils();
   const key = channelId ? channelKey(channelId) : dmKey(conversationId!);
@@ -336,6 +339,7 @@ export function ChatArea({
   return (
     <main className="flex-1 flex flex-col min-w-0 h-full bg-chat relative select-text">
       {header}
+      {topPanel}
       {unreadBar}
 
       {/* Messages area */}

@@ -52,6 +52,7 @@ function VideoTile({
   speaking: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const setVoiceSession = useAppStore(state => state.setVoiceSession);
   const hasVideo =
     !!stream &&
     (participant.camera || participant.screen) &&
@@ -61,12 +62,16 @@ function VideoTile({
     const video = videoRef.current;
     if (!video) return;
     video.srcObject = hasVideo ? stream : null;
-    if (hasVideo) video.play().catch(() => {});
+    if (hasVideo) {
+      video.play().catch(() => {
+        if (!isLocal) setVoiceSession({ voicePlaybackBlocked: true });
+      });
+    }
     return () => {
       video.pause();
       video.srcObject = null;
     };
-  }, [stream, hasVideo]);
+  }, [hasVideo, isLocal, setVoiceSession, stream]);
 
   return (
     <div
@@ -189,33 +194,11 @@ export function VoiceView({
   const speakingByUser = useAppStore(s => s.speakingByUser);
   const localVideo = useAppStore(s => s.localVideo);
   const remoteStreams = useAppStore(s => s.remoteStreams);
+  const connectionQuality = useAppStore(s => s.voiceQuality);
 
   const [joining, setJoining] = useState(false);
   const [focusUserId, setFocusUserId] = useState<number | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [connectionQuality, setConnectionQuality] = useState<"excellent" | "good" | "poor" | "unknown">("unknown");
-  const qualityCheckRef = useRef(0);
-
-  // Periodic connection quality check (simplified)
-  useEffect(() => {
-    if (!connected) {
-      setConnectionQuality("unknown");
-      return;
-    }
-    
-    const checkQuality = () => {
-      if (connectionStatus === "connected") {
-        const qualities = ["excellent", "good", "poor"] as const;
-        setConnectionQuality(qualities[Math.floor(Math.random() * 3)]);
-      } else {
-        setConnectionQuality("unknown");
-      }
-    };
-    
-    checkQuality();
-    qualityCheckRef.current = window.setInterval(checkQuality, 10000);
-    return () => window.clearInterval(qualityCheckRef.current);
-  }, [connected, connectionStatus]);
 
   const setSpeaker = trpc.server.stageSetSpeaker.useMutation({
     onError: e => toast.error(e.message),
@@ -424,17 +407,17 @@ export function VoiceView({
               <span
                 className={cn(
                   "flex h-2 w-2 rounded-full",
-                  connectionQuality === "excellent" && "bg-[#23A559]",
-                  connectionQuality === "good" && "bg-amber-400",
-                  connectionQuality === "poor" && "bg-red-400",
-                  connectionQuality === "unknown" && "bg-white/30"
+                  connectionQuality.level === "excellent" && "bg-[#23A559]",
+                  connectionQuality.level === "good" && "bg-amber-400",
+                  connectionQuality.level === "poor" && "bg-red-400",
+                  connectionQuality.level === "unknown" && "bg-white/30"
                 )}
               />
               <span className="text-[10px] text-muted2">
-                {connectionQuality === "excellent" && "Excelente"}
-                {connectionQuality === "good" && "Boa"}
-                {connectionQuality === "poor" && "Ruim"}
-                {connectionQuality === "unknown" && "—"}
+                {connectionQuality.level === "excellent" && "Excelente"}
+                {connectionQuality.level === "good" && "Boa"}
+                {connectionQuality.level === "poor" && "Ruim"}
+                {connectionQuality.level === "unknown" && "—"}
               </span>
             </span>
           )}

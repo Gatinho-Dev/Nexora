@@ -588,7 +588,12 @@ export const dmRouter = createRouter({
   // Toca o telefone dos outros participantes quando uma chamada DM começa
   // (o grupo já tinha isso; sem isto, a outra pessoa nunca fica sabendo).
   notifyCallStart: authedQuery
-    .input(z.object({ conversationId: z.number() }))
+    .input(
+      z.object({
+        conversationId: z.number(),
+        video: z.boolean().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       await requireConversationAccess(ctx.user.id, input.conversationId);
       await assertCanInteract(ctx.user.id);
@@ -602,7 +607,7 @@ export const dmRouter = createRouter({
         type: "call_started",
         actorId: ctx.user.id,
         conversationId: input.conversationId,
-        content: `${actor?.name ?? actor?.username ?? "Alguém"} iniciou uma chamada.`,
+        content: `${actor?.name ?? actor?.username ?? "Alguém"} iniciou uma chamada${input.video ? " de vídeo" : ""}.`,
         skip: [...inRoom],
       });
       return { ok: true };

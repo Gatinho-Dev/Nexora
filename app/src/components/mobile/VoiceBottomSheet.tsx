@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
 import { Avatar } from "@/components/Avatar";
@@ -6,6 +6,19 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useVoiceCallView } from "@/hooks/useVoiceCallView";
 import { VoiceConnectionBar } from "./VoiceConnectionBar";
+import {
+  Headphones,
+  Mic,
+  MicOff,
+  PhoneOff,
+  Video,
+  VideoOff,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
+
+const EMPTY_PARTICIPANTS: never[] = [];
 
 export function VoiceBottomSheet({
   isOpen,
@@ -21,29 +34,15 @@ export function VoiceBottomSheet({
     if (voiceConversationId != null) return `dm:${voiceConversationId}`;
     return null;
   });
-  const participants = roomKey ? useAppStore.getState().voiceParticipants[roomKey] ?? [] : [];
-  const [connectionQuality, setConnectionQuality] = useState<"excellent" | "good" | "poor" | "unknown">("unknown");
-  const qualityCheckRef = useRef(0);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setConnectionQuality("unknown");
-      return;
-    }
-    const checkQuality = () => {
-      const connectionStatus = useAppStore.getState().voiceConnectionStatus;
-      if (connectionStatus === "connected") {
-        const qualities = ["excellent", "good", "poor"] as const;
-        const randomQuality = qualities[Math.floor(Math.random() * 3)];
-        setConnectionQuality(randomQuality);
-      } else {
-        setConnectionQuality("unknown");
-      }
-    };
-    checkQuality();
-    qualityCheckRef.current = window.setInterval(checkQuality, 10000);
-    return () => window.clearInterval(qualityCheckRef.current);
-  }, [isOpen]);
+  const participantsMap = useAppStore(state => state.voiceParticipants);
+  const participants = roomKey
+    ? (participantsMap[roomKey] ?? EMPTY_PARTICIPANTS)
+    : EMPTY_PARTICIPANTS;
+  const connectionQuality = useAppStore(state => state.voiceQuality);
+  const speakingByUser = useAppStore(state => state.speakingByUser);
+  const muted = useAppStore(state => state.muted);
+  const deafened = useAppStore(state => state.deafened);
+  const cameraOn = useAppStore(state => state.cameraOn);
 
   if (!isOpen) return null;
 
@@ -58,25 +57,30 @@ export function VoiceBottomSheet({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/[0.06] bg-sidebar px-4 py-3">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">Chamada de voz</p>
+            <p className="truncate text-sm font-semibold text-white">
+              Chamada de voz
+            </p>
             <p className="text-[11px] text-[#aeb1bd]">
-              {participants.length} {participants.length === 1 ? "participante" : "participantes"}
+              {participants.length}{" "}
+              {participants.length === 1 ? "participante" : "participantes"}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1 text-xs font-medium text-[#55d98b]">
-              <span className={cn(
-                "flex h-2 w-2 rounded-full",
-                connectionQuality === "excellent" && "bg-[#23A559]",
-                connectionQuality === "good" && "bg-amber-400",
-                connectionQuality === "poor" && "bg-red-400",
-                connectionQuality === "unknown" && "bg-white/30"
-              )} />
+              <span
+                className={cn(
+                  "flex h-2 w-2 rounded-full",
+                  connectionQuality.level === "excellent" && "bg-[#23A559]",
+                  connectionQuality.level === "good" && "bg-amber-400",
+                  connectionQuality.level === "poor" && "bg-red-400",
+                  connectionQuality.level === "unknown" && "bg-white/30"
+                )}
+              />
               <span className="text-[10px] text-muted2">
-                {connectionQuality === "excellent" && "Excelente"}
-                {connectionQuality === "good" && "Boa"}
-                {connectionQuality === "poor" && "Ruim"}
-                {connectionQuality === "unknown" && "—"}
+                {connectionQuality.level === "excellent" && "Excelente"}
+                {connectionQuality.level === "good" && "Boa"}
+                {connectionQuality.level === "poor" && "Instável"}
+                {connectionQuality.level === "unknown" && "—"}
               </span>
             </span>
             <button
@@ -84,9 +88,7 @@ export function VoiceBottomSheet({
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 hover:bg-white/10 transition-colors"
               aria-label="Fechar painel"
             >
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
+              <X className="h-5 w-5" />
             </button>
           </div>
         </div>
@@ -114,7 +116,7 @@ export function VoiceBottomSheet({
                       size="md"
                       showStatus={false}
                     />
-                    {useAppStore.getState().speakingByUser[p.userId] && !p.muted && (
+                    {speakingByUser[p.userId] && !p.muted && (
                       <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-[#3bbd72] flex items-center justify-center ring-2 ring-chat">
                         <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                       </span>
@@ -126,10 +128,9 @@ export function VoiceBottomSheet({
                     </p>
                   </div>
                   <div className="flex items-center gap-1 text-muted2">
-                    {p.muted && <span className="text-red-400">🔇</span>}
-                    {p.deafened && <span className="text-red-400">🔈</span>}
-                    {p.camera && <span className="text-[#5865F2]">📹</span>}
-                    {p.screen && <span className="text-[#23A559]">🖥️</span>}
+                    {p.muted && <MicOff className="h-4 w-4 text-red-400" />}
+                    {p.deafened && <VolumeX className="h-4 w-4 text-red-400" />}
+                    {p.camera && <Video className="h-4 w-4 text-[#7383FF]" />}
                   </div>
                 </button>
               ))}
@@ -142,32 +143,46 @@ export function VoiceBottomSheet({
           <div className="flex items-center justify-center gap-2 sm:gap-3">
             <button
               onClick={() => voiceManager.toggleMute()}
-              aria-label={useAppStore.getState().muted ? "Ativar microfone" : "Silenciar microfone"}
+              aria-label={muted ? "Ativar microfone" : "Silenciar microfone"}
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-lg transition-transform active:scale-95 bg-white/10 text-bodyx"
             >
-              {useAppStore.getState().muted ? <span>🔇</span> : <span>🎤</span>}
+              {muted ? (
+                <MicOff className="h-5 w-5" />
+              ) : (
+                <Mic className="h-5 w-5" />
+              )}
             </button>
 
             <button
               onClick={() => voiceManager.toggleDeafen()}
-              aria-label={useAppStore.getState().deafened ? "Ativar áudio" : "Ensurdecer áudio"}
+              aria-label={deafened ? "Ativar áudio" : "Ensurdecer áudio"}
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-lg transition-transform active:scale-95 bg-white/10 text-bodyx"
             >
-              {useAppStore.getState().deafened ? <span>🔈</span> : <span>🎧</span>}
+              {deafened ? (
+                <Volume2 className="h-5 w-5" />
+              ) : (
+                <Headphones className="h-5 w-5" />
+              )}
             </button>
 
             <button
-              onClick={() => voiceManager.toggleCamera().catch(e => toast.error(e.message))}
+              onClick={() =>
+                voiceManager.toggleCamera().catch(e => toast.error(e.message))
+              }
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-lg transition-transform active:scale-95 bg-white/10 text-bodyx"
             >
-              {useAppStore.getState().cameraOn ? <span>📹</span> : <span>📷</span>}
+              {cameraOn ? (
+                <Video className="h-5 w-5" />
+              ) : (
+                <VideoOff className="h-5 w-5" />
+              )}
             </button>
 
             <button
               onClick={() => voiceManager.leave()}
               className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-600 text-white transition-transform active:scale-95"
             >
-              <span>📞</span>
+              <PhoneOff className="h-5 w-5" />
             </button>
           </div>
         </div>
