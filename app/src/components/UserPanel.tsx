@@ -9,16 +9,21 @@ import { voiceManager } from "@/lib/rtc";
 import { UserSettingsModal } from "./modals/UserSettingsModal";
 import { NexoraMark } from "./NexoraBrand";
 import { BadgeIcon } from "./badges/BadgeUI";
+import { ProfileAvatar } from "./profile/ProfileAvatar";
+import { StyledDisplayName } from "./profile/StyledDisplayName";
 import { cn } from "@/lib/utils";
 import {
   BadgeCheck,
   ChevronRight,
+  Copy,
+  Gamepad2,
   Mic,
   MicOff,
   Headphones,
   VolumeX,
   Settings,
-  LogOut,  Pencil,
+  LogOut,
+  Pencil,
   PhoneOff,
   Wifi,
   WifiOff,
@@ -51,6 +56,7 @@ export function UserPanel() {
     "account"
   );
   const [profileOpen, setProfileOpen] = useState(false);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const wsConnected = useAppStore(s => s.wsConnected);
   const inVoice = useAppStore(
     s => s.voiceChannelId !== null || s.voiceConversationId !== null
@@ -90,7 +96,9 @@ export function UserPanel() {
             <span
               className={cn(
                 "flex items-center gap-1 font-semibold",
-                wsConnected ? "text-[hsl(var(--presence-online))]" : "text-amber-500"
+                wsConnected
+                  ? "text-[hsl(var(--presence-online))]"
+                  : "text-amber-500"
               )}
             >
               {wsConnected ? (
@@ -157,9 +165,23 @@ export function UserPanel() {
             align="start"
             sideOffset={8}
             collisionPadding={8}
-            className="w-[min(320px,calc(100vw-1rem))] overflow-hidden rounded-2xl border-black/10 dark:border-white/10 bg-popover text-popover-foreground p-0 shadow-2xl"
+            className="w-[min(340px,calc(100vw-1rem))] overflow-hidden rounded-2xl border-black/10 bg-popover p-0 text-popover-foreground shadow-2xl dark:border-white/10"
           >
-            <div className="relative h-20 overflow-hidden bg-hov">
+            <div
+              className={cn(
+                "relative h-28 overflow-hidden bg-gradient-to-br",
+                profile.profileTheme === "rose" &&
+                  "from-[#ad3d78] via-[#67234d] to-[#32172c]",
+                profile.profileTheme === "mint" &&
+                  "from-[#168b91] via-[#17606c] to-[#17333b]",
+                profile.profileTheme === "sunset" &&
+                  "from-[#dd5d2e] via-[#9b3855] to-[#401d37]",
+                profile.profileTheme === "midnight" &&
+                  "from-[#5146ad] via-[#282553] to-[#12111f]",
+                (!profile.profileTheme || profile.profileTheme === "cobalt") &&
+                  "from-[#4255a7] via-[#283577] to-[#181d43]"
+              )}
+            >
               {profile.banner ? (
                 <img
                   src={profile.banner}
@@ -170,29 +192,32 @@ export function UserPanel() {
                 <>
                   <NexoraMark
                     decorative
-                    className="absolute -right-5 -top-9 h-36 w-36 rotate-6 opacity-[0.13]"
+                    className="absolute -right-7 -top-10 h-44 w-44 rotate-6 opacity-[0.16]"
                   />
-                  <div className="absolute inset-x-0 bottom-0 h-1 bg-primary" />
+                  <div
+                    className="absolute inset-x-0 bottom-0 h-1"
+                    style={{ backgroundColor: profile.profileAccent }}
+                  />
                 </>
               )}
             </div>
 
-            <div className="px-4 pb-4">
-              <div className="-mt-7 flex items-end justify-between gap-3">
+            <div className="relative px-4 pb-4">
+              <div className="-mt-10 flex items-end justify-between gap-3">
                 <div className="rounded-full border-4 border-popover bg-popover">
-                  <Avatar
+                  <ProfileAvatar
                     userId={user.id}
                     name={user.name ?? user.username}
                     src={user.avatar}
-                    size="lg"
-                    showStatus
-                    statusOverride={currentStatus}
+                    size="xl"
+                    decoration={profile.avatarDecoration}
+                    status={currentStatus}
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => openSettings("profile")}
-                  className="mb-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="mb-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   Editar perfil
@@ -200,15 +225,26 @@ export function UserPanel() {
               </div>
 
               <div className="mt-2 min-w-0">
-                <p className="truncate text-base font-bold text-foreground">
+                <StyledDisplayName
+                  font={profile.nameFont}
+                  effect={profile.nameEffect}
+                  colorA={profile.nameColorA}
+                  colorB={profile.nameColorB}
+                  className="text-xl"
+                >
                   {user.name ?? user.username}
-                </p>
-                <p className="truncate text-xs text-muted2">
+                </StyledDisplayName>
+                <p className="mt-0.5 truncate text-xs text-muted2">
                   @{user.username ?? "sem-usuario"}
                 </p>
+                {profile.customStatus && (
+                  <p className="mt-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs italic text-bodyx">
+                    {profile.customStatus}
+                  </p>
+                )}
               </div>
 
-              <div className="mt-3 rounded-xl border border-black/[0.06] dark:border-white/[0.07] bg-panel p-3">
+              <div className="mt-3 rounded-xl border border-black/[0.06] bg-panel/80 p-3 dark:border-white/[0.07]">
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-faint">
                   Sobre mim
                 </p>
@@ -222,6 +258,38 @@ export function UserPanel() {
                     "Adicione uma biografia para completar seu perfil."}
                 </p>
               </div>
+
+              {profile.profileGames?.length ? (
+                <div className="mt-3 rounded-xl border border-black/[0.06] bg-panel/80 p-3 dark:border-white/[0.07]">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-faint">
+                      Coleção de jogos
+                    </p>
+                    <span className="text-[10px] text-faint">
+                      {profile.profileGames.length}/20
+                    </span>
+                  </div>
+                  <div className="mt-2 flex gap-1.5">
+                    {profile.profileGames.slice(0, 4).map(game => (
+                      <div
+                        key={game.id}
+                        className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white/[0.06]"
+                        title={game.name}
+                      >
+                        {game.imageUrl ? (
+                          <img
+                            src={game.imageUrl}
+                            alt={game.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <Gamepad2 className="h-4 w-4 text-muted2" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-3">
                 <div className="flex items-center justify-between">
@@ -253,36 +321,51 @@ export function UserPanel() {
                 )}
               </div>
 
-              <div className="mt-4 border-t border-white/[0.07] pt-3">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-faint">
-                  Status
-                </p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {(["online", "idle", "dnd", "invisible"] as const).map(
-                    status => (
-                      <button
-                        key={status}
-                        type="button"
-                        onClick={() => setStatus(status)}
-                        className={cn(
-                          "flex min-h-9 items-center gap-2 rounded-lg px-2.5 text-left text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          currentStatus ===
-                            (status === "invisible" ? "offline" : status)
-                            ? "bg-black/[0.06] text-foreground"
-                            : "text-muted2 hover:bg-hov hover:text-foreground"
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "h-2.5 w-2.5 shrink-0 rounded-full",
-                            statusColor(status)
-                          )}
-                        />
-                        {STATUS_LABELS[status]}
-                      </button>
-                    )
-                  )}
-                </div>
+              <div className="relative mt-3 border-t border-white/[0.07] pt-3">
+                <button
+                  type="button"
+                  onClick={() => setStatusMenuOpen(value => !value)}
+                  className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium text-bodyx transition-colors hover:bg-hov focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span
+                    className={cn(
+                      "h-2.5 w-2.5 shrink-0 rounded-full",
+                      statusColor(currentStatus)
+                    )}
+                  />
+                  {STATUS_LABELS[currentStatus] ?? "Online"}
+                  <ChevronRight
+                    className={cn(
+                      "ml-auto h-4 w-4 text-faint transition-transform",
+                      statusMenuOpen && "rotate-90"
+                    )}
+                  />
+                </button>
+                {statusMenuOpen && (
+                  <div className="mt-1.5 rounded-xl border border-black/[0.08] bg-popover p-1.5 shadow-xl dark:border-white/10">
+                    {(["online", "idle", "dnd", "invisible"] as const).map(
+                      status => (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => {
+                            setStatus(status);
+                            setStatusMenuOpen(false);
+                          }}
+                          className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[11px] text-muted2 transition-colors hover:bg-hov hover:text-foreground"
+                        >
+                          <span
+                            className={cn(
+                              "h-2.5 w-2.5 shrink-0 rounded-full",
+                              statusColor(status)
+                            )}
+                          />
+                          {STATUS_LABELS[status]}
+                        </button>
+                      )
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="mt-3 space-y-1 border-t border-white/[0.07] pt-3">
@@ -294,6 +377,16 @@ export function UserPanel() {
                   <Settings className="h-4 w-4 text-faint" />
                   Configurações
                   <ChevronRight className="ml-auto h-4 w-4 text-faint" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void navigator.clipboard.writeText(String(user.id))
+                  }
+                  className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium text-bodyx transition-colors hover:bg-hov focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Copy className="h-4 w-4 text-faint" />
+                  Copiar ID do usuário
                 </button>
                 <button
                   type="button"

@@ -17,7 +17,22 @@ export function toPublicUser(u: typeof schema.users.$inferSelect): PublicUser {
     avatar: u.avatar,
     banner: u.banner,
     bio: u.bio,
+    customStatus: u.customStatus,
+    profileTheme: u.profileTheme,
+    profileAccent: u.profileAccent,
+    nameFont: u.nameFont,
+    nameEffect: u.nameEffect,
+    nameColorA: u.nameColorA,
+    nameColorB: u.nameColorB,
+    avatarDecoration: u.avatarDecoration,
+    profileEffect: u.profileEffect,
+    profileGames: u.profileGames ?? [],
+    profileWishlist: u.profileWishlist ?? [],
+    profileWidgets: u.profileWidgets ?? ["games", "favorite"],
+    favoriteGameId: u.favoriteGameId,
+    favoriteGameNote: u.favoriteGameNote,
     status: u.status,
+    createdAt: u.createdAt,
   };
 }
 

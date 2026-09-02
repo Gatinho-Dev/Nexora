@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   MessageDTO,
   ReactionDTO,
+  RichPresenceActivityDTO,
   RobloxActivityDTO,
   VoiceParticipant,
 } from "@contracts/types";
@@ -77,6 +78,11 @@ type AppState = {
   setRobloxActivity: (
     userId: number,
     activity: RobloxActivityDTO | null
+  ) => void;
+  richPresence: Record<number, RichPresenceActivityDTO[]>;
+  setRichPresence: (
+    userId: number,
+    activities: RichPresenceActivityDTO[]
   ) => void;
   unreadChannels: Record<number, number>;
   unreadConversations: Record<number, number>;
@@ -188,6 +194,7 @@ export const useAppStore = create<AppState>(set => ({
   typing: {},
   presence: {},
   robloxActivity: {},
+  richPresence: {},
   sensitiveMediaPref: "warn",
   serverUnread: {},
   serverMentions: {},
@@ -331,6 +338,9 @@ export const useAppStore = create<AppState>(set => ({
 
   setRobloxActivity: (userId, activity) =>
     set(s => ({ robloxActivity: { ...s.robloxActivity, [userId]: activity } })),
+
+  setRichPresence: (userId, activities) =>
+    set(s => ({ richPresence: { ...s.richPresence, [userId]: activities } })),
 
   setPresenceBulk: entries =>
     set(s => ({ presence: { ...s.presence, ...entries } })),

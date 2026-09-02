@@ -105,10 +105,7 @@ function callStateEvent(
   };
 }
 
-async function endDmCall(
-  conversationId: number,
-  reason: DmCallEndReason
-) {
+async function endDmCall(conversationId: number, reason: DmCallEndReason) {
   const session = dmCallSessions.get(conversationId);
   if (!session) return;
   dmCallSessions.delete(conversationId);
@@ -140,7 +137,7 @@ async function endDmCall(
       conversationId,
       session.initiatorId,
       content,
-      "call",
+      "call"
     );
     const message = await db.query.messages.findFirst({
       where: eq(schema.messages.id, messageId),
@@ -423,6 +420,13 @@ async function broadcastPresence(userId: number) {
       lastSeenAt: new Date(),
     })
     .where(eq(schema.users.id, userId))
+    .catch(() => {});
+
+  // Re-apply rich-presence audience filtering immediately when the owner
+  // becomes invisible or visible again. Dynamic import avoids a static cycle:
+  // presenceService uses the realtime delivery helpers exported by this file.
+  void import("./integrations/presenceService")
+    .then(({ rebroadcastActivities }) => rebroadcastActivities(userId))
     .catch(() => {});
 }
 
