@@ -98,7 +98,10 @@ export function buildAuthorizeUrl(input: {
     nonce: input.nonce,
     code_challenge: challenge,
     code_challenge_method: "S256",
-    prompt: "select_account",
+    // Roblox requires both screens for this third-party OIDC flow. OIDC prompt
+    // values share one space-delimited parameter; sending either value alone
+    // yields account_selection_required or consent_required respectively.
+    prompt: "select_account consent",
   });
   const url = new URL("https://apis.roblox.com/oauth/v1/authorize");
   url.search = params.toString();
