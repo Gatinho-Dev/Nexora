@@ -34,12 +34,13 @@ import { startSessionCleanupJob } from "./auth/sessions";
 import {
   startRobloxPresenceWorker,
   robloxWorkerStatus,
+  pollOnce as pollRobloxPresenceOnce,
 } from "./integrations/roblox/presenceWorker";
 import {
   robloxConfigured,
   buildAuthorizeUrl,
   exchangeCode,
-  fetchUserInfo,
+  resolveRobloxIdentity,
   RobloxApiError,
 } from "./integrations/roblox/client";
 import { upsertRobloxConnection } from "./integrations/roblox/service";
@@ -440,19 +441,21 @@ app.get("/api/integrations/:provider/callback", async c => {
     const code = c.req.query("code");
     if (!code) throw new Error("sem code");
     let result: { ok: true } | { ok: false; error: "already_linked" };
+    let robloxUserId: number | null = null;
     if (provider === "roblox") {
       const tokens = await exchangeCode({
         code,
         codeVerifier: oauth.codeVerifier,
       });
-      const info = await fetchUserInfo(tokens.access_token);
+      const identity = await resolveRobloxIdentity(tokens.access_token);
+      robloxUserId = Number(identity.providerUserId);
       result = await upsertRobloxConnection({
         userId: user.id,
-        providerUserId: info.sub,
-        username: info.preferred_username,
-        displayName: info.name ?? info.nickname ?? null,
-        avatarUrl: info.picture ?? null,
-        profileUrl: info.profile ?? null,
+        providerUserId: identity.providerUserId,
+        username: identity.username,
+        displayName: identity.displayName,
+        avatarUrl: identity.avatarUrl,
+        profileUrl: identity.profileUrl,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token ?? null,
         expiresInSeconds: tokens.expires_in,
@@ -477,6 +480,16 @@ app.get("/api/integrations/:provider/callback", async c => {
         integrationReturn(provider, "already_linked", oauth.returnPath),
         302
       );
+    }
+    if (
+      provider === "roblox" &&
+      robloxUserId !== null &&
+      Number.isSafeInteger(robloxUserId) &&
+      robloxUserId > 0
+    ) {
+      // Confirma a conta e consulta a presença logo após conectar. Depois, o
+      // worker segue atualizando em lote no intervalo configurado.
+      void pollRobloxPresenceOnce([robloxUserId]).catch(() => {});
     }
     console.log(
       JSON.stringify({

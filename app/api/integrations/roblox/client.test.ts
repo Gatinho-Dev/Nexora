@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildAuthorizeUrl, exchangeCode, revokeToken } from "./client";
+import {
+  buildAuthorizeUrl,
+  exchangeCode,
+  resolveRobloxIdentity,
+  revokeToken,
+} from "./client";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -58,5 +63,63 @@ describe("Roblox OAuth authorization URL", () => {
     expect(
       new Headers(tokenInit.headers).get("Authorization")?.startsWith("Basic ")
     ).toBe(true);
+  });
+
+  it("confirma o sub OAuth mesmo quando o profile scope só devolve a identidade", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ sub: "1516563360", picture: null }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 1516563360,
+            name: "RobloxPlayer",
+            displayName: "Jogador Roblox",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(resolveRobloxIdentity("access-token-valido")).resolves.toEqual(
+      {
+        providerUserId: "1516563360",
+        username: "RobloxPlayer",
+        displayName: "Jogador Roblox",
+        avatarUrl: null,
+        profileUrl: "https://www.roblox.com/users/1516563360/profile",
+      }
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://users.roblox.com/v1/users/1516563360"
+    );
+  });
+
+  it("mantém a conta confirmada se a consulta pública de nome falhar", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ sub: "261" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockRejectedValueOnce(new Error("rede indisponível"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(resolveRobloxIdentity("access-token-valido")).resolves.toEqual(
+      {
+        providerUserId: "261",
+        username: "roblox-261",
+        displayName: null,
+        avatarUrl: null,
+        profileUrl: "https://www.roblox.com/users/261/profile",
+      }
+    );
   });
 });
