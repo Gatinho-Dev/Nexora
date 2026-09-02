@@ -44,6 +44,10 @@ export function AppLayout() {
   const mobileNavOpen = useAppStore(s => s.mobileNavOpen);
   const setMobileNavOpen = useAppStore(s => s.setMobileNavOpen);
   const setMembersOpen = useAppStore(s => s.setMembersOpen);
+  const hasIntegrationReturn = (() => {
+    const params = new URLSearchParams(location.search);
+    return params.has("integration") && params.has("status");
+  })();
 
   // Global modals and context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
@@ -51,8 +55,10 @@ export function AppLayout() {
     null
   );
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("account");
+  const [settingsOpen, setSettingsOpen] = useState(hasIntegrationReturn);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>(
+    hasIntegrationReturn ? "connections" : "account"
+  );
   useEffect(() => {
     const openSettings = (e: Event) => {
       const tab = (e as CustomEvent<{ tab?: SettingsTab }>).detail?.tab;

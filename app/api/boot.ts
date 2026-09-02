@@ -40,6 +40,7 @@ import {
   buildAuthorizeUrl,
   exchangeCode,
   fetchUserInfo,
+  RobloxApiError,
 } from "./integrations/roblox/client";
 import { upsertRobloxConnection } from "./integrations/roblox/service";
 import { createOauthState, consumeOauthState } from "./integrations/oauthState";
@@ -337,14 +338,22 @@ const OAUTH_PROVIDERS = new Set<IntegrationProviderId>([
   "roblox",
 ]);
 
-function integrationReturn(provider: string, status: string) {
+function integrationReturn(
+  provider: string,
+  status: string,
+  returnPath = "/channels/@me"
+) {
   const base = env.appOrigin || "http://localhost";
-  const url = new URL(base);
+  const safeReturnPath =
+    returnPath.startsWith("/") && !returnPath.startsWith("//")
+      ? returnPath
+      : "/channels/@me";
+  const url = new URL(safeReturnPath, base);
   url.searchParams.set("integration", provider);
   url.searchParams.set("status", status);
   return env.appOrigin
     ? url.toString()
-    : `/?integration=${provider}&status=${status}`;
+    : `${url.pathname}${url.search}${url.hash}`;
 }
 
 app.get("/api/integrations/:provider/connect", async c => {
@@ -359,6 +368,7 @@ app.get("/api/integrations/:provider/connect", async c => {
     return c.json({ error: "Integração desconhecida." }, 404);
   }
   rateLimit(`oauthConnect:${user.id}:${provider}`, 12, 60_000);
+  const returnPath = c.req.query("returnTo") ?? "/channels/@me";
 
   if (provider === "roblox") {
     if (!env.robloxIntegrationEnabled || !robloxConfigured()) {
@@ -367,7 +377,11 @@ app.get("/api/integrations/:provider/connect", async c => {
         503
       );
     }
-    const oauth = await createOauthState({ userId: user.id, provider });
+    const oauth = await createOauthState({
+      userId: user.id,
+      provider,
+      returnPath,
+    });
     const { url } = buildAuthorizeUrl({
       state: oauth.state,
       codeVerifier: oauth.codeVerifier,
@@ -379,7 +393,11 @@ app.get("/api/integrations/:provider/connect", async c => {
   if (!adapter?.enabled() || !adapter.configured()) {
     return c.json({ error: "Essa conexão está indisponível no momento." }, 503);
   }
-  const oauth = await createOauthState({ userId: user.id, provider });
+  const oauth = await createOauthState({
+    userId: user.id,
+    provider,
+    returnPath,
+  });
   return c.redirect(
     adapter.buildAuthorizeUrl({
       state: oauth.state,
@@ -411,7 +429,8 @@ app.get("/api/integrations/:provider/callback", async c => {
     return c.redirect(
       integrationReturn(
         provider,
-        error === "access_denied" ? "cancelled" : "error"
+        error === "access_denied" ? "cancelled" : "error",
+        oauth.returnPath
       ),
       302
     );
@@ -454,7 +473,10 @@ app.get("/api/integrations/:provider/callback", async c => {
       });
     }
     if (!result.ok) {
-      return c.redirect(integrationReturn(provider, "already_linked"), 302);
+      return c.redirect(
+        integrationReturn(provider, "already_linked", oauth.returnPath),
+        302
+      );
     }
     console.log(
       JSON.stringify({
@@ -464,16 +486,27 @@ app.get("/api/integrations/:provider/callback", async c => {
         timestamp: new Date().toISOString(),
       })
     );
-    return c.redirect(integrationReturn(provider, "connected"), 302);
-  } catch {
+    return c.redirect(
+      integrationReturn(provider, "connected", oauth.returnPath),
+      302
+    );
+  } catch (error) {
     console.warn(
       JSON.stringify({
         event: "integration_oauth_callback_failed",
         provider,
+        userId: user.id,
+        errorType:
+          error instanceof Error ? error.constructor.name : "UnknownError",
+        upstreamStatus:
+          error instanceof RobloxApiError ? error.status : undefined,
         timestamp: new Date().toISOString(),
       })
     );
-    return c.redirect(integrationReturn(provider, "error"), 302);
+    return c.redirect(
+      integrationReturn(provider, "error", oauth.returnPath),
+      302
+    );
   }
 });
 
