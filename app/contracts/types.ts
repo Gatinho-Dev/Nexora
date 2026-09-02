@@ -10,16 +10,54 @@ export type PublicUser = {
   avatar: string | null;
   banner: string | null;
   bio: string | null;
+  customStatus: string | null;
+  profileTheme: string;
+  profileAccent: string;
+  nameFont: string;
+  nameEffect: string;
+  nameColorA: string;
+  nameColorB: string;
+  avatarDecoration: string;
+  profileEffect: string;
+  profileGames: ProfileGame[];
+  profileWishlist: ProfileGame[];
+  profileWidgets: string[];
+  favoriteGameId: string | null;
+  favoriteGameNote: string | null;
   status: string;
+  createdAt: string | Date;
+};
+
+export type ProfileGame = {
+  id: string;
+  name: string;
+  imageUrl?: string | null;
+};
+
+export type IntegrationProviderId =
+  "spotify" | "youtube" | "twitch" | "github" | "roblox";
+
+export type RichPresenceActivityDTO = {
+  id: string;
+  provider: IntegrationProviderId | "nexora";
+  type: "music" | "gaming" | "streaming" | "watching" | "coding" | "activity";
+  title: string;
+  details?: string | null;
+  state?: string | null;
+  largeImageUrl?: string | null;
+  largeImageText?: string | null;
+  smallImageUrl?: string | null;
+  smallImageText?: string | null;
+  startedAt?: string | Date | null;
+  endsAt?: string | Date | null;
+  externalUrl?: string | null;
+  isLive?: boolean;
+  updatedAt: string | Date;
 };
 
 // ── Composite DTOs ────────────────────────────────────────────
 export type ModerationStatus =
-  | "processing"
-  | "approved"
-  | "sensitive"
-  | "blocked"
-  | "review_required";
+  "processing" | "approved" | "sensitive" | "blocked" | "review_required";
 
 export type AttachmentDTO = {
   id: number;
@@ -309,18 +347,10 @@ export type NotificationDTO = {
 };
 
 export type OfficialAnnouncementKind =
-  | "GENERAL"
-  | "UPDATE"
-  | "SECURITY"
-  | "MAINTENANCE";
+  "GENERAL" | "UPDATE" | "SECURITY" | "MAINTENANCE";
 
 export type OfficialAnnouncementType =
-  | "INFO"
-  | "SUCCESS"
-  | "WARNING"
-  | "ERROR"
-  | "MAINTENANCE"
-  | "ANNOUNCEMENT";
+  "INFO" | "SUCCESS" | "WARNING" | "ERROR" | "MAINTENANCE" | "ANNOUNCEMENT";
 
 export type OfficialAnnouncementDTO = {
   id: number;
@@ -363,12 +393,7 @@ export type PollDTO = {
 };
 
 export type BadgeRarity =
-  | "COMMON"
-  | "UNCOMMON"
-  | "RARE"
-  | "EPIC"
-  | "LEGENDARY"
-  | "EXCLUSIVE";
+  "COMMON" | "UNCOMMON" | "RARE" | "EPIC" | "LEGENDARY" | "EXCLUSIVE";
 
 export type BadgeDTO = {
   id: number;
@@ -418,7 +443,8 @@ export type VoiceParticipant = {
 };
 
 // ── Segurança: denúncias / apelações / casos ──────────────────
-export type ReportTargetType = "message" | "user" | "media" | "server" | "channel";
+export type ReportTargetType =
+  "message" | "user" | "media" | "server" | "channel";
 
 export type ReportDTO = {
   id: number;
@@ -485,7 +511,8 @@ export type AccountSessionDTO = {
   isCurrent?: boolean;
 };
 
-export type SafetyAiStatusDTO = {  provider: string;
+export type SafetyAiStatusDTO = {
+  provider: string;
   model: string;
   visionModel: string;
   policyVersion: string;
@@ -646,6 +673,11 @@ export type WSServerEvent =
       t: "activity:update";
       userId: number;
       activity: RobloxActivityDTO | null;
+    }
+  | {
+      t: "rich-presence:update";
+      userId: number;
+      activities: RichPresenceActivityDTO[];
     }
   | {
       t: "account:restriction_updated";

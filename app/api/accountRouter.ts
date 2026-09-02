@@ -46,6 +46,16 @@ const usernameSchema = z
   .max(32, "O nome de usuário pode ter no máximo 32 caracteres.")
   .regex(/^[a-zA-Z0-9_.-]+$/, "Use apenas letras, números, ponto, hífen e sublinhado.");
 
+const colorSchema = z
+  .string()
+  .regex(/^#[0-9a-f]{6}$/i, "Escolha uma cor hexadecimal válida.");
+
+const profileGameSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().min(1).max(80),
+  imageUrl: z.string().max(500).nullable().optional(),
+});
+
 async function issueSession(
   ctx: { req: Request; resHeaders: Headers },
   user: { id: number; unionId: string },
@@ -233,6 +243,20 @@ export const accountRouter = createRouter({
         bio: z.string().max(500).optional(),
         avatar: z.string().max(500).optional(),
         banner: z.string().max(500).optional(),
+        customStatus: z.string().max(128).optional(),
+        profileTheme: z.enum(["cobalt", "rose", "mint", "sunset", "midnight"]).optional(),
+        profileAccent: colorSchema.optional(),
+        nameFont: z.enum(["sans", "serif", "rounded", "mono", "display", "handwritten"]).optional(),
+        nameEffect: z.enum(["solid", "gradient", "neon", "outline", "pop", "prism"]).optional(),
+        nameColorA: colorSchema.optional(),
+        nameColorB: colorSchema.optional(),
+        avatarDecoration: z.enum(["none", "sparkles", "crown", "orbit"]).optional(),
+        profileEffect: z.enum(["none", "aurora", "stardust", "bubbles"]).optional(),
+        profileGames: z.array(profileGameSchema).max(20).optional(),
+        profileWishlist: z.array(profileGameSchema).max(20).optional(),
+        profileWidgets: z.array(z.enum(["games", "favorite", "connections", "activity"])).max(4).optional(),
+        favoriteGameId: z.string().max(64).nullable().optional(),
+        favoriteGameNote: z.string().max(240).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -241,6 +265,20 @@ export const accountRouter = createRouter({
       if (input.bio !== undefined) patch.bio = input.bio;
       if (input.avatar !== undefined) patch.avatar = input.avatar;
       if (input.banner !== undefined) patch.banner = input.banner;
+      if (input.customStatus !== undefined) patch.customStatus = input.customStatus || null;
+      if (input.profileTheme !== undefined) patch.profileTheme = input.profileTheme;
+      if (input.profileAccent !== undefined) patch.profileAccent = input.profileAccent;
+      if (input.nameFont !== undefined) patch.nameFont = input.nameFont;
+      if (input.nameEffect !== undefined) patch.nameEffect = input.nameEffect;
+      if (input.nameColorA !== undefined) patch.nameColorA = input.nameColorA;
+      if (input.nameColorB !== undefined) patch.nameColorB = input.nameColorB;
+      if (input.avatarDecoration !== undefined) patch.avatarDecoration = input.avatarDecoration;
+      if (input.profileEffect !== undefined) patch.profileEffect = input.profileEffect;
+      if (input.profileGames !== undefined) patch.profileGames = input.profileGames;
+      if (input.profileWishlist !== undefined) patch.profileWishlist = input.profileWishlist;
+      if (input.profileWidgets !== undefined) patch.profileWidgets = input.profileWidgets;
+      if (input.favoriteGameId !== undefined) patch.favoriteGameId = input.favoriteGameId;
+      if (input.favoriteGameNote !== undefined) patch.favoriteGameNote = input.favoriteGameNote || null;
       if (Object.keys(patch).length === 0) return { user: toPublicUser(ctx.user) };
 
       await getDb()

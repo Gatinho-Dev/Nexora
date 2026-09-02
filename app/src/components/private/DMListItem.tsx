@@ -1,7 +1,18 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { BellOff, MoreHorizontal, Phone, Pin, PinOff, Users, X } from "lucide-react";
-import type { ConversationDTO } from "@contracts/types";
+import {
+  BellOff,
+  MoreHorizontal,
+  Phone,
+  Pin,
+  PinOff,
+  Users,
+  X,
+} from "lucide-react";
+import type {
+  ConversationDTO,
+  RichPresenceActivityDTO,
+} from "@contracts/types";
 import { Avatar } from "@/components/Avatar";
 import { GroupAvatar } from "@/components/groups/GroupAvatar";
 import { groupDisplayName } from "@/lib/groupDisplayName";
@@ -11,6 +22,8 @@ import { toast } from "sonner";
 import { useAppStore } from "@/store/useAppStore";
 import { UnreadIndicator } from "./UnreadIndicator";
 import { DMConversationMenu } from "./DMConversationMenu";
+import { RichPresenceInline } from "@/components/profile/RichPresenceInline";
+import { usePrimaryActivity } from "@/hooks/usePrimaryActivity";
 import {
   isConversationMutedAt,
   resolveConversationUnread,
@@ -20,28 +33,31 @@ export function DMListItem({
   conversation,
   active,
   isFriend,
+  initialActivity,
   onOpenProfile,
 }: {
   conversation: ConversationDTO;
   active: boolean;
   isFriend: boolean;
+  initialActivity?: RichPresenceActivityDTO | null;
   onOpenProfile?: (userId: number) => void;
 }) {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const [renderedAt] = useState(() => Date.now());
   const realtimeUnread = useAppStore(
-    state => state.unreadConversations[conversation.id],
+    state => state.unreadConversations[conversation.id]
   );
   const voiceCount = useAppStore(
-    state => state.voiceParticipants[`dm:${conversation.id}`]?.length ?? 0,
+    state => state.voiceParticipants[`dm:${conversation.id}`]?.length ?? 0
   );
   const unread = resolveConversationUnread(
     realtimeUnread,
-    conversation.unreadCount,
+    conversation.unreadCount
   );
   const isGroup = conversation.isGroup;
   const other = conversation.otherUser;
+  const activity = usePrimaryActivity(other?.id, initialActivity);
   const displayName = isGroup
     ? groupDisplayName(conversation)
     : (conversation.friendNickname ??
@@ -71,7 +87,7 @@ export function DMListItem({
           ? "bg-act text-foreground"
           : unread > 0
             ? "bg-white/[0.035] text-foreground hover:bg-hov"
-            : "text-muted2 hover:bg-hov hover:text-bodyx",
+            : "text-muted2 hover:bg-hov hover:text-bodyx"
       )}
       data-unread={unread > 0 ? "true" : "false"}
       data-selected={active ? "true" : "false"}
@@ -109,25 +125,38 @@ export function DMListItem({
           <span
             className={cn(
               "flex min-w-0 items-center gap-1.5 truncate text-[13px] leading-4",
-              unread > 0 ? "font-bold text-foreground" : "font-semibold",
+              unread > 0 ? "font-bold text-foreground" : "font-semibold"
             )}
           >
-            {isGroup && <Users className="h-3 w-3 shrink-0 text-faint" aria-hidden />}
-            <span className="truncate" title={displayName}>{displayName}</span>
-            {isMuted && <BellOff className="h-3 w-3 shrink-0 text-faint" aria-label="Silenciada" />}
-          </span>
-          <span
-            className={cn(
-              "mt-0.5 block truncate text-[11px] leading-3.5",
-              unread > 0 ? "text-bodyx" : "text-faint",
+            {isGroup && (
+              <Users className="h-3 w-3 shrink-0 text-faint" aria-hidden />
             )}
-          >
-            {conversation.lastMessage
-              ? conversation.lastMessage.content || "Anexo enviado"
-              : isGroup
-                ? `${conversation.memberCount ?? 0} participantes`
-                : `@${other?.username ?? "usuário"}`}
+            <span className="truncate" title={displayName}>
+              {displayName}
+            </span>
+            {isMuted && (
+              <BellOff
+                className="h-3 w-3 shrink-0 text-faint"
+                aria-label="Silenciada"
+              />
+            )}
           </span>
+          {!isGroup && activity ? (
+            <RichPresenceInline activity={activity} />
+          ) : (
+            <span
+              className={cn(
+                "mt-0.5 block truncate text-[11px] leading-3.5",
+                unread > 0 ? "text-bodyx" : "text-faint"
+              )}
+            >
+              {conversation.lastMessage
+                ? conversation.lastMessage.content || "Anexo enviado"
+                : isGroup
+                  ? `${conversation.memberCount ?? 0} participantes`
+                  : `@${other?.username ?? "usuário"}`}
+            </span>
+          )}
         </span>
       </button>
 
@@ -142,7 +171,10 @@ export function DMListItem({
           </span>
         )}
         {conversation.pinnedAt && (
-          <Pin className="h-3.5 w-3.5 text-primary group-hover:hidden" aria-label="Conversa fixada" />
+          <Pin
+            className="h-3.5 w-3.5 text-primary group-hover:hidden"
+            aria-label="Conversa fixada"
+          />
         )}
         {isGroup && unread > 0 && (
           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--mention-badge)] px-1 text-[10px] font-bold text-white group-hover:hidden">
@@ -160,10 +192,16 @@ export function DMListItem({
               })
             }
             className="flex h-7 w-7 items-center justify-center rounded-md text-muted2 hover:bg-black/10 hover:text-foreground"
-            aria-label={conversation.pinnedAt ? "Desafixar conversa" : "Fixar conversa"}
+            aria-label={
+              conversation.pinnedAt ? "Desafixar conversa" : "Fixar conversa"
+            }
             title={conversation.pinnedAt ? "Desafixar" : "Fixar"}
           >
-            {conversation.pinnedAt ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+            {conversation.pinnedAt ? (
+              <PinOff className="h-3.5 w-3.5" />
+            ) : (
+              <Pin className="h-3.5 w-3.5" />
+            )}
           </button>
           <button
             type="button"

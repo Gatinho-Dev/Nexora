@@ -131,4 +131,34 @@ export const env = {
     30_000,
     Number(process.env.ROBLOX_PRESENCE_INTERVAL_MS ?? 60_000)
   ),
+
+  // ── Nexora Rich Presence: providers OAuth oficiais ─────────
+  spotifyClientId: process.env.SPOTIFY_CLIENT_ID ?? "",
+  spotifyClientSecret: process.env.SPOTIFY_CLIENT_SECRET ?? "",
+  spotifyRedirectUri:
+    process.env.SPOTIFY_REDIRECT_URI ??
+    "https://nexorachat.cloud/api/integrations/spotify/callback",
+  spotifyIntegrationEnabled: process.env.SPOTIFY_INTEGRATION_ENABLED !== "false",
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  googleRedirectUri:
+    process.env.GOOGLE_REDIRECT_URI ??
+    "https://nexorachat.cloud/api/integrations/youtube/callback",
+  youtubeIntegrationEnabled: process.env.YOUTUBE_INTEGRATION_ENABLED !== "false",
+  twitchClientId: process.env.TWITCH_CLIENT_ID ?? "",
+  twitchClientSecret: process.env.TWITCH_CLIENT_SECRET ?? "",
+  twitchRedirectUri:
+    process.env.TWITCH_REDIRECT_URI ??
+    "https://nexorachat.cloud/api/integrations/twitch/callback",
+  twitchIntegrationEnabled: process.env.TWITCH_INTEGRATION_ENABLED !== "false",
+  githubClientId: process.env.GITHUB_CLIENT_ID ?? "",
+  githubClientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
+  githubRedirectUri:
+    process.env.GITHUB_REDIRECT_URI ??
+    "https://nexorachat.cloud/api/integrations/github/callback",
+  githubIntegrationEnabled: process.env.GITHUB_INTEGRATION_ENABLED !== "false",
+  externalPresenceIntervalMs: Math.max(
+    30_000,
+    Number(process.env.EXTERNAL_PRESENCE_INTERVAL_MS ?? 60_000),
+  ),
 };

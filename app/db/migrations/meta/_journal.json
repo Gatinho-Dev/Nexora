@@ -162,6 +162,13 @@
       "when": 1788486000000,
       "tag": "0019_server_settings_control_center",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1788572400000,
+      "tag": "0020_profiles_rich_presence",
+      "breakpoints": true
     }
   ]
 }

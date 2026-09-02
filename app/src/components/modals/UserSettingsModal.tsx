@@ -54,6 +54,7 @@ import {
   type AudioProcessingSession,
 } from "@/lib/voice/audioProcessing";
 import { NexoraLogo, NexoraMark } from "@/components/NexoraBrand";
+import { ProfileStudio } from "@/components/profile/ProfileStudio";
 
 type Tab =
   | "account"
@@ -171,13 +172,19 @@ function SettingsShell({
     setEntered(true);
   };
 
+  const leaveProfile = () => {
+    setTab("account");
+    if (isMobile) setEntered(false);
+  };
+
   return (
     <div className="relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden sm:flex-row">
       {/* Left Navigation Sidebar */}
       <aside
         className={cn(
           "flex w-full min-w-0 max-w-full shrink-0 items-center gap-1 overflow-x-auto border-b border-white/5 bg-sidebar p-2 sm:block sm:h-full sm:w-56 sm:overflow-x-hidden sm:overflow-y-auto sm:border-r sm:border-b-0 sm:p-4",
-          isMobile && entered && "hidden"
+          isMobile && entered && "hidden",
+          tab === "profile" && "sm:hidden"
         )}
       >
         <div className="mb-4 hidden px-2 sm:block">
@@ -228,7 +235,7 @@ function SettingsShell({
         )}
       >
         {/* Navegação empilhada (mobile): voltar para a lista */}
-        {isMobile && (
+        {isMobile && tab !== "profile" && (
           <div className="absolute top-3 left-3 z-20 sm:hidden">
             <button
               onClick={() => setEntered(false)}
@@ -242,7 +249,12 @@ function SettingsShell({
         )}
 
         {/* ESC close button */}
-        <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 sm:top-5 sm:right-6">
+        <div
+          className={cn(
+            "absolute top-3 right-3 z-20 flex items-center gap-1.5 sm:top-5 sm:right-6",
+            tab === "profile" && "hidden"
+          )}
+        >
           <button
             onClick={() => onOpenChange(false)}
             className="flex items-center justify-center h-8 w-8 rounded-full border border-white/20 text-muted2 hover:bg-white/10 hover:text-white transition-colors"
@@ -257,10 +269,21 @@ function SettingsShell({
         </div>
 
         <ScrollArea className="h-full">
-          <div className="mx-auto w-full min-w-0 max-w-3xl p-4 pt-14 pr-14 sm:p-8 sm:pt-8 sm:pr-20">
+          <div
+            className={cn(
+              "mx-auto w-full min-w-0 max-w-3xl p-4 pt-14 pr-14 sm:p-8 sm:pt-8 sm:pr-20",
+              tab === "profile" &&
+                "max-w-none p-0 pt-12 pr-0 sm:p-0 sm:pt-0 sm:pr-0"
+            )}
+          >
             {isMobile && <p className="sr-only">{activeLabel}</p>}
             {tab === "account" && <AccountTab />}
-            {tab === "profile" && <ProfileTab />}
+            {tab === "profile" && (
+              <ProfileTab
+                onBack={leaveProfile}
+                onClose={() => onOpenChange(false)}
+              />
+            )}
             {tab === "devices" && <DevicesSection />}
             {tab === "security" && <SecurityCenter onNavigate={enterTab} />}
             {tab === "standing" && <StandingTab />}
@@ -399,7 +422,17 @@ function AccountTab() {
 }
 
 // ── Perfil ────────────────────────────────────────────────────
-function ProfileTab() {
+function ProfileTab({
+  onBack,
+  onClose,
+}: {
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  return <ProfileStudio onBack={onBack} onClose={onClose} />;
+}
+
+function LegacyProfileTab() {
   const { user, refresh } = useAuth();
   const utils = trpc.useUtils();
   const [displayName, setDisplayName] = useState(user?.name ?? "");
@@ -621,6 +654,9 @@ function ProfileTab() {
     </div>
   );
 }
+
+// Mantido temporariamente como fallback enquanto o novo estúdio é validado.
+void LegacyProfileTab;
 
 function PrivacyTab() {
   const utils = trpc.useUtils();

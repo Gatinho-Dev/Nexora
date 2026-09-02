@@ -1,324 +1,294 @@
 import { useEffect } from "react";
-import { trpc } from "@/providers/trpc";
+import {
+  ExternalLink,
+  Gamepad2,
+  Github,
+  Music2,
+  Radio,
+  ShieldCheck,
+  Youtube,
+} from "lucide-react";
 import { toast } from "sonner";
-import { ExternalLink, Gamepad2 } from "lucide-react";
+import { apiUrl } from "@/lib/endpoints";
+import { trpc } from "@/providers/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-const CONNECT_URL = "/api/integrations/roblox/connect";
+type ProviderId = "spotify" | "youtube" | "twitch" | "github" | "roblox";
 
-type RobloxSettings = {
-  showOnProfile: boolean;
-  showActivity: boolean;
-  allowJoin: boolean;
+const DESCRIPTIONS: Record<ProviderId, string> = {
+  spotify:
+    "Mostre a faixa que está tocando, com capa e progresso em tempo real.",
+  youtube:
+    "Exiba seu canal conectado. A Nexora não inventa o vídeo que você está assistindo.",
+  twitch: "Mostre seu canal e sua transmissão quando você estiver ao vivo.",
+  github:
+    "Exiba seu perfil público sem solicitar acesso a repositórios privados.",
+  roblox:
+    "Mostre sua conta e a experiência em que você está jogando quando a API permitir.",
 };
 
-/** Configurações → Minha Conta → Conexões (integração Roblox). */
+function ProviderIcon({ provider }: { provider: ProviderId }) {
+  if (provider === "spotify") return <Music2 className="h-5 w-5" />;
+  if (provider === "youtube") return <Youtube className="h-5 w-5" />;
+  if (provider === "twitch") return <Radio className="h-5 w-5" />;
+  if (provider === "github") return <Github className="h-5 w-5" />;
+  return <Gamepad2 className="h-5 w-5" />;
+}
+
 export function ConnectionsSection() {
   const utils = trpc.useUtils();
-  const roblox = trpc.integrations.roblox.useQuery();
+  const providers = trpc.integrations.providers.useQuery();
+  const refetchProviders = providers.refetch;
+  const settings = trpc.integrations.providerSettings.useMutation({
+    onSettled: () => void utils.integrations.providers.invalidate(),
+    onError: error => toast.error(error.message),
+  });
+  const disconnect = trpc.integrations.providerDisconnect.useMutation({
+    onSuccess: async (_, variables) => {
+      toast.success(`${variables.provider} foi desconectado.`);
+      await Promise.all([
+        utils.integrations.providers.invalidate(),
+        utils.integrations.userPresence.invalidate(),
+      ]);
+    },
+    onError: error => toast.error(error.message),
+  });
 
-  // Pós-OAuth: backend volta para / com ?roblox=conectado|cancelado|erro|em-uso
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const result = params.get("roblox");
-    if (!result) return;
-    if (result === "conectado") {
-      toast.success("Conta Roblox conectada com sucesso.");
-      void utils.integrations.roblox.invalidate();
-    } else if (result === "cancelado") {
-      toast("Conexão com Roblox cancelada.");
-    } else if (result === "em-uso") {
-      toast.error(
-        "Esta conta Roblox já está conectada a outra conta Nexora."
-      );
-    } else {
-      toast.error("Não foi possível conectar sua conta Roblox.");
-    }
-    params.delete("roblox");
-    const qs = params.toString();
+    const provider = params.get("integration");
+    const status = params.get("status");
+    if (!provider || !status) return;
+    if (status === "connected")
+      toast.success(`${provider} conectado com sucesso.`);
+    else if (status === "cancelled") toast.info("Conexão cancelada.");
+    else if (status === "already_linked")
+      toast.error("Essa conta já está ligada a outro usuário Nexora.");
+    else if (status === "invalid_state")
+      toast.error("A autorização expirou. Tente conectar novamente.");
+    else toast.error(`Não foi possível conectar ${provider}.`);
+    params.delete("integration");
+    params.delete("status");
+    const query = params.toString();
     window.history.replaceState(
-      null,
+      {},
       "",
-      window.location.pathname + (qs ? `?${qs}` : "")
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
     );
-  }, [utils]);
+    void refetchProviders();
+  }, [refetchProviders]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
-        <h2 className="text-xl font-bold text-white">Conexões</h2>
-        <p className="text-xs text-muted2 mt-1">
-          Conecte suas contas para exibir no perfil da Nexora.
+        <div className="flex items-center gap-2">
+          <h2 className="text-xl font-bold text-white">Conexões</h2>
+          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+        </div>
+        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted2">
+          Vincule serviços oficiais ao seu perfil. Tokens ficam criptografados
+          no servidor e cada atividade respeita sua privacidade, bloqueios e
+          modo invisível.
         </p>
       </div>
-      {roblox.isLoading ? <ConnectionSkeleton /> : <RobloxCard />}
-    </div>
-  );
-}
 
-function ConnectionSkeleton() {
-  return (
-    <div className="flex items-start gap-4 rounded-xl border border-white/10 bg-sidebar p-5">
-      <Skeleton className="h-12 w-12 shrink-0 rounded-xl bg-white/[0.06]" />
-      <div className="flex-1 space-y-2 py-1">
-        <Skeleton className="h-4 w-28 bg-white/[0.06]" />
-        <Skeleton className="h-3 w-64 bg-white/[0.06]" />
-      </div>
-    </div>
-  );
-}
-
-function RobloxCard() {
-  const utils = trpc.useUtils();
-  const roblox = trpc.integrations.roblox.useQuery();
-  const data = roblox.data;
-
-  const setSetting = trpc.integrations.robloxSettings.useMutation({
-    onSettled: () => void utils.integrations.roblox.invalidate(),
-    onError: e => toast.error(e.message),
-  });
-  const disconnect = trpc.integrations.robloxDisconnect.useMutation({
-    onSuccess: async () => {
-      toast.success("Conta Roblox desconectada.");
-      await utils.integrations.userActivity.invalidate();
-      await utils.integrations.roblox.invalidate();
-    },
-    onError: e => toast.error(e.message),
-  });
-
-  if (!data) return null;
-
-  if (!data.connected) {
-    return (
-      <div className="flex items-start gap-4 rounded-xl border border-white/10 bg-sidebar p-5 transition-[color,background-color,border-color,box-shadow] hover:border-white/20">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-muted2">
-          <Gamepad2 className="h-6 w-6" aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-bold tracking-wide text-white">ROBLOX</p>
-            {!data.configured && (
-              <Badge
-                variant="outline"
-                className="border-amber-400/30 bg-amber-400/10 text-[10px] font-semibold uppercase tracking-wide text-amber-400"
-              >
-                Indisponível no momento
-              </Badge>
-            )}
-          </div>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted2">
-            Conecte sua conta Roblox para mostrar sua atividade na Nexora.
-          </p>
-          <Button
-            size="sm"
-            disabled={!data.configured}
-            onClick={() => {
-              window.location.href = CONNECT_URL;
-            }}
-            className="mt-3 h-9 rounded-lg bg-[#5865F2] px-4 text-xs font-semibold text-white hover:bg-[#4752C4]"
-          >
-            Conectar
-          </Button>
+      {providers.isLoading && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {[0, 1, 2, 3].map(item => (
+            <div
+              key={item}
+              className="h-44 animate-pulse rounded-2xl bg-white/5"
+            />
+          ))}
         </div>
-      </div>
-    );
-  }
+      )}
 
-  return (
-    <ConnectedCard
-      username={data.username ?? "roblox"}
-      displayName={data.displayName}
-      avatarUrl={data.avatarUrl}
-      profileUrl={data.profileUrl}
-      needsReauth={!!data.needsReauth}
-      settings={data.settings}
-      pendingDisconnect={disconnect.isPending}
-      onToggle={patch => setSetting.mutate(patch)}
-      onDisconnect={() => disconnect.mutate()}
-    />
-  );
-}
-
-function ConnectedCard({
-  username,
-  displayName,
-  avatarUrl,
-  profileUrl,
-  needsReauth,
-  settings,
-  pendingDisconnect,
-  onToggle,
-  onDisconnect,
-}: {
-  username: string;
-  displayName: string | null;
-  avatarUrl: string | null;
-  profileUrl: string | null;
-  needsReauth: boolean;
-  settings: RobloxSettings;
-  pendingDisconnect: boolean;
-  onToggle: (patch: Partial<RobloxSettings>) => void;
-  onDisconnect: () => void;
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-sidebar p-5 transition-[color,background-color,border-color,box-shadow] hover:border-white/20">
-        <div className="flex items-start gap-4">
-          {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt={`Avatar Roblox de ${displayName ?? username}`}
-              loading="lazy"
-              className="h-12 w-12 shrink-0 rounded-xl object-cover"
-            />
-          ) : (
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-muted2">
-              <Gamepad2 className="h-6 w-6" aria-hidden />
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold text-white">
-              {displayName ?? username}
-            </p>
-            <p className="truncate text-xs text-muted2">@{username}</p>
-            {needsReauth ? (
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400">
-                  Reconecte sua conta Roblox.
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.href = CONNECT_URL;
-                  }}
-                  className="text-[11px] font-bold text-[#7383FF] underline-offset-2 hover:underline"
-                >
-                  Reconectar agora
-                </button>
-              </div>
-            ) : (
-              <p className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
-                ✓ Conta conectada
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Visibilidade da atividade */}
-        <div className="mt-5 border-t border-white/5 pt-4">
-          <h3 className="text-[11px] font-bold uppercase tracking-wider text-faint">
-            Visibilidade da atividade
-          </h3>
-          <div className="mt-3 space-y-3">
-            <SettingRow
-              label="Mostrar no perfil"
-              description="Exibe a conexão Roblox no seu perfil da Nexora."
-              checked={settings.showOnProfile}
-              onCheckedChange={v => onToggle({ showOnProfile: v })}
-            />
-            <SettingRow
-              label="Mostrar atividade"
-              description="Mostra o jogo em que você está jogando agora."
-              checked={settings.showActivity}
-              onCheckedChange={v => onToggle({ showActivity: v })}
-            />
-            <SettingRow
-              label="Permitir que amigos entrem no servidor"
-              description="Amigos podem acompanhar sua partida pelo seu perfil."
-              checked={settings.allowJoin}
-              onCheckedChange={v => onToggle({ allowJoin: v })}
-            />
-          </div>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2 border-t border-white/5 pt-4">
-          <Button asChild variant="secondary" size="sm" disabled={!profileUrl}>
-            <a
-              href={profileUrl ?? "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5"
+      <div className="grid gap-3 lg:grid-cols-2">
+        {providers.data?.map(provider => {
+          const id = provider.id as ProviderId;
+          return (
+            <article
+              key={id}
+              className="rounded-2xl border border-white/10 bg-sidebar p-4 shadow-sm transition-colors hover:border-white/20"
             >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Ver perfil
-            </a>
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={pendingDisconnect}
-                className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
-              >
-                {pendingDisconnect ? "Desconectando..." : "Desconectar"}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="bg-panel border-white/10 sm:max-w-sm">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-base text-white">
-                  Desconectar sua conta Roblox da Nexora?
-                </AlertDialogTitle>
-                <AlertDialogDescription className="text-xs leading-relaxed text-muted2">
-                  Sua atividade deixará de aparecer para outros usuários.
-                  Você pode reconectar a qualquer momento.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="h-9 border-white/10 bg-transparent text-xs font-semibold text-white hover:bg-white/5">
-                  Cancelar
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={onDisconnect}
-                  className="h-9 bg-red-500 text-xs font-semibold text-white hover:bg-red-600"
+              <div className="flex items-start gap-3">
+                {provider.account?.avatarUrl ? (
+                  <img
+                    src={provider.account.avatarUrl}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    className="h-11 w-11 shrink-0 rounded-xl object-cover"
+                  />
+                ) : (
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-white/80">
+                    <ProviderIcon provider={id} />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-black text-white">
+                      {provider.label}
+                    </h3>
+                    {provider.connected && (
+                      <Badge className="border-0 bg-emerald-400/10 text-[10px] text-emerald-300 hover:bg-emerald-400/10">
+                        Conectado
+                      </Badge>
+                    )}
+                    {!provider.configured && (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-400/30 bg-amber-400/10 text-[10px] text-amber-300"
+                      >
+                        Indisponível
+                      </Badge>
+                    )}
+                  </div>
+                  {provider.connected ? (
+                    <p className="mt-0.5 truncate text-xs text-white/55">
+                      @
+                      {provider.account?.username ??
+                        provider.account?.displayName ??
+                        "conta"}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs leading-relaxed text-white/55">
+                      {DESCRIPTIONS[id]}
+                    </p>
+                  )}
+                </div>
+                {provider.account?.profileUrl && (
+                  <a
+                    href={provider.account.profileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Abrir perfil ${provider.label}`}
+                    className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                )}
+              </div>
+
+              {!provider.connected ? (
+                <Button
+                  size="sm"
+                  disabled={!provider.configured || !provider.enabled}
+                  onClick={() => {
+                    window.location.href = apiUrl(
+                      `/api/integrations/${id}/connect`
+                    );
+                  }}
+                  className="mt-4 h-9 w-full bg-[#5865F2] text-xs hover:bg-[#4752C4]"
                 >
-                  Desconectar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+                  Conectar {provider.label}
+                </Button>
+              ) : (
+                <div className="mt-4 space-y-3 border-t border-white/[0.08] pt-4">
+                  {provider.account?.needsReauth && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = apiUrl(
+                          `/api/integrations/${id}/connect`
+                        );
+                      }}
+                      className="w-full rounded-lg bg-amber-400/10 px-3 py-2 text-left text-xs font-bold text-amber-300 hover:bg-amber-400/15"
+                    >
+                      A conexão expirou — reconectar agora
+                    </button>
+                  )}
+                  <SettingRow
+                    label="Exibir conexão no perfil"
+                    checked={provider.settings?.showOnProfile ?? true}
+                    onCheckedChange={value =>
+                      settings.mutate({ provider: id, showOnProfile: value })
+                    }
+                  />
+                  {provider.capabilities.livePresence && (
+                    <>
+                      <SettingRow
+                        label="Exibir atividade"
+                        checked={provider.settings?.showActivity ?? true}
+                        onCheckedChange={value =>
+                          settings.mutate({ provider: id, showActivity: value })
+                        }
+                      />
+                      <SettingRow
+                        label="Mostrar detalhes"
+                        checked={provider.settings?.showDetails ?? true}
+                        onCheckedChange={value =>
+                          settings.mutate({ provider: id, showDetails: value })
+                        }
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold text-white/70">
+                          Visibilidade
+                        </span>
+                        <Select
+                          value={
+                            provider.settings?.activityVisibility ?? "everyone"
+                          }
+                          onValueChange={value =>
+                            settings.mutate({
+                              provider: id,
+                              activityVisibility: value as
+                                "everyone" | "friends" | "private",
+                            })
+                          }
+                        >
+                          <SelectTrigger className="h-8 w-36 border-white/10 bg-white/5 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="everyone">Permitidos</SelectItem>
+                            <SelectItem value="friends">Só amigos</SelectItem>
+                            <SelectItem value="private">Somente eu</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={disconnect.isPending}
+                    onClick={() => disconnect.mutate({ provider: id })}
+                    className="h-8 w-full text-xs text-red-300 hover:bg-red-400/10 hover:text-red-200"
+                  >
+                    Desconectar
+                  </Button>
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
+    </div>
   );
 }
 
 function SettingRow({
   label,
-  description,
   checked,
   onCheckedChange,
 }: {
   label: string;
-  description: string;
   checked: boolean;
-  onCheckedChange: (v: boolean) => void;
+  onCheckedChange: (value: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-xs font-semibold text-white">{label}</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-muted2">
-          {description}
-        </p>
-      </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        aria-label={label}
-      />
+    <div className="flex min-h-8 items-center justify-between gap-3">
+      <span className="text-xs font-semibold text-white/70">{label}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   );
 }

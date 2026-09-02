@@ -13,11 +13,12 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { FriendDTO } from "@contracts/types";
+import type { FriendDTO, RichPresenceActivityDTO } from "@contracts/types";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar } from "./Avatar";
-import { RobloxActivityInline } from "./roblox/RobloxActivityCard";
+import { RichPresenceInline } from "./profile/RichPresenceInline";
+import { usePrimaryActivity } from "@/hooks/usePrimaryActivity";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -89,15 +90,30 @@ export function FriendsPanel({
 
   const all = friends.data ?? [];
   const accepted = all.filter(friend => friend.status === "ACCEPTED");
+  const acceptedIds = useMemo(
+    () =>
+      (friends.data ?? [])
+        .filter(friend => friend.status === "ACCEPTED")
+        .map(friend => friend.user.id),
+    [friends.data]
+  );
+  const activitySummaries = trpc.integrations.presenceSummary.useQuery(
+    { userIds: acceptedIds },
+    {
+      enabled: acceptedIds.length > 0,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+    }
+  );
   const online = accepted.filter(
     friend =>
       (presence[friend.user.id] ?? friend.user.status ?? "offline") !==
-      "offline",
+      "offline"
   );
   const pending = all.filter(friend => friend.status === "PENDING");
   const blocked = all.filter(friend => friend.status === "BLOCKED");
   const incomingCount = pending.filter(
-    friend => friend.direction === "incoming",
+    friend => friend.direction === "incoming"
   ).length;
 
   const visibleFriends = useMemo(() => {
@@ -132,7 +148,7 @@ export function FriendsPanel({
   const removeFriend = (friend: FriendDTO) => {
     if (
       window.confirm(
-        `Remover ${friend.user.name ?? friend.user.username} dos seus amigos?`,
+        `Remover ${friend.user.name ?? friend.user.username} dos seus amigos?`
       )
     ) {
       remove.mutate({ userId: friend.user.id });
@@ -141,7 +157,7 @@ export function FriendsPanel({
   const blockFriend = (friend: FriendDTO) => {
     if (
       window.confirm(
-        `Bloquear ${friend.user.name ?? friend.user.username}? Essa pessoa não poderá conversar com você.`,
+        `Bloquear ${friend.user.name ?? friend.user.username}? Essa pessoa não poderá conversar com você.`
       )
     ) {
       block.mutate({ userId: friend.user.id });
@@ -168,7 +184,7 @@ export function FriendsPanel({
                     : "bg-act text-foreground"
                   : item.id === "add"
                     ? "text-primary hover:bg-primary/10"
-                    : "text-muted2 hover:bg-hov hover:text-foreground",
+                    : "text-muted2 hover:bg-hov hover:text-foreground"
               )}
             >
               {item.label}
@@ -213,7 +229,8 @@ export function FriendsPanel({
 
             <div className="mx-auto mt-5 max-w-2xl">
               <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-faint">
-                {tabs.find(item => item.id === tab)?.label} · {visibleFriends.length}
+                {tabs.find(item => item.id === tab)?.label} ·{" "}
+                {visibleFriends.length}
               </p>
 
               {friends.isLoading ? (
@@ -223,7 +240,11 @@ export function FriendsPanel({
                   title="Não foi possível carregar seus amigos"
                   description="Confira a conexão e tente novamente."
                   action={
-                    <Button size="sm" variant="outline" onClick={() => friends.refetch()}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => friends.refetch()}
+                    >
                       Tentar novamente
                     </Button>
                   }
@@ -243,9 +264,14 @@ export function FriendsPanel({
                     <FriendRow
                       key={friend.friendshipId}
                       friend={friend}
+                      initialActivity={
+                        activitySummaries.data?.[friend.user.id] ?? null
+                      }
                       pending={actionPending}
                       onOpenProfile={onOpenProfile}
-                      onMessage={() => openDm.mutate({ userId: friend.user.id })}
+                      onMessage={() =>
+                        openDm.mutate({ userId: friend.user.id })
+                      }
                       onAccept={() =>
                         accept.mutate({ friendshipId: friend.friendshipId })
                       }
@@ -257,14 +283,15 @@ export function FriendsPanel({
                       }
                       onRemove={() => removeFriend(friend)}
                       onBlock={() => blockFriend(friend)}
-                      onUnblock={() => unblock.mutate({ userId: friend.user.id })}
+                      onUnblock={() =>
+                        unblock.mutate({ userId: friend.user.id })
+                      }
                     />
                   ))}
                 </div>
               )}
             </div>
           </section>
-
         </div>
       )}
     </main>
@@ -273,6 +300,7 @@ export function FriendsPanel({
 
 function FriendRow({
   friend,
+  initialActivity,
   pending,
   onOpenProfile,
   onMessage,
@@ -284,6 +312,7 @@ function FriendRow({
   onUnblock,
 }: {
   friend: FriendDTO;
+  initialActivity?: RichPresenceActivityDTO | null;
   pending: boolean;
   onOpenProfile?: (userId: number) => void;
   onMessage: () => void;
@@ -295,6 +324,7 @@ function FriendRow({
   onUnblock: () => void;
 }) {
   const displayName = friend.user.name ?? friend.user.username ?? "Usuário";
+  const activity = usePrimaryActivity(friend.user.id, initialActivity);
   return (
     <article className="group flex min-h-[64px] items-center gap-3 px-2 py-2.5 transition-colors hover:bg-hov/70 sm:px-3">
       <button
@@ -327,8 +357,8 @@ function FriendRow({
               : " · pedido enviado"
             : ""}
         </span>
-        {friend.status === "ACCEPTED" && (
-          <RobloxActivityInline userId={friend.user.id} />
+        {friend.status === "ACCEPTED" && activity && (
+          <RichPresenceInline activity={activity} />
         )}
       </button>
 
@@ -417,7 +447,9 @@ function FriendRow({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="min-w-48">
-              <DropdownMenuItem onSelect={() => onOpenProfile?.(friend.user.id)}>
+              <DropdownMenuItem
+                onSelect={() => onOpenProfile?.(friend.user.id)}
+              >
                 <Users /> Ver perfil
               </DropdownMenuItem>
               {friend.status === "ACCEPTED" && (
@@ -450,7 +482,7 @@ function AddFriend({ onDone }: { onDone: () => void }) {
       toast.success(
         result.status === "ACCEPTED"
           ? "Vocês já são amigos na Nexora."
-          : "Pedido de amizade enviado.",
+          : "Pedido de amizade enviado."
       );
       setUsername("");
       onDone();
@@ -466,7 +498,9 @@ function AddFriend({ onDone }: { onDone: () => void }) {
             <UserPlus className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-foreground">Adicionar amigo</h1>
+            <h1 className="text-lg font-bold text-foreground">
+              Adicionar amigo
+            </h1>
             <p className="mt-1 text-sm leading-relaxed text-muted2">
               Envie um pedido usando o nome de usuário exato da pessoa.
             </p>
@@ -480,7 +514,10 @@ function AddFriend({ onDone }: { onDone: () => void }) {
             if (value) sendRequest.mutate({ username: value });
           }}
         >
-          <label htmlFor={inputId} className="text-xs font-semibold text-foreground">
+          <label
+            htmlFor={inputId}
+            className="text-xs font-semibold text-foreground"
+          >
             Nome de usuário
           </label>
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -510,9 +547,15 @@ function AddFriend({ onDone }: { onDone: () => void }) {
 
 function FriendListSkeleton() {
   return (
-    <div className="divide-y divide-border/70 border-t border-border/70" aria-label="Carregando amigos">
+    <div
+      className="divide-y divide-border/70 border-t border-border/70"
+      aria-label="Carregando amigos"
+    >
       {Array.from({ length: 5 }).map((_, index) => (
-        <div key={index} className="flex min-h-[64px] items-center gap-3 px-3 py-2.5">
+        <div
+          key={index}
+          className="flex min-h-[64px] items-center gap-3 px-3 py-2.5"
+        >
           <div className="h-10 w-10 animate-pulse rounded-full bg-act" />
           <div className="flex-1 space-y-2">
             <div className="h-3 w-32 animate-pulse rounded bg-act" />
@@ -540,7 +583,9 @@ function EmptyFriends({
         <Users className="h-6 w-6" />
       </div>
       <h2 className="mt-4 text-sm font-semibold text-foreground">{title}</h2>
-      <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted2">{description}</p>
+      <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted2">
+        {description}
+      </p>
       {action && <div className="mt-4">{action}</div>}
     </div>
   );

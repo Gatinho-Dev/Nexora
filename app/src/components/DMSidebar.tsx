@@ -1,7 +1,17 @@
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useMemo, useState } from "react";
-import { BadgeCheck, Inbox, Plus, Search, ShieldCheck, Users } from "lucide-react";
-import type { ConversationDTO } from "@contracts/types";
+import {
+  BadgeCheck,
+  Inbox,
+  Plus,
+  Search,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+import type {
+  ConversationDTO,
+  RichPresenceActivityDTO,
+} from "@contracts/types";
 import { trpc } from "@/providers/trpc";
 import { UserPanel } from "./UserPanel";
 import { cn } from "@/lib/utils";
@@ -20,9 +30,7 @@ export function DMSidebar({
   const location = useLocation();
   const params = useParams();
   const [newMessageOpen, setNewMessageOpen] = useState(false);
-  const setQuickSwitcherOpen = useAppStore(
-    state => state.setQuickSwitcherOpen,
-  );
+  const setQuickSwitcherOpen = useAppStore(state => state.setQuickSwitcherOpen);
   const activeConversationId = params.conversationId
     ? Number(params.conversationId)
     : null;
@@ -41,12 +49,32 @@ export function DMSidebar({
       new Set(
         (friends.data ?? [])
           .filter(friend => friend.status === "ACCEPTED")
-          .map(friend => friend.user.id),
+          .map(friend => friend.user.id)
       ),
-    [friends.data],
+    [friends.data]
   );
   const { pinned, recent, requests, spam } = organizePrivateInbox(
-    conversations.data ?? [],
+    conversations.data ?? []
+  );
+  const directUserIds = useMemo(
+    () => [
+      ...new Set(
+        (conversations.data ?? [])
+          .filter(conversation => !conversation.isGroup)
+          .flatMap(conversation =>
+            conversation.otherUser ? [conversation.otherUser.id] : []
+          )
+      ),
+    ],
+    [conversations.data]
+  );
+  const activitySummaries = trpc.integrations.presenceSummary.useQuery(
+    { userIds: directUserIds },
+    {
+      enabled: directUserIds.length > 0,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+    }
   );
   const directMessageCount = pinned.length + recent.length;
   const officialActive = location.pathname === "/channels/@me/official";
@@ -97,7 +125,7 @@ export function DMSidebar({
             "group flex min-h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors",
             officialActive
               ? "bg-act text-foreground"
-              : "text-muted2 hover:bg-hov hover:text-bodyx",
+              : "text-muted2 hover:bg-hov hover:text-bodyx"
           )}
         >
           <span className="relative shrink-0">
@@ -107,8 +135,12 @@ export function DMSidebar({
             </span>
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold">Nexora Oficial</span>
-            <span className="block truncate text-[10px] text-faint">Comunicados da plataforma</span>
+            <span className="block truncate text-[13px] font-semibold">
+              Nexora Oficial
+            </span>
+            <span className="block truncate text-[10px] text-faint">
+              Comunicados da plataforma
+            </span>
           </span>
           {(officialUnread.data?.count ?? 0) > 0 && (
             <CountBadge count={officialUnread.data?.count ?? 0} />
@@ -126,7 +158,9 @@ export function DMSidebar({
 
       <div className="flex min-h-0 flex-1 flex-col border-t border-white/5">
         <div className="flex h-9 shrink-0 items-center justify-between px-3.5 pt-1">
-          <span className="text-[11px] font-semibold text-faint">Mensagens diretas</span>
+          <span className="text-[11px] font-semibold text-faint">
+            Mensagens diretas
+          </span>
           <button
             type="button"
             onClick={() => setNewMessageOpen(true)}
@@ -138,12 +172,17 @@ export function DMSidebar({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2" aria-label="Lista de mensagens diretas">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2"
+          aria-label="Lista de mensagens diretas"
+        >
           {conversations.isLoading && !conversations.data ? (
             <DMSidebarSkeleton />
           ) : conversations.isError ? (
             <div className="mx-2 mt-4 rounded-xl border border-border px-3 py-5 text-center">
-              <p className="text-xs font-semibold text-bodyx">Falha ao carregar conversas</p>
+              <p className="text-xs font-semibold text-bodyx">
+                Falha ao carregar conversas
+              </p>
               <button
                 type="button"
                 onClick={() => conversations.refetch()}
@@ -154,8 +193,12 @@ export function DMSidebar({
             </div>
           ) : directMessageCount === 0 ? (
             <div className="mx-2 mt-4 rounded-xl border border-dashed border-border px-3 py-5 text-center">
-              <p className="text-xs font-semibold text-bodyx">Nenhuma conversa ainda</p>
-              <p className="mt-1 text-[11px] leading-4 text-muted2">Inicie uma DM ou crie um grupo com seus amigos.</p>
+              <p className="text-xs font-semibold text-bodyx">
+                Nenhuma conversa ainda
+              </p>
+              <p className="mt-1 text-[11px] leading-4 text-muted2">
+                Inicie uma DM ou crie um grupo com seus amigos.
+              </p>
               <button
                 type="button"
                 onClick={() => setNewMessageOpen(true)}
@@ -172,6 +215,7 @@ export function DMSidebar({
                   items={pinned}
                   activeConversationId={activeConversationId}
                   acceptedFriendIds={acceptedFriendIds}
+                  activitySummaries={activitySummaries.data}
                   onOpenProfile={onOpenProfile}
                 />
               )}
@@ -180,6 +224,7 @@ export function DMSidebar({
                 items={recent}
                 activeConversationId={activeConversationId}
                 acceptedFriendIds={acceptedFriendIds}
+                activitySummaries={activitySummaries.data}
                 onOpenProfile={onOpenProfile}
               />
             </>
@@ -188,7 +233,10 @@ export function DMSidebar({
       </div>
 
       <UserPanel />
-      <NewMessageDialog open={newMessageOpen} onOpenChange={setNewMessageOpen} />
+      <NewMessageDialog
+        open={newMessageOpen}
+        onOpenChange={setNewMessageOpen}
+      />
     </aside>
   );
 }
@@ -198,25 +246,39 @@ function ConversationGroup({
   items,
   activeConversationId,
   acceptedFriendIds,
+  activitySummaries,
   onOpenProfile,
 }: {
   label?: string;
   items: ConversationDTO[];
   activeConversationId: number | null;
   acceptedFriendIds: Set<number>;
+  activitySummaries?: Record<number, RichPresenceActivityDTO | null>;
   onOpenProfile?: (userId: number) => void;
 }) {
   if (items.length === 0) return null;
   return (
     <section aria-label={label ?? "Conversas"} className="mb-1">
-      {label && <p className="px-3 pb-1 pt-2 text-[10px] font-semibold text-faint">{label}</p>}
+      {label && (
+        <p className="px-3 pb-1 pt-2 text-[10px] font-semibold text-faint">
+          {label}
+        </p>
+      )}
       <div className="space-y-0.5">
         {items.map(conversation => (
           <DMListItem
             key={conversation.id}
             conversation={conversation}
             active={activeConversationId === conversation.id}
-            isFriend={!!conversation.otherUser && acceptedFriendIds.has(conversation.otherUser.id)}
+            isFriend={
+              !!conversation.otherUser &&
+              acceptedFriendIds.has(conversation.otherUser.id)
+            }
+            initialActivity={
+              conversation.otherUser
+                ? activitySummaries?.[conversation.otherUser.id]
+                : null
+            }
             onOpenProfile={onOpenProfile}
           />
         ))}
@@ -247,7 +309,7 @@ function PrivateNavItem({
         "flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-semibold transition-colors [&_svg]:h-4 [&_svg]:w-4",
         active
           ? "bg-act text-foreground"
-          : "text-muted2 hover:bg-hov hover:text-bodyx",
+          : "text-muted2 hover:bg-hov hover:text-bodyx"
       )}
     >
       {icon}
@@ -269,7 +331,10 @@ function DMSidebarSkeleton() {
   return (
     <div className="space-y-1 px-1 py-1" aria-label="Carregando conversas">
       {[1, 2, 3, 4, 5, 6].map(item => (
-        <div key={item} className="flex animate-pulse items-center gap-2.5 rounded-lg px-2 py-1.5">
+        <div
+          key={item}
+          className="flex animate-pulse items-center gap-2.5 rounded-lg px-2 py-1.5"
+        >
           <div className="h-8 w-8 rounded-full bg-white/[0.07]" />
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="h-2.5 w-2/3 rounded bg-white/[0.07]" />

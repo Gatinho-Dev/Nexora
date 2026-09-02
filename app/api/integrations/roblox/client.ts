@@ -29,7 +29,11 @@ const HOSTS = new Set([
 export class RobloxApiError extends Error {
   status: number;
   retryAfterMs: number | null;
-  constructor(status: number, message: string, retryAfterMs: number | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    retryAfterMs: number | null = null
+  ) {
     super(message);
     this.status = status;
     this.retryAfterMs = retryAfterMs;
@@ -51,7 +55,11 @@ async function robloxFetch(url: string, init?: RequestInit): Promise<Response> {
     });
     if (res.status === 429) {
       const ra = Number(res.headers.get("retry-after") ?? "") || null;
-      throw new RobloxApiError(429, "Rate limit do Roblox.", ra ? ra * 1000 : null);
+      throw new RobloxApiError(
+        429,
+        "Rate limit do Roblox.",
+        ra ? ra * 1000 : null
+      );
     }
     return res;
   } catch (e) {
@@ -90,15 +98,21 @@ export function buildAuthorizeUrl(input: {
     nonce: input.nonce,
     code_challenge: challenge,
     code_challenge_method: "S256",
-    prompt: "consent",
+    prompt: "select_account",
   });
+  const url = new URL("https://apis.roblox.com/oauth/v1/authorize");
+  url.search = params.toString();
   return {
-    url: `https://apis.roblox.com/oauth/v1/authorize?${params}`,
+    url: url.toString(),
     challenge,
   };
 }
 
-export function generatePkcePair(): { verifier: string; nonce: string; state: string } {
+export function generatePkcePair(): {
+  verifier: string;
+  nonce: string;
+  state: string;
+} {
   return {
     verifier: randomBytes(32).toString("base64url"),
     nonce: randomBytes(16).toString("base64url"),
@@ -134,10 +148,7 @@ async function tokenRequest(body: URLSearchParams) {
   return parsed.data;
 }
 
-export function exchangeCode(input: {
-  code: string;
-  codeVerifier: string;
-}) {
+export function exchangeCode(input: { code: string; codeVerifier: string }) {
   return tokenRequest(
     new URLSearchParams({
       grant_type: "authorization_code",
@@ -164,19 +175,16 @@ export function refreshTokens(refreshToken: string) {
 /** Best-effort — falha de revoke não bloqueia desconexão local. */
 export async function revokeToken(token: string): Promise<boolean> {
   try {
-    const res = await robloxFetch(
-      "https://apis.roblox.com/oauth/v2/revoke",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Basic ${Buffer.from(
-            `${env.robloxClientId}:${env.robloxClientSecret}`
-          ).toString("base64")}`,
-        },
-        body: new URLSearchParams({ token }).toString(),
-      }
-    );
+    const res = await robloxFetch("https://apis.roblox.com/oauth/v2/revoke", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${Buffer.from(
+          `${env.robloxClientId}:${env.robloxClientSecret}`
+        ).toString("base64")}`,
+      },
+      body: new URLSearchParams({ token }).toString(),
+    });
     return res.ok;
   } catch {
     return false;
@@ -195,13 +203,16 @@ export const RobloxUserInfo = z.object({
 });
 export type RobloxUserInfoT = z.infer<typeof RobloxUserInfo>;
 
-export async function fetchUserInfo(accessToken: string): Promise<RobloxUserInfoT> {
+export async function fetchUserInfo(
+  accessToken: string
+): Promise<RobloxUserInfoT> {
   const res = await robloxFetch("https://apis.roblox.com/oauth/v1/userinfo", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new RobloxApiError(res.status, "Userinfo falhou.");
   const parsed = RobloxUserInfo.safeParse(await res.json().catch(() => null));
-  if (!parsed.success) throw new RobloxApiError(res.status || 500, "Userinfo inválida.");
+  if (!parsed.success)
+    throw new RobloxApiError(res.status || 500, "Userinfo inválida.");
   return parsed.data;
 }
 
@@ -249,17 +260,23 @@ const PresenceResponse = z.object({
 export async function fetchPresenceBatch(
   robloxUserIds: number[]
 ): Promise<RobloxPresenceEntry[]> {
-  const res = await robloxFetch("https://presence.roblox.com/v1/presence/users", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userIds: robloxUserIds.slice(0, 100) }),
-  });
+  const res = await robloxFetch(
+    "https://presence.roblox.com/v1/presence/users",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIds: robloxUserIds.slice(0, 100) }),
+    }
+  );
   if (!res.ok) {
     throw new RobloxApiError(res.status, `Presence falhou (${res.status}).`);
   }
   const parsed = PresenceResponse.safeParse(await res.json().catch(() => null));
   if (!parsed.success) {
-    throw new RobloxApiError(res.status || 500, "Resposta de presence inválida.");
+    throw new RobloxApiError(
+      res.status || 500,
+      "Resposta de presence inválida."
+    );
   }
   return parsed.data.userPresences.map(p => ({
     robloxUserId: String(p.userId),
@@ -283,7 +300,9 @@ export const GameMetadata = z.object({
         id: z.number(),
         rootPlaceId: z.number().nullable().optional(),
         name: z.string().nullable().optional(),
-        creator: z.object({ name: z.string().nullable().optional() }).optional(),
+        creator: z
+          .object({ name: z.string().nullable().optional() })
+          .optional(),
       })
     )
     .min(1),
@@ -333,7 +352,9 @@ export async function fetchUniverseCloudV2(universeId: number): Promise<{
   }
 }
 
-export async function fetchGameThumbnail(universeId: number): Promise<string | null> {
+export async function fetchGameThumbnail(
+  universeId: number
+): Promise<string | null> {
   const res = await robloxFetch(
     `https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds=${universeId}&size=768x432&format=Png&isCircular=false`
   );

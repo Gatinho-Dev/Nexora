@@ -120,6 +120,9 @@ export function useRealtime(myUserId: number | undefined) {
         case "activity:update":
           store.setRobloxActivity(event.userId, event.activity);
           break;
+        case "rich-presence:update":
+          store.setRichPresence(event.userId, event.activities);
+          break;
         case "voice:participants": {
           const roomKey = event.channelId
             ? `c:${event.channelId}`

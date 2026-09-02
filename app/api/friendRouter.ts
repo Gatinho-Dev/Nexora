@@ -15,14 +15,28 @@ async function friendshipBetween(a: number, b: number) {
   const db = getDb();
   return db.query.friendships.findFirst({
     where: or(
-      and(eq(schema.friendships.requesterId, a), eq(schema.friendships.addresseeId, b)),
-      and(eq(schema.friendships.requesterId, b), eq(schema.friendships.addresseeId, a)),
+      and(
+        eq(schema.friendships.requesterId, a),
+        eq(schema.friendships.addresseeId, b)
+      ),
+      and(
+        eq(schema.friendships.requesterId, b),
+        eq(schema.friendships.addresseeId, a)
+      )
     ),
   });
 }
 
 function refreshFriends(...userIds: number[]) {
   sendToUsers(userIds, { t: "friends:refresh" });
+}
+
+function refreshRichPresence(...userIds: number[]) {
+  void import("./integrations/presenceService")
+    .then(async ({ rebroadcastActivities }) => {
+      await Promise.all(userIds.map(userId => rebroadcastActivities(userId)));
+    })
+    .catch(() => {});
 }
 
 export const friendRouter = createRouter({
@@ -40,28 +54,47 @@ export const friendRouter = createRouter({
     .input(z.object({ username: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       await assertCanInteract(ctx.user.id);
-      rateLimit(`friendRequest:${ctx.user.id}`, RateLimits.friendRequest.limit, RateLimits.friendRequest.windowMs);
+      rateLimit(
+        `friendRequest:${ctx.user.id}`,
+        RateLimits.friendRequest.limit,
+        RateLimits.friendRequest.windowMs
+      );
       const db = getDb();
       const target = await db.query.users.findFirst({
         where: eq(schema.users.username, input.username),
       });
       if (!target) {
-        throw new TRPCError({ code: "NOT_FOUND", message: `Nenhum usuário encontrado com o nome "${input.username}".` });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Nenhum usuário encontrado com o nome "${input.username}".`,
+        });
       }
       if (target.id === ctx.user.id) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode adicionar a si mesmo." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Você não pode adicionar a si mesmo.",
+        });
       }
 
       const existing = await friendshipBetween(ctx.user.id, target.id);
       if (existing) {
         if (existing.status === "ACCEPTED") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Vocês já são amigos." });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Vocês já são amigos.",
+          });
         }
         if (existing.status === "BLOCKED") {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Não foi possível enviar o pedido de amizade." });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Não foi possível enviar o pedido de amizade.",
+          });
         }
         if (existing.requesterId === ctx.user.id) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Você já enviou um pedido para este usuário." });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Você já enviou um pedido para este usuário.",
+          });
         }
         // The other user already requested → auto-accept.
         await db
@@ -69,6 +102,7 @@ export const friendRouter = createRouter({
           .set({ status: "ACCEPTED" })
           .where(eq(schema.friendships.id, existing.id));
         refreshFriends(ctx.user.id, target.id);
+        refreshRichPresence(ctx.user.id, target.id);
         return { status: "ACCEPTED" as const };
       }
 
@@ -120,13 +154,17 @@ export const friendRouter = createRouter({
         where: eq(schema.friendships.id, input.friendshipId),
       });
       if (!friendship || friendship.addresseeId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de amizade não encontrado." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Pedido de amizade não encontrado.",
+        });
       }
       await db
         .update(schema.friendships)
         .set({ status: "ACCEPTED" })
         .where(eq(schema.friendships.id, friendship.id));
       refreshFriends(ctx.user.id, friendship.requesterId);
+      refreshRichPresence(ctx.user.id, friendship.requesterId);
       return { ok: true };
     }),
 
@@ -138,9 +176,14 @@ export const friendRouter = createRouter({
         where: eq(schema.friendships.id, input.friendshipId),
       });
       if (!friendship || friendship.addresseeId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de amizade não encontrado." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Pedido de amizade não encontrado.",
+        });
       }
-      await db.delete(schema.friendships).where(eq(schema.friendships.id, friendship.id));
+      await db
+        .delete(schema.friendships)
+        .where(eq(schema.friendships.id, friendship.id));
       refreshFriends(ctx.user.id, friendship.requesterId);
       return { ok: true };
     }),
@@ -153,9 +196,14 @@ export const friendRouter = createRouter({
         where: eq(schema.friendships.id, input.friendshipId),
       });
       if (!friendship || friendship.requesterId !== ctx.user.id) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Pedido de amizade não encontrado." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Pedido de amizade não encontrado.",
+        });
       }
-      await db.delete(schema.friendships).where(eq(schema.friendships.id, friendship.id));
+      await db
+        .delete(schema.friendships)
+        .where(eq(schema.friendships.id, friendship.id));
       refreshFriends(ctx.user.id, friendship.addresseeId);
       return { ok: true };
     }),
@@ -166,9 +214,12 @@ export const friendRouter = createRouter({
       const db = getDb();
       const friendship = await friendshipBetween(ctx.user.id, input.userId);
       if (friendship) {
-        await db.delete(schema.friendships).where(eq(schema.friendships.id, friendship.id));
+        await db
+          .delete(schema.friendships)
+          .where(eq(schema.friendships.id, friendship.id));
       }
       refreshFriends(ctx.user.id, input.userId);
+      refreshRichPresence(ctx.user.id, input.userId);
       return { ok: true };
     }),
 
@@ -180,7 +231,11 @@ export const friendRouter = createRouter({
       if (existing) {
         await db
           .update(schema.friendships)
-          .set({ status: "BLOCKED", requesterId: ctx.user.id, addresseeId: input.userId })
+          .set({
+            status: "BLOCKED",
+            requesterId: ctx.user.id,
+            addresseeId: input.userId,
+          })
           .where(eq(schema.friendships.id, existing.id));
       } else {
         await db.insert(schema.friendships).values({
@@ -190,6 +245,7 @@ export const friendRouter = createRouter({
         });
       }
       refreshFriends(ctx.user.id, input.userId);
+      refreshRichPresence(ctx.user.id, input.userId);
       return { ok: true };
     }),
 
@@ -203,10 +259,11 @@ export const friendRouter = createRouter({
           and(
             eq(schema.friendships.requesterId, ctx.user.id),
             eq(schema.friendships.addresseeId, input.userId),
-            eq(schema.friendships.status, "BLOCKED"),
-          ),
+            eq(schema.friendships.status, "BLOCKED")
+          )
         );
       refreshFriends(ctx.user.id, input.userId);
+      refreshRichPresence(ctx.user.id, input.userId);
       return { ok: true };
     }),
 
@@ -218,13 +275,14 @@ export const friendRouter = createRouter({
       .where(
         or(
           eq(schema.friendships.requesterId, ctx.user.id),
-          eq(schema.friendships.addresseeId, ctx.user.id),
-        ),
+          eq(schema.friendships.addresseeId, ctx.user.id)
+        )
       );
 
     const result: FriendDTO[] = [];
     for (const f of rows) {
-      const otherId = f.requesterId === ctx.user.id ? f.addresseeId : f.requesterId;
+      const otherId =
+        f.requesterId === ctx.user.id ? f.addresseeId : f.requesterId;
       const user = await db.query.users.findFirst({
         where: eq(schema.users.id, otherId),
       });

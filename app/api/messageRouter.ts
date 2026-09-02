@@ -43,7 +43,22 @@ function removedUser(): PublicUser {
     avatar: null,
     banner: null,
     bio: null,
+    customStatus: null,
+    profileTheme: "cobalt",
+    profileAccent: "#7383FF",
+    nameFont: "sans",
+    nameEffect: "solid",
+    nameColorA: "#F4F7FB",
+    nameColorB: "#7383FF",
+    avatarDecoration: "none",
+    profileEffect: "none",
+    profileGames: [],
+    profileWishlist: [],
+    profileWidgets: ["games", "favorite"],
+    favoriteGameId: null,
+    favoriteGameNote: null,
     status: "offline",
+    createdAt: new Date(0),
   };
 }
 

@@ -11,6 +11,7 @@ import {
   RobloxApiError,
   type RobloxPresenceEntry,
 } from "./client";
+import { clearActivity, persistActivity } from "../presenceService";
 
 /**
  * RobloxPresenceWorker — polling adaptativo em lote.
@@ -47,8 +48,6 @@ export function robloxWorkerStatus() {
     ...robloxMetrics,
   };
 }
-
-type ActivityRow = typeof schema.robloxActivity.$inferSelect;
 
 /** Audiência: amigos + co-membros de servidores (contactIds já faz isso). */
 function broadcastActivity(
@@ -114,7 +113,9 @@ async function applyPresence(entry: RobloxPresenceEntry): Promise<void> {
     previous?.status === entry.status;
   if (
     sameGame ||
-    (entry.status === "OFFLINE" && !previous?.name && previous?.status === "OFFLINE")
+    (entry.status === "OFFLINE" &&
+      !previous?.name &&
+      previous?.status === "OFFLINE")
   ) {
     return;
   }
@@ -128,13 +129,13 @@ async function applyPresence(entry: RobloxPresenceEntry): Promise<void> {
   const inGame = entry.status === "IN_GAME" && entry.universeId != null;
   if (inGame && entry.universeId != null) {
     // Nome: Open Cloud (opcional) → metadados → lastLocation do presence.
-    const cloud = await fetchUniverseCloudV2(entry.universeId).catch(() => null);
-    const gameMeta = await fetchGameMetadata(entry.universeId).catch(() => null);
-    name =
-      cloud?.displayName ??
-      gameMeta?.name ??
-      entry.lastLocation ??
-      null;
+    const cloud = await fetchUniverseCloudV2(entry.universeId).catch(
+      () => null
+    );
+    const gameMeta = await fetchGameMetadata(entry.universeId).catch(
+      () => null
+    );
+    name = cloud?.displayName ?? gameMeta?.name ?? entry.lastLocation ?? null;
     creatorName = gameMeta?.creatorName ?? null;
     playUrl =
       entry.placeId != null
@@ -146,7 +147,9 @@ async function applyPresence(entry: RobloxPresenceEntry): Promise<void> {
         ? new Date(previous.startedAt)
         : new Date();
     if (name) {
-      const thumb = await fetchGameThumbnail(entry.universeId).catch(() => null);
+      const thumb = await fetchGameThumbnail(entry.universeId).catch(
+        () => null
+      );
       thumbnailUrl = thumb ?? previous?.thumbnailUrl ?? null;
     }
   }
@@ -169,11 +172,31 @@ async function applyPresence(entry: RobloxPresenceEntry): Promise<void> {
     .values(values)
     .onDuplicateKeyUpdate({ set: values });
 
+  if (inGame && name) {
+    await persistActivity(conn.userId, {
+      provider: "roblox",
+      type: "gaming",
+      title: name,
+      details: "Jogando Roblox",
+      state: creatorName,
+      largeImageUrl: thumbnailUrl,
+      largeImageText: name,
+      startedAt,
+      externalUrl: playUrl,
+      ttlMs: 3 * 60_000,
+    });
+  } else {
+    await clearActivity(conn.userId, "roblox");
+  }
+
   robloxMetrics.activityUpdates += 1;
   if (entry.status === "IN_GAME") robloxMetrics.activePlayers += 1;
 
   // Privacidade showActivity=false: persiste estado interno, não divulga.
-  broadcastActivity(conn.userId, conn.showActivity ? { ...values, provider: "ROBLOX" as const } : null);
+  broadcastActivity(
+    conn.userId,
+    conn.showActivity ? { ...values, provider: "ROBLOX" as const } : null
+  );
 }
 
 /** Seleção inteligente: online agora → 1 tick; offline → a cada 5 ticks. */
@@ -211,7 +234,7 @@ async function pickRobloxTargets(): Promise<number[]> {
 }
 
 async function pollOnce(forceIds?: number[]): Promise<void> {
-  const targets = forceIds ?? await pickRobloxTargets();
+  const targets = forceIds ?? (await pickRobloxTargets());
   for (let i = 0; i < targets.length; i += BATCH_SIZE) {
     if (Date.now() < backoffUntil) return;
     const chunk = targets.slice(i, i + BATCH_SIZE);
@@ -236,7 +259,8 @@ async function pollOnce(forceIds?: number[]): Promise<void> {
         robloxMetrics.errors += 1;
         consecutiveFailures += 1;
         if (consecutiveFailures >= 5) {
-          backoffUntil = Date.now() + 5 * 60_000 + Math.floor(Math.random() * 30_000);
+          backoffUntil =
+            Date.now() + 5 * 60_000 + Math.floor(Math.random() * 30_000);
           // Atividades ficam stale (UI pode indicar indisponibilidade).
           await markAllStale().catch(() => {});
         }

@@ -2,14 +2,12 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { compress } from "hono/compress";
-import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import type { HttpBindings } from "@hono/node-server";
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { eq } from "drizzle-orm";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { authenticateRequest } from "./auth/middleware";
-import { getSessionCookieOptions } from "./lib/cookies";
 import {
   MAX_UPLOAD_MB,
   ALLOWED_UPLOAD_MIME_PREFIXES,
@@ -40,11 +38,15 @@ import {
 import {
   robloxConfigured,
   buildAuthorizeUrl,
-  generatePkcePair,
   exchangeCode,
   fetchUserInfo,
 } from "./integrations/roblox/client";
 import { upsertRobloxConnection } from "./integrations/roblox/service";
+import { createOauthState, consumeOauthState } from "./integrations/oauthState";
+import { getExternalProvider } from "./integrations/registry";
+import { upsertExternalConnection } from "./integrations/connectionService";
+import { startExternalPresenceWorker } from "./integrations/presenceWorker";
+import type { IntegrationProviderId } from "./integrations/types";
 import { createHash, randomUUID } from "node:crypto";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
@@ -55,7 +57,9 @@ const app = new Hono<{ Bindings: HttpBindings }>();
 // evita conteúdo duplicado indexável. /api e health checks passam direto
 // (o health check do Render chega pelo hostname interno). Desative com
 // SEO_CANONICAL_REDIRECT=0 se o domínio ainda não estiver configurado.
-const CANONICAL_HOST = (process.env.CANONICAL_HOST || "nexorachat.cloud").toLowerCase();
+const CANONICAL_HOST = (
+  process.env.CANONICAL_HOST || "nexorachat.cloud"
+).toLowerCase();
 app.use("*", async (c, next) => {
   if (
     process.env.NODE_ENV === "production" &&
@@ -198,7 +202,10 @@ app.post("/api/upload", async c => {
   const buffer = Buffer.from(await file.arrayBuffer());
   const filename = (file.name || "arquivo").slice(0, 255);
   if (shouldModerate(mimeType) && !isRealImage(buffer)) {
-    return c.json({ error: "Arquivo inválido: o conteúdo não corresponde a uma imagem." }, 400);
+    return c.json(
+      { error: "Arquivo inválido: o conteúdo não corresponde a uma imagem." },
+      400
+    );
   }
   const [{ id }] = await getDb()
     .insert(schema.files)
@@ -321,105 +328,152 @@ app.get("/api/files/:id", async c => {
   });
 });
 
-// ── WebRTC ICE configuration (STUN by default, TURN via env) ──
-// ── Integração Roblox: OAuth 2.0 + PKCE ───────────────────────
-const ROBLOX_STATE_COOKIE = "roblox_oauth_state";
+// ── Integrações externas: OAuth oficial + state one-time ─────
+const OAUTH_PROVIDERS = new Set<IntegrationProviderId>([
+  "spotify",
+  "youtube",
+  "twitch",
+  "github",
+  "roblox",
+]);
 
-app.get("/api/integrations/roblox/connect", async c => {
+function integrationReturn(provider: string, status: string) {
+  const base = env.appOrigin || "http://localhost";
+  const url = new URL(base);
+  url.searchParams.set("integration", provider);
+  url.searchParams.set("status", status);
+  return env.appOrigin
+    ? url.toString()
+    : `/?integration=${provider}&status=${status}`;
+}
+
+app.get("/api/integrations/:provider/connect", async c => {
+  let user;
   try {
-    await authenticateRequest(c.req.raw.headers);
+    ({ user } = await authenticateRequest(c.req.raw.headers));
   } catch {
     return c.json({ error: "Não autenticado." }, 401);
   }
-  if (!env.robloxIntegrationEnabled || !robloxConfigured()) {
-    return c.json(
-      { error: "Conexão com Roblox indisponível no momento." },
-      503
-    );
+  const provider = c.req.param("provider") as IntegrationProviderId;
+  if (!OAUTH_PROVIDERS.has(provider)) {
+    return c.json({ error: "Integração desconhecida." }, 404);
   }
-  const pkce = generatePkcePair();
-  const { url } = buildAuthorizeUrl({
-    state: pkce.state,
-    codeVerifier: pkce.verifier,
-    nonce: pkce.nonce,
-  });
-  const opts = getSessionCookieOptions(c.req.raw.headers);
-  setCookie(
-    c,
-    ROBLOX_STATE_COOKIE,
-    `${pkce.state}:${pkce.verifier}:${pkce.nonce}`,
-    {
-      httpOnly: true,
-      secure: opts.secure,
-      sameSite: "Lax",
-      path: "/api/integrations/roblox",
-      maxAge: 600, // 10 min — expiração curta anti-CSRF
+  rateLimit(`oauthConnect:${user.id}:${provider}`, 12, 60_000);
+
+  if (provider === "roblox") {
+    if (!env.robloxIntegrationEnabled || !robloxConfigured()) {
+      return c.json(
+        { error: "Conexão com Roblox indisponível no momento." },
+        503
+      );
     }
+    const oauth = await createOauthState({ userId: user.id, provider });
+    const { url } = buildAuthorizeUrl({
+      state: oauth.state,
+      codeVerifier: oauth.codeVerifier,
+      nonce: oauth.nonce,
+    });
+    return c.redirect(url, 302);
+  }
+  const adapter = getExternalProvider(provider);
+  if (!adapter?.enabled() || !adapter.configured()) {
+    return c.json({ error: "Essa conexão está indisponível no momento." }, 503);
+  }
+  const oauth = await createOauthState({ userId: user.id, provider });
+  return c.redirect(
+    adapter.buildAuthorizeUrl({
+      state: oauth.state,
+      codeChallenge: oauth.codeChallenge,
+      nonce: oauth.nonce,
+    }),
+    302
   );
-  return c.redirect(url, 302);
 });
 
-app.get("/api/integrations/roblox/callback", async c => {
+app.get("/api/integrations/:provider/callback", async c => {
   let user;
   try {
     ({ user } = await authenticateRequest(c.req.raw.headers));
   } catch {
     return c.redirect(`${env.appOrigin || "/"}/login`, 302);
   }
-  const appOrigin = env.appOrigin || "/";
+  const provider = c.req.param("provider") as IntegrationProviderId;
+  if (!OAUTH_PROVIDERS.has(provider)) {
+    return c.json({ error: "Integração desconhecida." }, 404);
+  }
+  const state = c.req.query("state") ?? "";
+  const oauth = await consumeOauthState({ state, userId: user.id, provider });
+  if (!oauth) {
+    return c.redirect(integrationReturn(provider, "invalid_state"), 302);
+  }
   const error = c.req.query("error");
   if (error) {
-    return c.redirect(`${appOrigin}?roblox=cancelado`, 302);
+    return c.redirect(
+      integrationReturn(
+        provider,
+        error === "access_denied" ? "cancelled" : "error"
+      ),
+      302
+    );
   }
-
-  // Validação de state (anti-CSRF) via cookie HttpOnly de curta duração.
-  const stateCookie = getCookie(c, ROBLOX_STATE_COOKIE) ?? "";
-  const [state, verifier, nonce] = stateCookie.split(":");
-  if (!state || !verifier || state !== c.req.query("state")) {
-    return c.redirect(`${appOrigin}?roblox=erro`, 302);
-  }
-  deleteCookie(c, ROBLOX_STATE_COOKIE, {
-    path: "/api/integrations/roblox",
-  });
 
   try {
     const code = c.req.query("code");
     if (!code) throw new Error("sem code");
-    const tokens = await exchangeCode({ code, codeVerifier: verifier });
-    const info = await fetchUserInfo(tokens.access_token);
-    // Nonce OIDC: verificação best-effort contra replay.
-    void nonce;
-
-    const result = await upsertRobloxConnection({
-      userId: user.id,
-      providerUserId: info.sub,
-      username: info.preferred_username,
-      displayName: info.name ?? info.nickname ?? null,
-      avatarUrl: info.picture ?? null,
-      profileUrl: info.profile ?? null,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token ?? null,
-      expiresInSeconds: tokens.expires_in,
-    });
+    let result: { ok: true } | { ok: false; error: "already_linked" };
+    if (provider === "roblox") {
+      const tokens = await exchangeCode({
+        code,
+        codeVerifier: oauth.codeVerifier,
+      });
+      const info = await fetchUserInfo(tokens.access_token);
+      result = await upsertRobloxConnection({
+        userId: user.id,
+        providerUserId: info.sub,
+        username: info.preferred_username,
+        displayName: info.name ?? info.nickname ?? null,
+        avatarUrl: info.picture ?? null,
+        profileUrl: info.profile ?? null,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token ?? null,
+        expiresInSeconds: tokens.expires_in,
+      });
+    } else {
+      const adapter = getExternalProvider(provider);
+      if (!adapter) throw new Error("provider indisponível");
+      const tokens = await adapter.exchangeCode({
+        code,
+        codeVerifier: oauth.codeVerifier,
+      });
+      const profile = await adapter.fetchProfile(tokens.accessToken);
+      result = await upsertExternalConnection({
+        userId: user.id,
+        provider,
+        profile,
+        tokens,
+      });
+    }
     if (!result.ok) {
-      return c.redirect(`${appOrigin}?roblox=em-uso`, 302);
+      return c.redirect(integrationReturn(provider, "already_linked"), 302);
     }
     console.log(
       JSON.stringify({
-        event: "roblox_oauth_callback_success",
+        event: "integration_oauth_callback_success",
+        provider,
         userId: user.id,
         timestamp: new Date().toISOString(),
       })
     );
-    return c.redirect(`${appOrigin}?roblox=conectado`, 302);
+    return c.redirect(integrationReturn(provider, "connected"), 302);
   } catch {
     console.warn(
       JSON.stringify({
-        event: "roblox_oauth_callback_failed",
+        event: "integration_oauth_callback_failed",
+        provider,
         timestamp: new Date().toISOString(),
       })
     );
-    return c.redirect(`${appOrigin}?roblox=erro`, 302);
+    return c.redirect(integrationReturn(provider, "error"), 302);
   }
 });
 
@@ -640,5 +694,6 @@ void ensureBadgeCatalog().catch(e =>
 );
 startSessionCleanupJob();
 startRobloxPresenceWorker();
+startExternalPresenceWorker();
 
 export default app;
