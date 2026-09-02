@@ -197,11 +197,13 @@ export async function revokeToken(token: string): Promise<boolean> {
 
 export const RobloxUserInfo = z.object({
   sub: z.string().min(1),
-  preferred_username: z.string().min(1),
-  name: z.string().optional(),
-  nickname: z.string().optional(),
-  picture: z.string().url().optional(),
-  profile: z.string().url().optional(),
+  preferred_username: z.string().min(1).nullable().optional(),
+  name: z.string().min(1).nullable().optional(),
+  nickname: z.string().min(1).nullable().optional(),
+  // O Roblox pode retornar `picture: null`; isso não invalida a identidade
+  // OAuth e não deve fazer o callback cair no erro genérico.
+  picture: z.string().url().nullable().optional(),
+  profile: z.string().url().nullable().optional(),
 });
 export type RobloxUserInfoT = z.infer<typeof RobloxUserInfo>;
 
@@ -216,6 +218,66 @@ export async function fetchUserInfo(
   if (!parsed.success)
     throw new RobloxApiError(res.status || 500, "Userinfo inválida.");
   return parsed.data;
+}
+
+const RobloxPublicUser = z.object({
+  id: z.number().int().positive(),
+  name: z.string().min(1),
+  displayName: z.string().min(1).optional(),
+});
+
+async function fetchPublicUser(userId: string) {
+  if (!/^\d+$/.test(userId)) return null;
+  try {
+    const res = await robloxFetch(
+      `https://users.roblox.com/v1/users/${userId}`
+    );
+    if (!res.ok) return null;
+    const parsed = RobloxPublicUser.safeParse(
+      await res.json().catch(() => null)
+    );
+    return parsed.success && String(parsed.data.id) === userId
+      ? parsed.data
+      : null;
+  } catch {
+    // Esta consulta apenas enriquece o perfil. O `sub` ainda é uma prova de
+    // identidade válida se o endpoint público estiver indisponível.
+    return null;
+  }
+}
+
+/**
+ * O `sub` do userinfo é a identidade estável confirmada pelo OAuth. Alguns
+ * apps recebem somente esse campo quando `profile` não foi habilitado no
+ * painel do Roblox; nesse caso, completamos nome público sem invalidar uma
+ * autorização legítima.
+ */
+export async function resolveRobloxIdentity(accessToken: string): Promise<{
+  providerUserId: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileUrl: string;
+}> {
+  const info = await fetchUserInfo(accessToken);
+  const publicUser = info.preferred_username
+    ? null
+    : await fetchPublicUser(info.sub);
+  const username =
+    info.preferred_username ?? publicUser?.name ?? `roblox-${info.sub}`;
+  return {
+    providerUserId: info.sub,
+    username,
+    displayName:
+      info.name ??
+      info.nickname ??
+      publicUser?.displayName ??
+      publicUser?.name ??
+      null,
+    avatarUrl: info.picture ?? null,
+    profileUrl:
+      info.profile ?? `https://www.roblox.com/users/${info.sub}/profile`,
+  };
 }
 
 // ── Presence (legacy público, batch) ─────────────────────────

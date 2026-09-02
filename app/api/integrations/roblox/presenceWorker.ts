@@ -111,14 +111,30 @@ async function applyPresence(entry: RobloxPresenceEntry): Promise<void> {
   const sameGame =
     previous?.universeId === entry.universeId &&
     previous?.status === entry.status;
-  if (
+  const unchanged =
     sameGame ||
     (entry.status === "OFFLINE" &&
       !previous?.name &&
-      previous?.status === "OFFLINE")
-  ) {
+      previous?.status === "OFFLINE");
+  if (unchanged && entry.status === "IN_GAME" && previous?.name) {
+    // A presença do Roblox não mudou, mas a atividade normalizada tem TTL.
+    // Renovamos esse TTL enquanto a API confirma que o jogador continua na
+    // mesma experiência, sem emitir um evento duplicado.
+    await persistActivity(conn.userId, {
+      provider: "roblox",
+      type: "gaming",
+      title: previous.name,
+      details: "Jogando Roblox",
+      state: previous.creatorName,
+      largeImageUrl: previous.thumbnailUrl,
+      largeImageText: previous.name,
+      startedAt: previous.startedAt,
+      externalUrl: previous.playUrl,
+      ttlMs: 3 * 60_000,
+    });
     return;
   }
+  if (unchanged) return;
 
   let name: string | null = null;
   let creatorName: string | null = null;
@@ -282,6 +298,8 @@ export { pollOnce };
 export function startRobloxPresenceWorker(): void {
   if (!env.robloxIntegrationEnabled || !env.robloxClientId) return;
   const base = env.robloxPresenceIntervalMs;
+  // Após restart, renova atividades ativas sem esperar o primeiro intervalo.
+  void pollOnce().catch(() => {});
   const schedule = () => {
     const jitter = Math.floor(Math.random() * (base * 0.2));
     setTimeout(async () => {
