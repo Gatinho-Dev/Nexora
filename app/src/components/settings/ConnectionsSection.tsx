@@ -63,6 +63,11 @@ export function ConnectionsSection() {
     onError: error => toast.error(error.message),
   });
 
+  const connectionUrl = (provider: ProviderId) => {
+    const params = new URLSearchParams({ returnTo: window.location.pathname });
+    return apiUrl(`/api/integrations/${provider}/connect?${params}`);
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const provider = params.get("integration");
@@ -183,9 +188,7 @@ export function ConnectionsSection() {
                   size="sm"
                   disabled={!provider.configured || !provider.enabled}
                   onClick={() => {
-                    window.location.href = apiUrl(
-                      `/api/integrations/${id}/connect`
-                    );
+                    window.location.href = connectionUrl(id);
                   }}
                   className="mt-4 h-9 w-full bg-[#5865F2] text-xs hover:bg-[#4752C4]"
                 >
@@ -197,9 +200,7 @@ export function ConnectionsSection() {
                     <button
                       type="button"
                       onClick={() => {
-                        window.location.href = apiUrl(
-                          `/api/integrations/${id}/connect`
-                        );
+                        window.location.href = connectionUrl(id);
                       }}
                       className="w-full rounded-lg bg-amber-400/10 px-3 py-2 text-left text-xs font-bold text-amber-300 hover:bg-amber-400/15"
                     >

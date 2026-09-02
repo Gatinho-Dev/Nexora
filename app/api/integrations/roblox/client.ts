@@ -7,7 +7,7 @@ import { env } from "../../lib/env";
  *
  * Endpoints (verificados ao vivo em 2026-08):
  * - OIDC discovery: apis.roblox.com/oauth/.well-known/openid-configuration
- *   authorize /oauth/v1/authorize · token /oauth/v2/token · userinfo /oauth/v1/userinfo
+ *   authorize /oauth/v1/authorize · token /oauth/v1/token · userinfo /oauth/v1/userinfo
  * - Presence (legacy público, sem cookies): POST presence.roblox.com/v1/presence/users
  *   → aceita BATCH de userIds. Documentado como legacy nesta integração.
  * - Metadados: GET games.roblox.com/v1/games?universeIds=
@@ -130,7 +130,7 @@ const TokenResponse = z.object({
 });
 
 async function tokenRequest(body: URLSearchParams) {
-  const res = await robloxFetch("https://apis.roblox.com/oauth/v2/token", {
+  const res = await robloxFetch("https://apis.roblox.com/oauth/v1/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -156,8 +156,6 @@ export function exchangeCode(input: { code: string; codeVerifier: string }) {
     new URLSearchParams({
       grant_type: "authorization_code",
       code: input.code,
-      client_id: env.robloxClientId,
-      client_secret: env.robloxClientSecret,
       redirect_uri: env.robloxRedirectUri,
       code_verifier: input.codeVerifier,
     })
@@ -169,8 +167,6 @@ export function refreshTokens(refreshToken: string) {
     new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: env.robloxClientId,
-      client_secret: env.robloxClientSecret,
     })
   );
 }
@@ -178,16 +174,19 @@ export function refreshTokens(refreshToken: string) {
 /** Best-effort — falha de revoke não bloqueia desconexão local. */
 export async function revokeToken(token: string): Promise<boolean> {
   try {
-    const res = await robloxFetch("https://apis.roblox.com/oauth/v2/revoke", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Authorization: `Basic ${Buffer.from(
-          `${env.robloxClientId}:${env.robloxClientSecret}`
-        ).toString("base64")}`,
-      },
-      body: new URLSearchParams({ token }).toString(),
-    });
+    const res = await robloxFetch(
+      "https://apis.roblox.com/oauth/v1/token/revoke",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Basic ${Buffer.from(
+            `${env.robloxClientId}:${env.robloxClientSecret}`
+          ).toString("base64")}`,
+        },
+        body: new URLSearchParams({ token }).toString(),
+      }
+    );
     return res.ok;
   } catch {
     return false;
