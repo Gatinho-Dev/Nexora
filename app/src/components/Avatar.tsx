@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 import { statusColor } from "@/lib/statusColor";
+import { useState, useEffect } from "react";
 
 type Props = {
   /** Convenience: derive userId/name/src from a user-like object. */
@@ -39,6 +40,21 @@ const dotSizes = {
   "2xl": "h-6 w-6 border-4",
 };
 
+// Generate consistent color from user ID for fallback background
+function getAvatarColor(userId: number): string {
+  const colors = [
+    "bg-[#8b5cf6]", // violet
+    "bg-[#ec4899]", // pink
+    "bg-[#06b6d4]", // cyan
+    "bg-[#22c55e]", // green
+    "bg-[#f59e0b]", // amber
+    "bg-[#ef4444]", // red
+    "bg-[#3b82f6]", // blue
+    "bg-[#a855f7]", // purple
+  ];
+  return colors[userId % colors.length];
+}
+
 export function Avatar({
   user,
   userId: userIdProp,
@@ -58,28 +74,46 @@ export function Avatar({
   );
   const status = statusOverride ?? liveStatus;
   const initial = (name ?? "?").trim().charAt(0).toUpperCase() || "?";
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  const showInitial = !src || imgError || !imgLoaded;
+  const fallbackColor = userId ? getAvatarColor(userId) : "bg-secondary";
 
   return (
     <div className={cn("relative shrink-0", className)}>
       <div
         className={cn(
-          "rounded-full overflow-hidden flex items-center justify-center bg-secondary font-semibold select-none",
+          "rounded-full overflow-hidden flex items-center justify-center font-semibold select-none",
           sizes[size]
         )}
       >
-        {src ? (
+        <div
+          className={cn(
+            "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
+            fallbackColor,
+            imgLoaded && "opacity-0"
+          )}
+        >
+          <span className="text-white/90">{initial}</span>
+        </div>
+        {src && (
           <img
             src={src}
             alt={name ?? "avatar"}
             loading="lazy"
             decoding="async"
-            className="h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
+            className={cn(
+              "h-full w-full object-cover transition-opacity duration-200",
+              imgLoaded ? "opacity-100" : "opacity-0"
+            )}
+            onLoad={() => setImgLoaded(true)}
+            onError={() => {
+              setImgError(true);
+              setImgLoaded(true);
             }}
           />
-        ) : null}
-        {!src && <span>{initial}</span>}
+        )}
       </div>
       {showStatus && (
         <span
