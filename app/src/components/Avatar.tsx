@@ -40,7 +40,7 @@ const dotSizes = {
   "2xl": "h-6 w-6 border-4",
 };
 
-// Generate consistent color from user ID for fallback background
+// Generate consistent color from user ID for loading fallback background
 function getAvatarColor(userId: number): string {
   const colors = [
     "bg-[#8b5cf6]", // violet
@@ -77,26 +77,28 @@ export function Avatar({
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
 
-  const showInitial = !src || imgError || !imgLoaded;
+  const hasSrc = Boolean(src);
+  const loading = hasSrc && !imgLoaded && !imgError;
   const fallbackColor = userId ? getAvatarColor(userId) : "bg-secondary";
 
   return (
     <div className={cn("relative shrink-0", className)}>
       <div
         className={cn(
-          "rounded-full overflow-hidden flex items-center justify-center font-semibold select-none",
+          "rounded-full overflow-hidden flex items-center justify-center bg-secondary font-semibold select-none",
           sizes[size]
         )}
       >
-        <div
-          className={cn(
-            "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
-            fallbackColor,
-            imgLoaded && "opacity-0"
-          )}
-        >
-          <span className="text-white/90">{initial}</span>
-        </div>
+        {loading && (
+          <div
+            className={cn(
+              "absolute inset-0 flex items-center justify-center transition-opacity duration-200",
+              fallbackColor
+            )}
+          >
+            <span className="text-white/90">{initial}</span>
+          </div>
+        )}
         {src && (
           <img
             src={src}
@@ -114,6 +116,7 @@ export function Avatar({
             }}
           />
         )}
+        {!src && <span className="text-white/90">{initial}</span>}
       </div>
       {showStatus && (
         <span
