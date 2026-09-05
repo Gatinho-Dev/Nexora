@@ -74,10 +74,12 @@ export function Avatar({
             loading="lazy"
             decoding="async"
             className="h-full w-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
           />
-        ) : (
-          <span>{initial}</span>
-        )}
+        ) : null}
+        {!src && <span>{initial}</span>}
       </div>
       {showStatus && (
         <span

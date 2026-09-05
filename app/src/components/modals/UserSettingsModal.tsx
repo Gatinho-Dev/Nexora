@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { AccountStanding } from "../safety/AccountStanding";
@@ -24,6 +24,8 @@ import {
   ChevronRight,
   ShieldCheck,
   Keyboard,
+  AlertTriangle,
+  EyeOff,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -43,7 +45,7 @@ import {
 } from "@/components/ui/select";
 import { Avatar } from "../Avatar";
 import { cn } from "@/lib/utils";
-import { getTheme, setTheme, type Theme } from "@/lib/theme";
+import { getTheme, type Theme } from "@/lib/theme";
 import { getDevicePrefs, setDevicePrefs } from "@/lib/devices";
 import { useAuth } from "@/hooks/useAuth";
 import { soundManager, type SoundEvent } from "@/lib/sound";
@@ -55,10 +57,28 @@ import {
 } from "@/lib/voice/audioProcessing";
 import { NexoraLogo, NexoraMark } from "@/components/NexoraBrand";
 import { ProfileStudio } from "@/components/profile/ProfileStudio";
+import { IdentityPreferencesSection } from "@/components/settings/IdentityPreferencesSection";
+import { SupportTicketsSection } from "@/components/settings/SupportTicketsSection";
+import { AudioClipStudio } from "@/components/settings/AudioClipStudio";
+import {
+  DEFAULT_KEYBINDS,
+  duplicateKeybinds,
+  keybindFromEvent,
+  KEYBIND_LABELS,
+  parseKeybinds,
+  type KeybindAction,
+} from "@/lib/keybinds";
+import {
+  applyAppearancePreferences,
+  DEFAULT_APPEARANCE_PREFERENCES,
+  parseAppearancePreferences,
+  type AppearancePreferences,
+} from "@/lib/appearancePreferences";
 
 type Tab =
   | "account"
   | "profile"
+  | "identity"
   | "devices"
   | "security"
   | "standing"
@@ -67,6 +87,7 @@ type Tab =
   | "my-reports"
   | "appeals"
   | "connections"
+  | "support"
   | "appearance"
   | "accessibility"
   | "voice"
@@ -84,12 +105,14 @@ const MENU_GROUPS: {
     items: [
       { id: "account", label: "Minha conta" },
       { id: "profile", label: "Perfil" },
+      { id: "identity", label: "Identidade e status" },
       { id: "devices", label: "Dispositivos conectados" },
       { id: "security", label: "Central de Segurança", icon: <ShieldCheck /> },
       { id: "standing", label: "Status da Conta" },
       { id: "privacy", label: "Conteúdo e Privacidade" },
       { id: "sensitive", label: "Conteúdo sensível" },
       { id: "connections", label: "Conexões" },
+      { id: "support", label: "Suporte e tickets" },
     ],
   },
   {
@@ -284,6 +307,8 @@ function SettingsShell({
                 onClose={() => onOpenChange(false)}
               />
             )}
+            {tab === "identity" && <IdentityPreferencesSection />}
+            {tab === "support" && <SupportTicketsSection />}
             {tab === "devices" && <DevicesSection />}
             {tab === "security" && <SecurityCenter onNavigate={enterTab} />}
             {tab === "standing" && <StandingTab />}
@@ -551,6 +576,11 @@ function LegacyProfileTab() {
               {uploadingTarget === "banner" ? "Enviando..." : "Alterar banner"}
             </button>
           </div>
+          <div className="absolute bottom-3 left-3 right-3 text-center">
+            <p className="text-[10px] text-white/60 bg-black/50 px-2 py-1 rounded inline-block">
+              Recomendado: 16:9 (1920×1080 ou 1280×720) • PNG, JPG, WEBP ≤ 10 MB
+            </p>
+          </div>
           <input
             ref={bannerFileRef}
             type="file"
@@ -649,7 +679,7 @@ function LegacyProfileTab() {
         disabled={updateProfile.isPending || uploadingTarget !== null}
         className="bg-[#5865F2] hover:bg-[#4752C4]"
       >
-        {updateProfile.isPending ? "Salvando..." : "Salvar alterações"}
+        {updateProfile.isPending ? "Salvando" : "Salvar alterações"}
       </Button>
     </div>
   );
@@ -661,11 +691,29 @@ void LegacyProfileTab;
 function PrivacyTab() {
   const utils = trpc.useUtils();
   const privacy = trpc.account.privacy.useQuery();
+  const syncedPreferences = trpc.advanced.profile.preferences.useQuery();
+  const blocks = trpc.advanced.security.blocks.useQuery();
+  const restrictions = trpc.advanced.security.restrictions.useQuery();
   const [readReceipts, setReadReceipts] = useState<boolean | null>(null);
 
   const setPrivacy = trpc.account.setPrivacy.useMutation({
     onSuccess: () => void utils.account.privacy.invalidate(),
     onError: e => toast.error(e.message),
+  });
+  const saveSyncedPreferences = trpc.advanced.profile.updatePreferences.useMutation({
+    onSuccess: () => void syncedPreferences.refetch(),
+    onError: error => {
+      if (error.data?.code === "CONFLICT") void syncedPreferences.refetch();
+      toast.error(error.message);
+    },
+  });
+  const unblock = trpc.advanced.security.setBlocked.useMutation({
+    onSuccess: () => { toast.success("Usuário desbloqueado."); void blocks.refetch(); },
+    onError: error => toast.error(error.message),
+  });
+  const unrestrict = trpc.advanced.security.setRestricted.useMutation({
+    onSuccess: () => { toast.success("Restrição removida."); void restrictions.refetch(); },
+    onError: error => toast.error(error.message),
   });
 
   // Sincroniza com o servidor quando os dados chegam.
@@ -677,6 +725,16 @@ function PrivacyTab() {
   }
 
   const current = readReceipts ?? serverValue;
+  const rawPrivacy = syncedPreferences.data?.data.privacy;
+  const syncedPrivacy = rawPrivacy && typeof rawPrivacy === "object" && !Array.isArray(rawPrivacy)
+    ? rawPrivacy as Record<string, unknown>
+    : {};
+  const allowServerDms = syncedPrivacy.allowServerDms !== false;
+  const filterUnknownDms = syncedPrivacy.filterUnknownDms !== false;
+  const updateSyncedPrivacy = (patch: Record<string, boolean>) => saveSyncedPreferences.mutate({
+    expectedVersion: syncedPreferences.data?.version ?? 0,
+    data: { ...(syncedPreferences.data?.data ?? {}), privacy: { ...syncedPrivacy, ...patch } },
+  });
 
   return (
     <div className="space-y-4">
@@ -712,13 +770,29 @@ function PrivacyTab() {
       <div className="rounded-xl bg-sidebar border border-white/10 p-4 space-y-3 text-xs">
         <div className="flex items-center justify-between">
           <span>Permitir mensagens diretas de membros do servidor</span>
-          <Switch defaultChecked />
+          <Switch checked={allowServerDms} disabled={!syncedPreferences.data || saveSyncedPreferences.isPending} onCheckedChange={value => updateSyncedPrivacy({ allowServerDms: value })} />
         </div>
         <div className="flex items-center justify-between">
           <span>Filtro de mensagens diretas de desconhecidos</span>
-          <Switch defaultChecked />
+          <Switch checked={filterUnknownDms} disabled={!syncedPreferences.data || saveSyncedPreferences.isPending} onCheckedChange={value => updateSyncedPrivacy({ filterUnknownDms: value })} />
         </div>
       </div>
+
+      <section className="rounded-xl border border-white/10 bg-sidebar p-4">
+        <h3 className="text-sm font-bold text-white">Usuários bloqueados</h3>
+        <p className="mt-1 text-[11px] text-muted2">Bloqueios também impedem DMs e pedidos de amizade.</p>
+        <div className="mt-3 space-y-2">
+          {blocks.isLoading ? <p className="py-3 text-center text-xs text-muted2">Carregando…</p> : blocks.data?.length ? blocks.data.map(row => <div key={row.block.id} className="flex min-h-12 items-center gap-3 rounded-lg bg-black/10 px-3"><Avatar userId={row.user.id} name={row.user.name ?? row.user.username} src={row.user.avatar} size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-white">{row.user.name ?? row.user.username}</p><p className="truncate text-[10px] text-muted2">@{row.user.username}</p></div><Button size="sm" variant="ghost" disabled={unblock.isPending} onClick={() => unblock.mutate({ userId: row.user.id, blocked: false })}>Desbloquear</Button></div>) : <p className="py-3 text-center text-xs text-muted2">Nenhum usuário bloqueado.</p>}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-white/10 bg-sidebar p-4">
+        <h3 className="text-sm font-bold text-white">Usuários restritos</h3>
+        <p className="mt-1 text-[11px] text-muted2">Conteúdo filtrado sem avisar a outra pessoa.</p>
+        <div className="mt-3 space-y-2">
+          {restrictions.isLoading ? <p className="py-3 text-center text-xs text-muted2">Carregando…</p> : restrictions.data?.length ? restrictions.data.map(row => <div key={row.restriction.id} className="flex min-h-12 items-center gap-3 rounded-lg bg-black/10 px-3"><Avatar userId={row.user.id} name={row.user.name ?? row.user.username} src={row.user.avatar} size="sm" /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-white">{row.user.name ?? row.user.username}</p><p className="truncate text-[10px] text-muted2">Mensagens e chamadas filtradas</p></div><Button size="sm" variant="ghost" disabled={unrestrict.isPending} onClick={() => unrestrict.mutate({ userId: row.user.id, restricted: false, filterMessages: true, muteCalls: true, muteNotifications: true, hidePresence: false })}>Remover</Button></div>) : <p className="py-3 text-center text-xs text-muted2">Nenhum usuário restrito.</p>}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1411,13 +1485,51 @@ function VoiceTab() {
           ))}
         </div>
       </section>
+      <AudioClipStudio />
     </div>
   );
 }
 
 // ── Aparência (Tema Nexora) ────────────────────────────────────
 function AppearanceTab() {
-  const [theme, setThemeState] = useState<Theme>(getTheme());
+  const utils = trpc.useUtils();
+  const preferences = trpc.advanced.profile.preferences.useQuery();
+  const [appearance, setAppearance] = useState<AppearancePreferences>(() => ({
+    ...DEFAULT_APPEARANCE_PREFERENCES,
+    theme: getTheme(),
+  }));
+  const update = trpc.advanced.profile.updatePreferences.useMutation({
+    onSuccess: result => {
+      utils.advanced.profile.preferences.setData(undefined, current => current ? {
+        ...current,
+        data: result.data,
+        version: result.version,
+        updatedAt: new Date(),
+      } : current);
+      toast.success("Aparência sincronizada.");
+    },
+    onError: error => {
+      if (error.data?.code === "CONFLICT") void preferences.refetch();
+      toast.error(error.message || "Não foi possível salvar a aparência.");
+    },
+  });
+
+  useEffect(() => {
+    if (!preferences.data) return;
+    const next = parseAppearancePreferences(preferences.data.data);
+    setAppearance(next);
+    applyAppearancePreferences(next);
+  }, [preferences.data]);
+
+  const save = (patch: Partial<AppearancePreferences>) => {
+    const next = { ...appearance, ...patch };
+    setAppearance(next);
+    applyAppearancePreferences(next);
+    update.mutate({
+      expectedVersion: preferences.data?.version ?? 0,
+      data: { ...(preferences.data?.data ?? {}), appearance: next },
+    });
+  };
 
   const options: {
     id: Theme;
@@ -1458,13 +1570,10 @@ function AppearanceTab() {
         {options.map(opt => (
           <button
             key={opt.id}
-            onClick={() => {
-              setTheme(opt.id);
-              setThemeState(opt.id);
-            }}
+            onClick={() => save({ theme: opt.id })}
             className={cn(
               "rounded-xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity] relative overflow-hidden select-none",
-              theme === opt.id
+              appearance.theme === opt.id
                 ? "border-[#5865F2] bg-[#5865F2]/10 text-white shadow-lg shadow-[#5865F2]/10"
                 : "border-white/10 bg-sidebar text-muted2 hover:border-white/20 hover:text-white"
             )}
@@ -1474,7 +1583,7 @@ function AppearanceTab() {
             <p className="text-[11px] text-muted2 mt-1 leading-snug">
               {opt.description}
             </p>
-            {theme === opt.id && (
+            {appearance.theme === opt.id && (
               <div className="absolute top-2 right-2 text-[#5865F2]">
                 <Check className="h-4 w-4" />
               </div>
@@ -1482,6 +1591,96 @@ function AppearanceTab() {
           </button>
         ))}
       </div>
+
+      <section className="space-y-4 rounded-xl border border-white/10 bg-sidebar p-4 sm:p-5">
+        <div>
+          <h3 className="text-sm font-bold text-white">Densidade das mensagens</h3>
+          <p className="mt-1 text-[11px] text-muted2">Escolha entre avatares espaçosos ou uma conversa mais densa.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Densidade das mensagens">
+          {([[
+            "cozy", "Cozy", "Avatar e mais respiro",
+          ], [
+            "compact", "Compact", "Mais mensagens na tela",
+          ]] as const).map(([value, label, description]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={appearance.messageDensity === value}
+              onClick={() => save({ messageDensity: value })}
+              className={cn(
+                "min-h-20 rounded-lg border p-3 text-left transition-colors",
+                appearance.messageDensity === value
+                  ? "border-[#7383ff] bg-[#4654d8]/20"
+                  : "border-white/10 bg-black/10 hover:border-white/20",
+              )}
+            >
+              <span className="block text-xs font-bold text-white">{label}</span>
+              <span className="mt-1 block text-[10px] text-muted2">{description}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-5 rounded-xl border border-white/10 bg-sidebar p-4 sm:p-5">
+        <div>
+          <h3 className="text-sm font-bold text-white">Escala da interface</h3>
+          <p className="mt-1 text-[11px] text-muted2">Atual: {appearance.uiScale}%</p>
+        </div>
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-7" role="radiogroup" aria-label="Escala da interface">
+          {[75, 80, 90, 100, 110, 125, 150].map(value => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={appearance.uiScale === value}
+              onClick={() => save({ uiScale: value })}
+              className={cn(
+                "min-h-11 rounded-lg border px-2 text-[11px] font-bold transition-colors",
+                appearance.uiScale === value
+                  ? "border-[#7383ff] bg-[#4654d8]/20 text-white"
+                  : "border-white/10 bg-black/10 text-muted2 hover:text-white",
+              )}
+            >
+              {value}%
+            </button>
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3 text-xs"><Label>Tamanho do texto</Label><span className="font-semibold text-[#aab2ff]">{appearance.messageTextSize}px</span></div>
+          <Slider
+            min={12}
+            max={24}
+            step={1}
+            value={[appearance.messageTextSize]}
+            onValueChange={([value]) => setAppearance(current => ({ ...current, messageTextSize: value }))}
+            onValueCommit={([value]) => save({ messageTextSize: value })}
+            aria-label="Tamanho do texto das mensagens"
+          />
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3 text-xs"><Label>Espaçamento entre mensagens</Label><span className="text-[10px] text-muted2">Compacto ↔ Espaçoso</span></div>
+          <Slider
+            min={0}
+            max={100}
+            step={10}
+            value={[appearance.messageSpacing]}
+            onValueChange={([value]) => setAppearance(current => ({ ...current, messageSpacing: value }))}
+            onValueCommit={([value]) => save({ messageSpacing: value })}
+            aria-label="Espaçamento entre mensagens"
+          />
+        </div>
+
+        <div className="rounded-lg border border-white/[0.07] bg-chat p-3" aria-label="Prévia da aparência">
+          <div className="flex gap-3">
+            <div className={cn("size-9 shrink-0 rounded-full bg-gradient-to-br from-[#7383ff] to-[#4654d8]", appearance.messageDensity === "compact" && "hidden")} />
+            <div className="min-w-0"><p className="text-xs font-bold text-white">Nexora</p><p style={{ fontSize: appearance.messageTextSize }} className="mt-1 leading-relaxed text-bodyx">Esta é uma prévia das suas mensagens.</p></div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1539,29 +1738,62 @@ function AccessibilityTab() {
 }
 
 function ShortcutsTab() {
+  const preferences = trpc.advanced.profile.preferences.useQuery();
+  const [recording, setRecording] = useState<KeybindAction | null>(null);
+  const [localKeybinds, setLocalKeybinds] = useState(DEFAULT_KEYBINDS);
+  const update = trpc.advanced.profile.updatePreferences.useMutation({
+    onSuccess: () => { void preferences.refetch(); toast.success("Atalhos sincronizados."); },
+    onError: error => { if (error.data?.code === "CONFLICT") void preferences.refetch(); toast.error(error.message); },
+  });
+
+  useEffect(() => {
+    if (preferences.data) setLocalKeybinds(parseKeybinds(preferences.data.data));
+  }, [preferences.data]);
+
+  const streamerRaw = preferences.data?.data.streamerMode;
+  const streamer = streamerRaw && typeof streamerRaw === "object" && !Array.isArray(streamerRaw)
+    ? streamerRaw as Record<string, unknown>
+    : {};
+  const streamerEnabled = streamer.enabled === true;
+  const autoDetect = streamer.autoDetect !== false;
+  const saveData = useCallback((patch: Record<string, unknown>) => update.mutate({
+    expectedVersion: preferences.data?.version ?? 0,
+    data: { ...(preferences.data?.data ?? {}), ...patch },
+  }), [preferences.data?.data, preferences.data?.version, update]);
+
+  useEffect(() => {
+    if (!recording) return;
+    const capture = (event: KeyboardEvent) => {
+      event.preventDefault(); event.stopPropagation();
+      if (event.key === "Escape") { setRecording(null); return; }
+      const shortcut = keybindFromEvent(event);
+      if (!shortcut || ["Ctrl", "Alt", "Shift", "Meta"].includes(shortcut)) return;
+      const next = { ...localKeybinds, [recording]: shortcut };
+      setLocalKeybinds(next);
+      setRecording(null);
+      saveData({ keybinds: next });
+    };
+    window.addEventListener("keydown", capture, true);
+    return () => window.removeEventListener("keydown", capture, true);
+  }, [localKeybinds, recording, saveData]);
+
+  const conflicts = duplicateKeybinds(localKeybinds);
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-bold text-white">Atalhos do Teclado</h2>
-      <div className="rounded-xl bg-sidebar border border-white/10 p-4 space-y-2 text-xs">
-        <div className="flex justify-between py-1 border-b border-white/5">
-          <span>Quick Switcher</span>
-          <kbd className="px-2 py-0.5 rounded bg-white/10 font-mono text-[10px]">
-            Ctrl + K
-          </kbd>
-        </div>
-        <div className="flex justify-between py-1 border-b border-white/5">
-          <span>Mutar / Desmutar</span>
-          <kbd className="px-2 py-0.5 rounded bg-white/10 font-mono text-[10px]">
-            Ctrl + Shift + M
-          </kbd>
-        </div>
-        <div className="flex justify-between py-1">
-          <span>Fechar modais</span>
-          <kbd className="px-2 py-0.5 rounded bg-white/10 font-mono text-[10px]">
-            ESC
-          </kbd>
-        </div>
+    <div className="space-y-5">
+      <div><h2 className="text-xl font-bold text-white">Atalhos globais</h2><p className="mt-1 text-xs text-muted2">No desktop, os atalhos continuam ativos com a janela em segundo plano.</p></div>
+      {conflicts.size > 0 && <p className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-100"><AlertTriangle className="size-4" />Há atalhos em conflito. Grave uma combinação diferente.</p>}
+      <div className="divide-y divide-white/[0.06] rounded-xl border border-white/10 bg-sidebar px-4">
+        {(Object.entries(KEYBIND_LABELS) as [KeybindAction, string][]).map(([action, label]) => {
+          const shortcut = localKeybinds[action];
+          return <div key={action} className="flex min-h-14 items-center justify-between gap-3 py-2"><div className="min-w-0"><p className="truncate text-xs font-semibold text-white">{label}</p>{shortcut && conflicts.has(shortcut) && <p className="text-[10px] text-amber-300">Conflito detectado</p>}</div><div className="flex items-center gap-1"><button type="button" onClick={() => setRecording(action)} className={cn("min-h-10 min-w-32 rounded-lg border px-3 font-mono text-[10px] font-bold", recording === action ? "border-[#7383ff] bg-[#4654d8]/20 text-[#aab2ff]" : conflicts.has(shortcut ?? "") ? "border-amber-400/30 bg-amber-400/10 text-amber-200" : "border-white/10 bg-black/15 text-bodyx")}>{recording === action ? "Pressione as teclas…" : shortcut?.replaceAll("+", " + ") || "Não definido"}</button>{shortcut && <button type="button" onClick={() => { const next = { ...localKeybinds }; delete next[action]; setLocalKeybinds(next); saveData({ keybinds: next }); }} className="grid size-10 place-items-center rounded-lg text-muted2 hover:bg-white/5 hover:text-red-300" aria-label={`Limpar atalho ${label}`}><X className="size-4" /></button>}</div></div>;
+        })}
       </div>
+
+      <section className="space-y-4 rounded-xl border border-white/10 bg-sidebar p-4">
+        <div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#4654d8]/15 text-[#8290ff]"><EyeOff className="size-4" /></span><div><h3 className="text-sm font-bold text-white">Modo Streamer</h3><p className="mt-1 text-[11px] leading-5 text-muted2">Oculta dados pessoais, convites e previews, além de silenciar alertas privados.</p></div></div>
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-black/10 p-3"><div><p className="text-xs font-semibold text-white">Ativar modo streamer</p><p className="mt-1 text-[10px] text-muted2">Pode ser alternado pelo atalho configurado acima.</p></div><Switch checked={streamerEnabled} disabled={update.isPending || !preferences.data} onCheckedChange={enabled => { document.documentElement.classList.toggle("nexora-streamer-mode", enabled); saveData({ streamerMode: { ...streamer, enabled } }); }} /></div>
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-black/10 p-3"><div><p className="text-xs font-semibold text-white">Detectar OBS e Streamlabs</p><p className="mt-1 text-[10px] text-muted2">Disponível no aplicativo Nexora para desktop.</p></div><Switch checked={autoDetect} disabled={update.isPending || !preferences.data} onCheckedChange={value => saveData({ streamerMode: { ...streamer, autoDetect: value } })} /></div>
+      </section>
     </div>
   );
 }
