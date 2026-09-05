@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ProfileAvatar } from "./ProfileAvatar";
 import { StyledDisplayName } from "./StyledDisplayName";
+import { BannerCropper } from "./BannerCropper";
 
 const THEMES = [
   { id: "cobalt", label: "Cobalto", surface: "from-[#20275a] to-[#11131a]" },
@@ -84,6 +85,7 @@ export function ProfileStudio({
   const [customStatus, setCustomStatus] = useState(user?.customStatus ?? "");
   const [avatar, setAvatar] = useState(user?.avatar ?? "");
   const [banner, setBanner] = useState(user?.banner ?? "");
+  const [cropperFile, setCropperFile] = useState<File | null>(null);
   const [profileTheme, setProfileTheme] = useState(
     user?.profileTheme ?? "cobalt"
   );
@@ -138,6 +140,10 @@ export function ProfileStudio({
   });
 
   const uploadImage = async (file: File, target: "avatar" | "banner") => {
+    if (target === "banner") {
+      setCropperFile(file);
+      return;
+    }
     setUploading(target);
     try {
       const form = new FormData();
@@ -165,6 +171,40 @@ export function ProfileStudio({
     } finally {
       setUploading(null);
     }
+  };
+
+  const handleCropComplete = async (croppedFile: File) => {
+    setCropperFile(null);
+    setUploading("banner");
+    try {
+      const form = new FormData();
+      form.append("file", croppedFile);
+      const response = await fetch(apiUrl("/api/upload"), {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      const payload = (await response.json()) as {
+        url?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.url)
+        throw new Error(payload.error || "Falha no upload.");
+      setBanner(payload.url);
+      toast.success("Banner recortado e enviado. Salve para publicar.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar o banner."
+      );
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handleCropCancel = () => {
+    setCropperFile(null);
   };
 
   const save = async () => {
@@ -458,24 +498,29 @@ export function ProfileStudio({
                   )}
                 />
               )}
-              <button
-                type="button"
-                onClick={() => bannerRef.current?.click()}
-                className="absolute right-3 top-3 inline-flex h-8 items-center gap-1.5 rounded-full bg-black/55 px-3 text-[10px] font-bold backdrop-blur hover:bg-black/70"
-              >
-                <Camera className="h-3 w-3" /> Banner
-              </button>
-              <input
-                ref={bannerRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={event => {
-                  const file = event.target.files?.[0];
-                  if (file) void uploadImage(file, "banner");
-                  event.target.value = "";
-                }}
-              />
+<button
+            type="button"
+            onClick={() => bannerRef.current?.click()}
+            className="absolute right-3 top-3 inline-flex h-8 items-center gap-1.5 rounded-full bg-black/55 px-3 text-[10px] font-bold backdrop-blur hover:bg-black/70"
+          >
+            <Camera className="h-3 w-3" /> Banner
+          </button>
+          <input
+            ref={bannerRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={event => {
+              const file = event.target.files?.[0];
+              if (file) void uploadImage(file, "banner");
+              event.target.value = "";
+            }}
+          />
+          <div className="absolute bottom-3 left-3 right-3 text-center">
+            <p className="text-[10px] text-white/60 bg-black/50 px-2 py-1 rounded inline-block">
+              Recomendado: 16:9 (1920×1080 ou 1280×720) • PNG, JPG, WEBP ≤ 10 MB
+            </p>
+          </div>
             </div>
             <div className="relative px-5 pb-5">
               <ProfileAvatar
@@ -723,9 +768,21 @@ export function ProfileStudio({
               </>
             )}
           </div>
-        </section>
+</section>
       </div>
-    </div>
+      {cropperFile ? (
+        <div>
+          <BannerCropper
+            file={cropperFile}
+            onComplete={handleCropComplete}
+            onCancel={handleCropCancel}
+            aspectRatio={16 / 9}
+            minWidth={1280}
+            minHeight={720}
+          />
+        </div>
+      ) : null}
+</div>
   );
 }
 

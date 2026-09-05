@@ -31,6 +31,7 @@ import {
   type DmCallEndReason,
 } from "./voice/dmCallPolicy";
 import { insertSystemMessage, userName } from "./services/groupService";
+import { activeServerTimeout } from "./services/serverModeration";
 
 // ── Connection registry ───────────────────────────────────────
 type Client = {
@@ -407,7 +408,7 @@ export async function contactIds(userId: number): Promise<Set<number>> {
   return ids;
 }
 
-async function broadcastPresence(userId: number) {
+export async function broadcastPresence(userId: number) {
   const status = visibleStatus(userId);
   const contacts = await contactIds(userId);
   sendToUsers(contacts, { t: "presence", userId, status });
@@ -479,6 +480,20 @@ export async function setLiveStageSpeaker(
   return true;
 }
 
+export async function setLiveVoiceMuted(
+  channelId: number,
+  userId: number,
+  muted: boolean
+): Promise<boolean> {
+  const roomKey = channelRoomKey(channelId);
+  const room = voiceRooms.get(roomKey);
+  const participant = room?.get(userId);
+  if (!participant || !room) return false;
+  participant.muted = muted;
+  await broadcastVoiceParticipants(roomKey);
+  return true;
+}
+
 /** True when the given user currently sits in the voice room of the channel. */
 export function isUserInVoiceRoom(channelId: number, userId: number): boolean {
   return !!voiceRooms.get(channelRoomKey(channelId))?.has(userId);
@@ -530,7 +545,7 @@ async function broadcastVoiceParticipants(roomKey: string) {
             visibleChannelIds.push(voiceChannel.id);
           }
         }
-        if (!visibleChannelIds.includes(channelId)) return;
+        if (visibleChannelIds.length === 0) return;
         const summary = getVoiceSummaryForChannels(visibleChannelIds);
         sendToUsers([userId], {
           t: "voice:participants",
@@ -547,6 +562,61 @@ async function broadcastVoiceParticipants(roomKey: string) {
       t: "voice:participants",
       conversationId,
       participants,
+    });
+  }
+}
+
+async function sendInitialVoiceSummaries(userId: number) {
+  const db = getDb();
+  const memberServers = await db
+    .select({ serverId: schema.serverMembers.serverId })
+    .from(schema.serverMembers)
+    .where(eq(schema.serverMembers.userId, userId));
+  const serverIds = memberServers.map(m => m.serverId);
+  if (serverIds.length === 0) return;
+
+  for (const serverId of serverIds) {
+    const voiceChannels = await db
+      .select()
+      .from(schema.channels)
+      .where(
+        and(
+          eq(schema.channels.serverId, serverId),
+          or(
+            eq(schema.channels.type, "VOICE"),
+            eq(schema.channels.type, "STAGE")
+          )
+        )
+      );
+    if (voiceChannels.length === 0) continue;
+
+    const permissions = await getMemberPermissions(userId, serverId);
+    if (!permissions) continue;
+
+    const visibleChannelIds: number[] = [];
+    for (const vc of voiceChannels) {
+      if (
+        permissions.has("ADMINISTRATOR") ||
+        permissions.has("MANAGE_CHANNELS")
+      ) {
+        visibleChannelIds.push(vc.id);
+        continue;
+      }
+      const effective = await getEffectiveChannelPermissions(userId, vc);
+      if (effective?.has("VIEW_CHANNEL")) {
+        visibleChannelIds.push(vc.id);
+      }
+    }
+
+    if (visibleChannelIds.length === 0) continue;
+
+    const summary = getVoiceSummaryForChannels(visibleChannelIds);
+    sendToUsers([userId], {
+      t: "voice:participants",
+      channelId: visibleChannelIds[0],
+      serverId,
+      participants: [],
+      ...summary,
     });
   }
 }
@@ -606,6 +676,15 @@ async function voiceJoin(
         t: "voice:denied",
         channelId: target.channelId,
         reason: "Você não tem permissão para acessar este canal de voz.",
+      });
+      return;
+    }
+    const timeoutUntil = await activeServerTimeout(client.userId, channel.serverId);
+    if (timeoutUntil) {
+      send(client, {
+        t: "voice:denied",
+        channelId: target.channelId,
+        reason: `Você está em timeout até ${timeoutUntil.toISOString()}.`,
       });
       return;
     }
@@ -1039,6 +1118,7 @@ export function attachRealtime(server: HttpServer) {
       addClient(client);
       send(client, { t: "ready", userId });
       await broadcastPresence(userId);
+      await sendInitialVoiceSummaries(userId);
 
       ws.on("pong", () => {
         client.alive = true;
