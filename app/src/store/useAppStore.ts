@@ -110,6 +110,17 @@ type AppState = {
   localStream: MediaStream | null;
   localVideo: MediaStream | null;
   remoteStreams: Record<number, MediaStream>;
+  companionSessionId: string | null;
+  companionCode: string | null;
+  companionStatus:
+    | "idle"
+    | "pending"
+    | "paired"
+    | "video-ready"
+    | "disconnected"
+    | "error";
+  companionVideo: MediaStream | null;
+  companionCameraActive: boolean;
   incomingCall: {
     conversationId: number;
     actorName: string;
@@ -171,6 +182,11 @@ type AppState = {
         | "voicePlaybackBlocked"
         | "localStream"
         | "localVideo"
+        | "companionSessionId"
+        | "companionCode"
+        | "companionStatus"
+        | "companionVideo"
+        | "companionCameraActive"
       >
     >
   ) => void;
@@ -233,6 +249,11 @@ export const useAppStore = create<AppState>(set => ({
   localStream: null,
   localVideo: null,
   remoteStreams: {},
+  companionSessionId: null,
+  companionCode: null,
+  companionStatus: "idle",
+  companionVideo: null,
+  companionCameraActive: false,
   incomingCall: null,
   mobileNavOpen: false,
   mobileMembersOpen: false,
@@ -497,6 +518,11 @@ export const useAppStore = create<AppState>(set => ({
       localStream: null,
       localVideo: null,
       remoteStreams: {},
+      companionSessionId: null,
+      companionCode: null,
+      companionStatus: "idle",
+      companionVideo: null,
+      companionCameraActive: false,
     }),
 
   setIncomingCall: call => set({ incomingCall: call }),

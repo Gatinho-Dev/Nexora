@@ -182,6 +182,36 @@ export function useRealtime(myUserId: number | undefined) {
           voiceManager.handleSignal(roomKey, event.from, event.data as never);
           break;
         }
+        case "companion:session": {
+          voiceManager.handleCompanionSession(event.sessionId, event.code);
+          break;
+        }
+        case "companion:paired": {
+          voiceManager.handleCompanionPaired(event.sessionId);
+          break;
+        }
+        case "companion:signal": {
+          voiceManager.handleCompanionSignal(
+            event.sessionId,
+            event.data as never
+          );
+          break;
+        }
+        case "companion:control": {
+          voiceManager.handleCompanionControl(event.sessionId, event.action);
+          break;
+        }
+        case "companion:state": {
+          useAppStore.getState().setVoiceSession({
+            companionCameraActive: event.session.cameraActive,
+            companionStatus: event.session.status,
+          });
+          break;
+        }
+        case "companion:disconnected": {
+          voiceManager.handleCompanionDisconnected(event.sessionId);
+          break;
+        }
         case "notification": {
           utils.notification.unreadCount.invalidate();
           utils.notification.list.invalidate();
