@@ -22,6 +22,7 @@ import { NexoraAppIcon } from "@/components/NexoraBrand";
 export default function CompanionPage() {
   const [searchParams] = useSearchParams();
   const code = searchParams.get("code") ?? "";
+  const [activeCode, setActiveCode] = useState(code);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -45,6 +46,10 @@ export default function CompanionPage() {
     }
   }
 
+  function pairCode(): string {
+    return activeCode;
+  }
+
   async function ensurePeer() {
     if (pcRef.current) return pcRef.current;
     const pc = new RTCPeerConnection({
@@ -59,7 +64,7 @@ export default function CompanionPage() {
     pc.onicecandidate = event => {
       send({
         t: "companion:signal",
-        code,
+        code: pairCode(),
         data: {
           candidate: event.candidate ? event.candidate.toJSON() : null,
         },
@@ -93,7 +98,7 @@ export default function CompanionPage() {
         await pc.setLocalDescription(answer);
         send({
           t: "companion:signal",
-          code,
+          code: pairCode(),
           data: { description: pc.localDescription?.toJSON() },
         });
       } else if (msg.candidate !== undefined) {
@@ -114,7 +119,7 @@ export default function CompanionPage() {
         await pc.setLocalDescription(offer);
         send({
           t: "companion:signal",
-          code,
+          code: pairCode(),
           data: { description: pc.localDescription?.toJSON() },
         });
       } catch (error) {
@@ -125,9 +130,9 @@ export default function CompanionPage() {
     })();
   }
 
-  async function start() {
+  async function start(codeToPair: string) {
     setErrorMsg(null);
-    if (!code) {
+    if (!codeToPair) {
       setPhase("error");
       setErrorMsg("Falta o código de pareamento na URL.");
       return;
@@ -161,7 +166,7 @@ export default function CompanionPage() {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      send({ t: "pair", code });
+      send({ t: "pair", code: codeToPair });
     };
     ws.onmessage = event => {
       let msg: unknown;
@@ -188,10 +193,6 @@ export default function CompanionPage() {
           setPhase("paired");
           createOffer();
           break;
-        case "companion:state":
-          setCamera(!!m.session?.cameraActive);
-          setScreen(!!m.session?.screenActive);
-          break;
         case "companion:signal":
           void handleSignal(m.data);
           break;
@@ -199,6 +200,10 @@ export default function CompanionPage() {
           pairedRef.current = false;
           setPhase("error");
           setErrorMsg(m.message ?? "Erro ao parear o dispositivo.");
+          break;
+        case "companion:state":
+          setCamera(!!m.session?.cameraActive);
+          setScreen(!!m.session?.screenActive);
           break;
         default:
           break;
@@ -220,7 +225,7 @@ export default function CompanionPage() {
   }
 
   function sendControl(action: string) {
-    send({ t: "companion:control", code, action });
+    send({ t: "companion:control", code: pairCode(), action });
   }
 
   function cleanup() {
@@ -233,21 +238,18 @@ export default function CompanionPage() {
   }
 
   useEffect(() => {
-    if (!code) return () => cleanup();
-    const t = setTimeout(() => start(), 0);
-    return () => {
-      clearTimeout(t);
-      cleanup();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => cleanup();
   }, []);
 
   return (
     <main className="flex min-h-[100dvh] flex-col items-center justify-center bg-[#1e1f22] p-4 text-white">
       {phase === "code" && (
         <CompanionIdle
-          code={code}
-          onStart={start}
+          initialCode={code}
+          onStart={c => {
+            setActiveCode(c);
+            void start(c);
+          }}
         />
       )}
       {phase === "connecting" && (
@@ -354,39 +356,52 @@ function CameraPill({
 }
 
 function CompanionIdle({
-  code,
+  initialCode,
   onStart,
 }: {
-  code: string;
-  onStart: () => void;
+  initialCode: string;
+  onStart: (code: string) => void;
 }) {
-  const [composingCode, setComposingCode] = useState(code);
+  const [composingCode, setComposingCode] = useState(initialCode);
+  const hasInitialCode = initialCode.length >= 6;
   return (
     <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#2b2d31] p-6">
       <div className="mb-4 flex flex-col items-center gap-3 text-center">
         <NexoraAppIcon className="h-12 w-12" />
         <h1 className="text-lg font-bold">Controle de chamada Nexora</h1>
         <p className="text-sm text-white/60">
-          Use este dispositivo como câmera da sua chamada. Informe o código
-          exibido no QR code da conversa.
+          {hasInitialCode
+            ? "Vamos usar a câmera deste dispositivo na sua chamada. Ao tocar em conectar, a Nexora vai pedir acesso à câmera e ao microfone."
+            : "Use este dispositivo como câmera da sua chamada. Informe o código exibido no QR code da conversa."}
         </p>
       </div>
+      {hasInitialCode && (
+        <p className="mb-4 rounded-lg border border-[#5865F2]/30 bg-[#5865F2]/10 px-3 py-2 text-center font-mono text-lg tracking-[0.3em] text-white">
+          {initialCode}
+        </p>
+      )}
       <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-white/50">
         Código de pareamento
       </label>
-      <input
-        value={composingCode}
-        onChange={e =>
-          setComposingCode(
-            e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)
-          )
-        }
-        placeholder="Ex: AB12CD34"
-        className="mb-4 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-center text-lg font-mono tracking-[0.3em] outline-none focus:ring-2 focus:ring-[#5865F2]"
-      />
+      {hasInitialCode ? (
+        <p className="mb-4 text-center text-xs text-white/50">
+          O código veio do QR code. Você pode editá-lo abaixo se precisar.
+        </p>
+      ) : (
+        <input
+          value={composingCode}
+          onChange={e =>
+            setComposingCode(
+              e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)
+            )
+          }
+          placeholder="Ex: AB12CD34"
+          className="mb-4 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-center text-lg font-mono tracking-[0.3em] outline-none focus:ring-2 focus:ring-[#5865F2]"
+        />
+      )}
       <Button
         className="w-full"
-        onClick={onStart}
+        onClick={() => onStart(composingCode)}
         disabled={composingCode.length < 6}
       >
         <Smartphone className="mr-2 h-4 w-4" />
