@@ -45,8 +45,11 @@ export function BannerCropper({
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    // ObjectURL precisa ser criado/revogado no effect para gerenciar o ciclo de vida do blob.
     const url = URL.createObjectURL(file);
+    /* eslint-disable react-hooks/set-state-in-effect */
     setImageUrl(url);
+    /* eslint-enable react-hooks/set-state-in-effect */
     return () => URL.revokeObjectURL(url);
   }, [file]);
 

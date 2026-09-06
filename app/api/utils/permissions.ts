@@ -108,6 +108,28 @@ export async function requirePermission(
   return perms;
 }
 
+/** Throws FORBIDDEN unless the user holds at least one of the given permissions. */
+export async function requireAnyPermission(
+  userId: number,
+  serverId: number,
+  permissions: readonly Permission[],
+): Promise<Set<Permission>> {
+  const perms = await getMemberPermissions(userId, serverId);
+  if (!perms) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Você não é membro deste servidor.",
+    });
+  }
+  if (!permissions.some(p => perms.has(p))) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Você não tem permissão para fazer isso.",
+    });
+  }
+  return perms;
+}
+
 /** Highest role position. The owner is always above every role. */
 export async function getHighestRolePosition(userId: number, serverId: number) {
   const db = getDb();
@@ -243,6 +265,22 @@ export async function requireChannelAccess(userId: number, channelId: number) {
     throw new TRPCError({ code: "NOT_FOUND", message: "Canal não encontrado." });
   }
   return { channel, perms };
+}
+
+/** Filters channels down to the ones the user can see (VIEW_CHANNEL + optional permission). */
+export async function filterVisibleChannels(
+  userId: number,
+  channels: readonly (typeof schema.channels.$inferSelect)[],
+  required?: Permission,
+): Promise<(typeof schema.channels.$inferSelect)[]> {
+  const visible: (typeof schema.channels.$inferSelect)[] = [];
+  for (const channel of channels) {
+    const perms = await getEffectiveChannelPermissions(userId, channel);
+    if (!perms || !perms.has("VIEW_CHANNEL")) continue;
+    if (required && !perms.has(required)) continue;
+    visible.push(channel);
+  }
+  return visible;
 }
 
 /** Verifies the user belongs to a DM conversation. */

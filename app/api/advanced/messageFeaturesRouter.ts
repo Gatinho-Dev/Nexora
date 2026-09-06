@@ -261,8 +261,8 @@ export const messageFeaturesRouter = createRouter({
       const channels = serverIds.length
         ? await db.select().from(schema.channels).where(inArray(schema.channels.serverId, serverIds))
         : [];
-      const visibleChannels = await filterVisibleChannels(ctx.user.id, channels, "READ_MESSAGES");
-      const readableChannelIds = visibleChannels.map(channel => channel.id);
+     const visibleChannels = await filterVisibleChannels(ctx.user.id, channels, "READ_MESSAGES");
+      const readableChannelIds = visibleChannels.map((channel: (typeof schema.channels.$inferSelect)) => channel.id);
       if (!readableChannelIds.length && !conversationIds.length) return { items: [], nextCursor: null };
 
       const parsed = parseNaturalSearch(input.query);

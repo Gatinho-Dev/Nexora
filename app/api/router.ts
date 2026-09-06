@@ -15,6 +15,7 @@ import { threadRouter, announceRouter, webhookRouter } from "./communityRouters"
 import { pollRouter } from "./pollRouter";
 import { embedRouter } from "./embedRouter";
 import { commandRouter } from "./services/commandRouter";
+import { advancedRouter } from "./advanced/router";
 import { createRouter, publicQuery } from "./middleware";
 
 export const appRouter = createRouter({
@@ -39,6 +40,7 @@ export const appRouter = createRouter({
   embed: embedRouter,
   announce: announceRouter,
   webhook: webhookRouter,
+  advanced: advancedRouter,
 });
 
 export type AppRouter = typeof appRouter;

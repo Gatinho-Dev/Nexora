@@ -26,6 +26,8 @@ import {
 import { OPEN_SETTINGS_EVENT } from "@/lib/openUserSettings";
 import { MigrationBanner } from "@/components/MigrationBanner";
 import { GlobalMessageBanner } from "@/components/GlobalMessageBanner";
+import { OfflineStatusBanner } from "@/components/OfflineStatusBanner";
+import { UserActionHost } from "@/components/UserActionHost";
 import { BottomNav, type MobileTab } from "@/components/mobile/BottomNav";
 import { YouSheet } from "@/components/mobile/YouSheet";
 import { NotificationsSheet } from "@/components/mobile/NotificationsSheet";
@@ -221,6 +223,8 @@ export function AppLayout() {
       <Seo noindex canonicalPath="/channels/@me" />
       <MigrationBanner />
       <GlobalMessageBanner />
+      <OfflineStatusBanner />
+      <UserActionHost />
 
       <div className="flex min-h-0 flex-1">
       {/* Desktop Rail */}
