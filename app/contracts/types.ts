@@ -442,6 +442,39 @@ export type VoiceParticipant = {
   speaker?: boolean;
 };
 
+export type CompanionControlAction =
+  | "toggle-mute"
+  | "toggle-deafen"
+  | "toggle-camera"
+  | "toggle-screen"
+  | "leave-call";
+
+export type CompanionStatus = "pending" | "paired" | "video-ready" | "disconnected";
+
+export type CompanionSessionPublic = {
+  id: string;
+  ownerUserId: number;
+  status: CompanionStatus;
+  cameraActive: boolean;
+  muted: boolean;
+  deafened: boolean;
+  screenActive: boolean;
+  participantsCount: number;
+  createdAt: string;
+};
+
+export type WSPublicClientEvent =
+  | { t: "pair"; code: string }
+  | { t: "companion:ready"; code: string }
+  | { t: "companion:signal"; code: string; data: unknown }
+  | { t: "companion:control"; code: string; action: CompanionControlAction };
+
+export type WSPublicServerEvent =
+  | { t: "paired"; code: string; session: CompanionSessionPublic }
+  | { t: "companion:state"; code: string; session: CompanionSessionPublic }
+  | { t: "companion:signal"; code: string; data: unknown }
+  | { t: "companion:error"; code: string; message: string };
+
 // ── Segurança: denúncias / apelações / casos ──────────────────
 export type ReportTargetType =
   "message" | "user" | "media" | "server" | "channel";
@@ -567,7 +600,10 @@ export type WSClientEvent =
       conversationId?: number;
       voiceSessionId?: string;
       data: unknown;
-    };
+    }
+  | { t: "companion:start"; voiceSessionId?: string }
+  | { t: "companion:signal"; sessionId: string; data: unknown }
+  | { t: "companion:stop"; sessionId: string };
 
 /** Atividade de jogo (Roblox) transmitida em tempo real e retornada por query. */
 export type RobloxActivityDTO = {
@@ -648,6 +684,28 @@ export type WSServerEvent =
     }
   | { t: "notification"; notification: NotificationDTO }
   | { t: "official:announcement"; announcement: OfficialAnnouncementDTO }
+  | {
+      t: "companion:session";
+      sessionId: string;
+      code: string;
+    }
+  | { t: "companion:paired"; sessionId: string }
+  | {
+      t: "companion:control";
+      sessionId: string;
+      action: CompanionControlAction;
+    }
+  | {
+      t: "companion:state";
+      sessionId: string;
+      session: CompanionSessionPublic;
+    }
+  | {
+      t: "companion:signal";
+      sessionId: string;
+      data: unknown;
+    }
+  | { t: "companion:disconnected"; sessionId: string }
   | {
       t: "poll:update";
       messageId: number;

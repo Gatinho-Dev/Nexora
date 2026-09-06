@@ -5,6 +5,7 @@ import { NexoraAppIcon } from "@/components/NexoraBrand";
 const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
+const CompanionPage = lazy(() => import("./pages/CompanionPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AppLayout = lazy(() =>
   import("./pages/AppLayout").then(module => ({ default: module.AppLayout }))
@@ -114,6 +115,14 @@ export default function App() {
         element={
           <Deferred>
             <Register />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/companion"
+        element={
+          <Deferred>
+            <CompanionPage />
           </Deferred>
         }
       />

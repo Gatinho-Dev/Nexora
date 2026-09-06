@@ -35,6 +35,7 @@ export function serveStaticFiles(app: App) {
   const SPA_ROUTES = [
     "/login",
     "/register",
+    "/companion",
     "/invite",
     "/privacy",
     "/terms",

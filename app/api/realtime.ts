@@ -30,6 +30,12 @@ import {
   formatDmCallHistory,
   type DmCallEndReason,
 } from "./voice/dmCallPolicy";
+import {
+  createCompanionSession,
+  getCompanionSessionForOwner,
+  refreshCompanionExpiry,
+  disbandCompanionSession,
+} from "./voice/companion";
 import { insertSystemMessage, userName } from "./services/groupService";
 import { activeServerTimeout } from "./services/serverModeration";
 
@@ -1003,6 +1009,66 @@ async function handleEvent(client: Client, event: WSClientEvent) {
         conversationId: event.conversationId,
         data: event.data,
       });
+      break;
+    }
+    case "companion:start": {
+      const roomKey = userVoiceRoom.get(client.userId);
+      if (!roomKey) {
+        send(client, {
+          t: "voice:denied",
+          reason: "Entre numa chamada para usar outro dispositivo como câmera.",
+        });
+        return;
+      }
+      if (event.voiceSessionId !== voiceSessionByUser.get(client.userId))
+        return;
+      const session = createCompanionSession({
+        ownerUserId: client.userId,
+        sessionId: event.voiceSessionId ?? roomKey,
+      });
+      send(client, {
+        t: "companion:session",
+        sessionId: session.id,
+        code: session.code,
+      });
+      break;
+    }
+    case "companion:signal": {
+      const session = getCompanionSessionForOwner(
+        event.sessionId,
+        client.userId
+      );
+      if (!session) return;
+      refreshCompanionExpiry(session);
+      const ws = session.companionSocket;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(
+        JSON.stringify({
+          t: "companion:signal",
+          code: session.code,
+          data: event.data,
+        })
+      );
+      break;
+    }
+    case "companion:stop": {
+      const session = getCompanionSessionForOwner(
+        event.sessionId,
+        client.userId
+      );
+      if (!session) return;
+      const ws = session.companionSocket;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            t: "companion:error",
+            code: session.code,
+            message: "O proprietário encerrou a câmera externa.",
+          })
+        );
+        ws.close(4000, "owner-stopped");
+      }
+      disbandCompanionSession(session);
       break;
     }
   }

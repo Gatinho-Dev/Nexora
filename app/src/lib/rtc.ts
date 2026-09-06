@@ -126,6 +126,10 @@ class VoiceManager {
   private cameraTrack: MediaStreamTrack | null = null;
   private screenTrack: MediaStreamTrack | null = null;
   private screenAudioTrack: MediaStreamTrack | null = null;
+  private companionPc: RTCPeerConnection | null = null;
+  private companionPendingCandidates: (RTCIceCandidateInit | null)[] = [];
+  private companionVideoTrack: MediaStreamTrack | null = null;
+  private companionSessionId: string | null = null;
   private knownParticipantIds = new Set<number>();
   private mutedBeforeDeafen = false;
   private reconnectDeadline: ReturnType<typeof setTimeout> | null = null;
@@ -587,7 +591,8 @@ class VoiceManager {
     if (microphoneTrack && localStream) {
       peer.microphoneSender = pc.addTrack(microphoneTrack, localStream);
     }
-    const videoTrack = this.screenTrack ?? this.cameraTrack;
+    const videoTrack =
+      this.screenTrack ?? this.companionVideoTrack ?? this.cameraTrack;
     if (videoTrack) {
       peer.videoSender = pc.addTrack(videoTrack, new MediaStream([videoTrack]));
     }
@@ -902,6 +907,189 @@ class VoiceManager {
     this.sendState({ camera: false });
   }
 
+  // ── Companion camera (QR-paired second device) ─────────────
+  /** Request a fresh pairing code for an external camera device. */
+  startCompanionCamera() {
+    if (!this.inCall) return;
+    realtime.send({
+      t: "companion:start",
+      voiceSessionId: this.voiceSessionId ?? undefined,
+    });
+  }
+
+  /** Store the pairing code returned by the server. */
+  handleCompanionSession(sessionId: string, code: string) {
+    this.companionSessionId = sessionId;
+    useAppStore.getState().setVoiceSession({
+      companionSessionId: sessionId,
+      companionCode: code,
+      companionStatus: "pending",
+    });
+  }
+
+  /** A companion device connected — prepare the WebRTC peer. */
+  handleCompanionPaired(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    if (!this.companionPc) this.createCompanionPeer();
+    useAppStore.getState().setVoiceSession({
+      companionStatus: "paired",
+    });
+  }
+
+  private createCompanionPeer() {
+    if (this.companionPc) return;
+    this.companionPendingCandidates = [];
+    const pc = new RTCPeerConnection({
+      iceServers: this.iceServers,
+      iceCandidatePoolSize: 4,
+    });
+    this.companionPc = pc;
+
+    pc.onicecandidate = event => {
+      if (!this.companionSessionId) return;
+      realtime.send({
+        t: "companion:signal",
+        sessionId: this.companionSessionId,
+        data: {
+          candidate: event.candidate ? event.candidate.toJSON() : null,
+        },
+      });
+    };
+
+    pc.ontrack = event => {
+      const videoTrack = event.streams.length
+        ? event.streams.flatMap(s => s.getTracks())
+        : [event.track];
+      const track = videoTrack.find(t => t.kind === "video");
+      if (track) {
+        this.companionVideoTrack = track;
+        this.publishVideoTrack(track).catch(() => {});
+        this.refreshLocalVideo();
+        useAppStore.getState().setVoiceSession({
+          cameraOn: true,
+          companionVideo: new MediaStream([track]),
+          companionStatus: "video-ready",
+          companionCameraActive: true,
+        });
+        this.sendState({ camera: true });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      this.log("companion connection", pc.connectionState);
+    };
+  }
+
+  /** Incoming signaling from the companion (offer/answer/ice). */
+  async handleCompanionSignal(sessionId: string, data: SignalData) {
+    if (sessionId !== this.companionSessionId) return;
+    if (!this.companionPc) this.createCompanionPeer();
+    const pc = this.companionPc!;
+    try {
+      if (data.description) {
+        await pc.setRemoteDescription(data.description);
+        while (this.companionPendingCandidates.length) {
+          await pc.addIceCandidate(
+            this.companionPendingCandidates.shift() ?? null
+          );
+        }
+        if (data.description.type === "offer") {
+          await pc.setLocalDescription();
+          if (pc.localDescription) {
+            realtime.send({
+              t: "companion:signal",
+              sessionId,
+              data: { description: pc.localDescription.toJSON() },
+            });
+          }
+        }
+      } else if (data.candidate !== undefined) {
+        if (!pc.remoteDescription) {
+          this.companionPendingCandidates.push(data.candidate);
+        } else {
+          await pc.addIceCandidate(data.candidate);
+        }
+      }
+    } catch (error) {
+      console.error("[VOICE] Falha no signaling do companion", error);
+    }
+  }
+
+  /** The companion panel sent a control action for this call. */
+  handleCompanionControl(sessionId: string, action: string) {
+    if (sessionId !== this.companionSessionId) return;
+    switch (action) {
+      case "toggle-mute":
+        this.toggleMute();
+        break;
+      case "toggle-deafen":
+        this.toggleDeafen();
+        break;
+      case "toggle-camera":
+        void this.stopCompanionCamera();
+        break;
+      case "toggle-screen":
+        this.toggleCompanionScreen();
+        break;
+      case "leave-call":
+        void this.leave();
+        break;
+    }
+  }
+
+  /** Companion requested to disconnect — tear down the peer. */
+  handleCompanionDisconnected(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    this.disconnectCompanionPeer();
+    useAppStore.getState().setVoiceSession({
+      companionStatus: "idle",
+      companionVideo: null,
+      companionCameraActive: false,
+      companionSessionId: null,
+      companionCode: null,
+    });
+  }
+
+  async stopCompanionCamera() {
+    if (this.companionSessionId) {
+      realtime.send({ t: "companion:stop", sessionId: this.companionSessionId });
+      this.companionSessionId = null;
+    }
+    this.disconnectCompanionPeer();
+    useAppStore.getState().setVoiceSession({
+      cameraOn: false,
+      companionStatus: "idle",
+      companionVideo: null,
+      companionCameraActive: false,
+      companionSessionId: null,
+      companionCode: null,
+    });
+    this.sendState({ camera: false });
+  }
+
+  private disconnectCompanionPeer() {
+    const pc = this.companionPc;
+    this.companionPc = null;
+    this.companionPendingCandidates = [];
+    this.companionVideoTrack = null;
+    if (pc) {
+      for (const sender of pc.getSenders()) sender.replaceTrack(null).catch(() => {});
+      pc.ontrack = null;
+      pc.onicecandidate = null;
+      pc.onconnectionstatechange = null;
+      pc.close();
+    }
+  }
+
+  private toggleCompanionScreen() {
+    const store = useAppStore.getState();
+    if (store.screenOn) {
+      void this.stopScreenShare();
+    } else {
+      void this.startScreenShare().catch(() => {});
+    }
+  }
+
   async startScreenShare() {
     if (this.screenTrack) return;
     let stream: MediaStream;
@@ -989,7 +1177,8 @@ class VoiceManager {
   }
 
   private refreshLocalVideo() {
-    const track = this.screenTrack ?? this.cameraTrack;
+    const track =
+      this.screenTrack ?? this.companionVideoTrack ?? this.cameraTrack;
     useAppStore
       .getState()
       .setVoiceSession({ localVideo: track ? new MediaStream([track]) : null });
@@ -1262,6 +1451,8 @@ class VoiceManager {
     this.cameraTrack = null;
     this.screenTrack = null;
     this.screenAudioTrack = null;
+    this.disconnectCompanionPeer();
+    this.companionSessionId = null;
     const session = this.audioSession;
     session?.outputStream.getAudioTracks().forEach(track => {
       track.onended = null;
