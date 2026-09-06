@@ -2,10 +2,14 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { useMemo, useState } from "react";
 import {
   BadgeCheck,
+  Bookmark,
+  CalendarClock,
   Inbox,
+  MessagesSquare,
   Plus,
   Search,
   ShieldCheck,
+  Star,
   Users,
 } from "lucide-react";
 import type {
@@ -82,6 +86,11 @@ export function DMSidebar({
     location.pathname === "/channels/@me" ||
     location.pathname === "/channels/@me/friends";
   const requestsActive = location.pathname === "/channels/@me/requests";
+  const searchActive = location.pathname === "/channels/@me/search";
+  const savedActive = location.pathname === "/channels/@me/saved";
+  const scheduledActive = location.pathname === "/channels/@me/scheduled";
+  const favoritesActive = location.pathname === "/channels/@me/favorites";
+  const followedThreadsActive = location.pathname === "/channels/@me/threads";
 
   return (
     <aside
@@ -116,6 +125,36 @@ export function DMSidebar({
           active={requestsActive}
           badge={requests.length + spam.length}
           onClick={() => navigate("/channels/@me/requests")}
+        />
+        <PrivateNavItem
+          icon={<Search />}
+          label="Busca global"
+          active={searchActive}
+          onClick={() => navigate("/channels/@me/search")}
+        />
+        <PrivateNavItem
+          icon={<Star />}
+          label="Favoritos"
+          active={favoritesActive}
+          onClick={() => navigate("/channels/@me/favorites")}
+        />
+        <PrivateNavItem
+          icon={<Bookmark />}
+          label="Mensagens salvas"
+          active={savedActive}
+          onClick={() => navigate("/channels/@me/saved")}
+        />
+        <PrivateNavItem
+          icon={<CalendarClock />}
+          label="Mensagens agendadas"
+          active={scheduledActive}
+          onClick={() => navigate("/channels/@me/scheduled")}
+        />
+        <PrivateNavItem
+          icon={<MessagesSquare />}
+          label="Threads seguidas"
+          active={followedThreadsActive}
+          onClick={() => navigate("/channels/@me/threads")}
         />
         <button
           type="button"
