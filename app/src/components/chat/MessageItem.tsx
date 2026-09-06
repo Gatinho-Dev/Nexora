@@ -1,7 +1,6 @@
 import { memo, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { ImageViewer } from "./ImageViewer";
-import { ForwardMessageDialog } from "./ForwardMessageDialog";
 import { PollMessage } from "./poll/PollMessage";
 import { EmbedCard } from "./embeds/EmbedCard";
 import {
@@ -116,7 +115,6 @@ function MessageItemBase({
   const editing = useChatUIStore(s => s.editing);
   const [editText, setEditText] = useState(message.content);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [forwardOpen, setForwardOpen] = useState(false);
   const [emojiBarOpen, setEmojiBarOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -153,17 +151,6 @@ function MessageItemBase({
       if (message.conversationId) {
         void utils.group.listPins.invalidate({
           conversationId: message.conversationId,
-        });
-      }
-      toast.success("Mensagem fixada.");
-    },
-    onError: error => toast.error(error.message),
-  });
-  const pinChannelMessage = trpc.advanced.messages.setPinned.useMutation({
-    onSuccess: () => {
-      if (message.channelId != null) {
-        void utils.advanced.messages.pins.invalidate({
-          channelId: message.channelId,
         });
       }
       toast.success("Mensagem fixada.");
@@ -619,27 +606,6 @@ function MessageItemBase({
                     mensagem
                   </DropdownMenuItem>
                 )}
-                {canPinMessages && message.channelId != null && (
-                  <DropdownMenuItem
-                    onClick={() =>
-                      pinChannelMessage.mutate({
-                        messageId: message.id,
-                        pinned: true,
-                      })
-                    }
-                    className="cursor-pointer hover:bg-white/10"
-                  >
-                    <Pin className="mr-2 h-3.5 w-3.5 text-primary" /> Fixar
-                    mensagem
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem
-                  onClick={() => setForwardOpen(true)}
-                  className="cursor-pointer hover:bg-white/10"
-                >
-                  <CornerUpLeft className="mr-2 h-3.5 w-3.5 text-muted2" />{" "}
-                  Encaminhar
-                </DropdownMenuItem>
                 {!isMine && (
                   <DropdownMenuItem
                     onClick={() => setReportOpen(true)}
@@ -804,24 +770,6 @@ function MessageItemBase({
                     },
                   ]
                 : []),
-              ...(canPinMessages && message.channelId != null
-                ? [
-                    {
-                      label: "Fixar mensagem",
-                      icon: Pin as LucideIcon,
-                      run: () =>
-                        pinChannelMessage.mutate({
-                          messageId: message.id,
-                          pinned: true,
-                        }),
-                    },
-                  ]
-                : []),
-              {
-                label: "Encaminhar mensagem",
-                icon: CornerUpLeft as LucideIcon,
-                run: () => setForwardOpen(true),
-              },
               ...(isMine
                 ? [
                     {
@@ -893,11 +841,6 @@ function MessageItemBase({
         open={reportOpen}
         onOpenChange={setReportOpen}
         target={{ type: "message", id: message.id }}
-      />
-      <ForwardMessageDialog
-        messageId={message.id}
-        open={forwardOpen}
-        onOpenChange={setForwardOpen}
       />
       {reportedFileId !== null && (
         <ReportDialog

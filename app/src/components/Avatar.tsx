@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/useAppStore";
 import { statusColor } from "@/lib/statusColor";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Props = {
   /** Convenience: derive userId/name/src from a user-like object. */

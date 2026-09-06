@@ -50,8 +50,6 @@ export function UserActionHost() {
   }, []);
 
   useEffect(() => {
-    // Pré-preenche a nota ao abrir a ação com dados já carregados.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (request?.action === "note" && savedNote.data) setNote(savedNote.data.content ?? "");
   }, [request?.action, savedNote.data]);
 

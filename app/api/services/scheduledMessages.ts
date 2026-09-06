@@ -6,7 +6,6 @@ import {
   requireConversationAccess,
 } from "../utils/permissions";
 import { assertCanInteract } from "./accountSafety";
-import { assertNotTimedOut, enforceSlowMode } from "./serverModeration";
 import { buildMessageDTO } from "../messageRouter";
 import { broadcastToChannel, broadcastToConversation } from "../realtime";
 
@@ -30,12 +29,6 @@ async function deliver(job: typeof schema.scheduledMessages.$inferSelect) {
     const { channel, perms } = await requireChannelAccess(job.userId, job.channelId);
     if (!perms.has("SEND_MESSAGES")) throw new Error("Permissão de envio removida.");
     if (channel.type === "FORUM") throw new Error("Use um post de fórum para este canal.");
-    await assertNotTimedOut(job.userId, channel.serverId);
-    await enforceSlowMode({
-      userId: job.userId,
-      channelId: channel.id,
-      canBypass: perms.has("ADMINISTRATOR") || perms.has("BYPASS_SLOWMODE"),
-    });
   } else if (job.conversationId) {
     await requireConversationAccess(job.userId, job.conversationId);
   } else {

@@ -1,138 +1,220 @@
-import { useEffect, useRef, useState } from "react";
-import { Loader2, Mic, Play, Save, Scissors, Square, Trash2, Upload } from "lucide-react";
-import { toast } from "sonner";
-import { trpc } from "@/providers/trpc";
-import { apiUrl } from "@/lib/endpoints";
+import { Loader2, AlertCircle, Mic, MicOff, Play, Square, Volume2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
+import { toast } from "sonner";
 
-type PreparedAudio = { file: File; url: string; durationMs: number; waveform: number[] };
-
-async function inspectAudio(file: File): Promise<PreparedAudio> {
-  const bytes = await file.arrayBuffer();
-  const context = new AudioContext();
-  try {
-    const buffer = await context.decodeAudioData(bytes.slice(0));
-    const channel = buffer.getChannelData(0);
-    const bars = 64;
-    const block = Math.max(1, Math.floor(channel.length / bars));
-    const waveform = Array.from({ length: bars }, (_, index) => {
-      let peak = 0;
-      const end = Math.min(channel.length, (index + 1) * block);
-      for (let cursor = index * block; cursor < end; cursor += 1) peak = Math.max(peak, Math.abs(channel[cursor]));
-      return Number(Math.min(1, peak).toFixed(4));
-    });
-    return { file, url: URL.createObjectURL(file), durationMs: Math.round(buffer.duration * 1000), waveform };
-  } finally {
-    await context.close();
-  }
-}
-
-async function renderWav(file: File, startMs: number, endMs: number, volume: number) {
-  const context = new AudioContext();
-  try {
-    const source = await context.decodeAudioData(await file.arrayBuffer());
-    const startFrame = Math.floor(startMs / 1000 * source.sampleRate);
-    const endFrame = Math.min(source.length, Math.ceil(endMs / 1000 * source.sampleRate));
-    const frames = Math.max(1, endFrame - startFrame);
-    const channels = Math.min(2, source.numberOfChannels);
-    const bytesPerSample = 2;
-    const buffer = new ArrayBuffer(44 + frames * channels * bytesPerSample);
-    const view = new DataView(buffer);
-    const write = (offset: number, value: string) => [...value].forEach((character, index) => view.setUint8(offset + index, character.charCodeAt(0)));
-    write(0, "RIFF"); view.setUint32(4, buffer.byteLength - 8, true); write(8, "WAVE"); write(12, "fmt ");
-    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, channels, true); view.setUint32(24, source.sampleRate, true);
-    view.setUint32(28, source.sampleRate * channels * bytesPerSample, true); view.setUint16(32, channels * bytesPerSample, true); view.setUint16(34, 16, true);
-    write(36, "data"); view.setUint32(40, frames * channels * bytesPerSample, true);
-    let offset = 44;
-    const gain = volume / 100;
-    const channelData = Array.from({ length: channels }, (_, channel) => source.getChannelData(channel));
-    for (let frame = 0; frame < frames; frame += 1) for (let channel = 0; channel < channels; channel += 1) {
-      const sample = Math.max(-1, Math.min(1, channelData[channel][startFrame + frame] * gain));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-      offset += bytesPerSample;
-    }
-    return new File([buffer], `${file.name.replace(/\.[^.]+$/, "")}-clip.wav`, { type: "audio/wav" });
-  } finally { await context.close(); }
-}
+const CATEGORIES = [
+  ["join", "Entrada no canal"],
+  ["leave", "Saída do canal"],
+  ["mute", "Mutar"],
+  ["unmute", "Desmutar"],
+  ["deafen", "Ensurdecer"],
+  ["undeafen", "Desensurdecer"],
+] as const;
 
 export function AudioClipStudio() {
-  const clips = trpc.advanced.server.audioClips.useQuery();
-  const [prepared, setPrepared] = useState<PreparedAudio | null>(null);
-  const [name, setName] = useState("");
-  const [range, setRange] = useState<[number, number]>([0, 1]);
-  const [volume, setVolume] = useState(100);
-  const [recording, setRecording] = useState(false);
-  const recorder = useRef<MediaRecorder | null>(null);
-  const recordedChunks = useRef<Blob[]>([]);
-  const input = useRef<HTMLInputElement>(null);
-  const save = trpc.advanced.server.saveAudioClip.useMutation({
-    onSuccess: () => { toast.success("Clipe salvo."); void clips.refetch(); clearPrepared(); },
-    onError: error => toast.error(error.message),
+  const [clips, setClips] = useState<
+    Array<{ id: string; category: string; name: string; url: string; volume: number }>
+  >([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    category: "join",
+    name: "",
+    url: "",
+    volume: 0.5,
   });
-  const remove = trpc.advanced.server.deleteAudioClip.useMutation({
-    onSuccess: () => { toast.success("Clipe removido."); void clips.refetch(); },
-    onError: error => toast.error(error.message),
-  });
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
 
-  const clearPrepared = () => {
-    setPrepared(current => { if (current) URL.revokeObjectURL(current.url); return null; });
-    setName(""); setRange([0, 1]); setVolume(100);
-  };
-  useEffect(() => () => { if (prepared) URL.revokeObjectURL(prepared.url); }, [prepared]);
-
-  const prepare = async (file: File) => {
-    if (!file.type.startsWith("audio/")) return toast.error("Escolha um arquivo de áudio.");
+  useEffect(() => {
     try {
-      const result = await inspectAudio(file);
-      if (result.durationMs > 60_000) throw new Error("O clipe deve ter no máximo 60 segundos.");
-      setPrepared(current => { if (current) URL.revokeObjectURL(current.url); return result; });
-      setName(file.name.replace(/\.[^.]+$/, "").slice(0, 64));
-      setRange([0, result.durationMs]);
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Áudio inválido."); }
+      const stored = localStorage.getItem("audio-clips");
+      if (stored) setClips(JSON.parse(stored));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("audio-clips", JSON.stringify(clips));
+  }, [clips]);
+
+  const saveClip = () => {
+    if (!formData.name.trim() || !formData.url.trim()) return;
+    if (editingId) {
+      setClips((c) =>
+        c.map((clip) =>
+          clip.id === editingId ? { ...formData, id: editingId } : clip
+        )
+      );
+      toast.success("Clipe atualizado.");
+    } else {
+      setClips((c) => [...c, { ...formData, id: crypto.randomUUID() }]);
+      toast.success("Clipe adicionado.");
+    }
+    setShowForm(false);
+    setEditingId(null);
+    setFormData({ category: "join", name: "", url: "", volume: 0.5 });
   };
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const current = new MediaRecorder(stream);
-      recordedChunks.current = [];
-      current.ondataavailable = event => { if (event.data.size) recordedChunks.current.push(event.data); };
-      current.onstop = () => {
-        stream.getTracks().forEach(track => track.stop());
-        const blob = new Blob(recordedChunks.current, { type: current.mimeType || "audio/webm" });
-        void prepare(new File([blob], `clip-${Date.now()}.webm`, { type: blob.type }));
-      };
-      current.start(200);
-      recorder.current = current;
-      setRecording(true);
-      window.setTimeout(() => { if (current.state === "recording") current.stop(); setRecording(false); }, 60_000);
-    } catch { toast.error("Não foi possível acessar o microfone."); }
+  const deleteClip = (id: string) => {
+    setClips((c) => c.filter((clip) => clip.id !== id));
+    toast.success("Clipe removido.");
   };
 
-  const uploadAndSave = async () => {
-    if (!prepared || !name.trim()) return;
-    try {
-      const rendered = await renderWav(prepared.file, range[0], range[1], volume);
-      const form = new FormData(); form.append("file", rendered);
-      const response = await fetch(apiUrl("/api/upload"), { method: "POST", body: form, credentials: "include" });
-      const data = await response.json() as { id?: number; error?: string };
-      if (!response.ok || !data.id) throw new Error(data.error || "Falha no upload.");
-      await save.mutateAsync({ fileId: data.id, name: name.trim(), startMs: 0, endMs: Math.round(range[1] - range[0]), volume: 100, waveform: prepared.waveform });
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Não foi possível salvar o clipe."); }
+  const playClip = (clip: typeof clips[0]) => {
+    if (playingId === clip.id) {
+      audioRefs.current[clip.id]?.pause();
+      setPlayingId(null);
+      return;
+    }
+    if (playingId) audioRefs.current[playingId]?.pause();
+    const audio = new Audio(clip.url);
+    audio.volume = clip.volume;
+    audioRefs.current[clip.id] = audio;
+    audio.play();
+    setPlayingId(clip.id);
+    audio.onended = () => setPlayingId(null);
   };
 
-  return <section className="space-y-4 rounded-xl border border-white/[0.08] bg-white/[0.03] p-5">
-    <div className="flex items-start gap-3"><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#4654d8] text-white"><Scissors className="size-4" /></span><div><p className="text-sm font-bold text-white">Clipes de áudio</p><p className="mt-1 text-[11px] text-muted2">Grave, corte e salve sons privados para usar nas mensagens.</p></div></div>
-    {!prepared ? <div className="grid grid-cols-2 gap-2"><input ref={input} type="file" accept="audio/*" className="hidden" onChange={event => event.target.files?.[0] && void prepare(event.target.files[0])} /><Button variant="secondary" className="min-h-11" onClick={() => input.current?.click()}><Upload className="mr-2 size-4" />Enviar áudio</Button><Button variant={recording ? "destructive" : "secondary"} className="min-h-11" onClick={() => { if (recording) { recorder.current?.stop(); setRecording(false); } else void startRecording(); }}>{recording ? <Square className="mr-2 size-4" /> : <Mic className="mr-2 size-4" />}{recording ? "Parar" : "Gravar"}</Button></div> : <div className="space-y-4 rounded-xl border border-white/[0.07] bg-black/10 p-3">
-      <div className="flex h-20 items-center gap-[2px] overflow-hidden rounded-lg bg-black/20 px-2" aria-label="Forma de onda do áudio">{prepared.waveform.map((bar, index) => <span key={index} className="min-w-[2px] flex-1 rounded-full bg-[#7383ff]" style={{ height: `${Math.max(6, bar * 64)}px` }} />)}</div>
-      <audio src={prepared.url} controls className="h-9 w-full" />
-      <Input value={name} onChange={event => setName(event.target.value)} maxLength={64} placeholder="Nome do clipe" />
-      <div className="space-y-2"><div className="flex justify-between text-[10px] text-muted2"><span>Corte: {(range[0] / 1000).toFixed(1)}s</span><span>{(range[1] / 1000).toFixed(1)}s</span></div><Slider min={0} max={prepared.durationMs} step={100} minStepsBetweenThumbs={1} value={range} onValueChange={value => setRange(value as [number, number])} aria-label="Intervalo do clipe" /></div>
-      <div className="space-y-2"><div className="flex justify-between text-[10px] text-muted2"><span>Volume</span><span>{volume}%</span></div><Slider min={0} max={100} value={[volume]} onValueChange={([value]) => setVolume(value)} /></div>
-      <div className="flex justify-end gap-2"><Button variant="ghost" onClick={clearPrepared}>Cancelar</Button><Button disabled={save.isPending || !name.trim()} onClick={() => void uploadAndSave()}>{save.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}Salvar clipe</Button></div>
-    </div>}
-    {clips.data?.length ? <div className="grid gap-2 sm:grid-cols-2">{clips.data.map(clip => <div key={clip.id} className="flex items-center gap-2 rounded-lg bg-black/10 p-2"><button type="button" onClick={() => { const audio = new Audio(clip.url); audio.volume = clip.volume / 100; audio.currentTime = clip.startMs / 1000; audio.addEventListener("timeupdate", () => { if (audio.currentTime * 1000 >= clip.endMs) audio.pause(); }); void audio.play(); }} className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#4654d8]/20 text-[#aab2ff]" aria-label={`Ouvir ${clip.name}`}><Play className="size-4" /></button><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-white">{clip.name}</p><p className="text-[9px] text-muted2">{((clip.endMs - clip.startMs) / 1000).toFixed(1)}s</p></div><Button size="icon-sm" variant="ghost" disabled={remove.isPending} onClick={() => remove.mutate({ id: clip.id })} aria-label={`Excluir ${clip.name}`}><Trash2 className="size-4 text-red-400" /></Button></div>)}</div> : null}
-  </section>;
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) =>
+    setFormData((f) => ({ ...f, category: e.target.value }));
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setFormData((f) => ({ ...f, name: e.target.value }));
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setFormData((f) => ({ ...f, url: e.target.value }));
+  const handleVolumeChange = (v: number[]) =>
+    setFormData((f) => ({ ...f, volume: v[0] }));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-white">Audio Clip Studio</h2>
+          <p className="mt-1 text-xs text-muted2">
+            Crie sons personalizados para eventos de voz.
+          </p>
+        </div>
+        <Button
+          variant={showForm ? "secondary" : "default"}
+          onClick={() => {
+            setShowForm(!showForm);
+            if (!showForm) {
+              setEditingId(null);
+              setFormData({ category: "join", name: "", url: "", volume: 0.5 });
+            }
+          }}
+        >
+          {showForm ? "Cancelar" : "Novo clipe"}
+        </Button>
+      </div>
+
+      {showForm && (
+        <div className="rounded-2xl border border-white/[0.08] bg-sidebar p-5 space-y-4">
+          <h3 className="font-bold">{editingId ? "Editar" : "Novo"} clipe</h3>
+          <div className="space-y-2">
+            <label className="text-xs font-medium">Categoria</label>
+            <select value={formData.category} onChange={handleCategoryChange} className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white">
+              {CATEGORIES.map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium">Nome</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={handleNameChange}
+              placeholder="Ex: Meu som de entrada"
+              className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white"
+              maxLength={40}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium">URL do áudio (MP3/OGG)</label>
+            <input
+              type="url"
+              value={formData.url}
+              onChange={handleUrlChange}
+              placeholder="https://exemplo.com/som.mp3"
+              className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium">Volume: {Math.round(formData.volume * 100)}%</label>
+            <Slider
+              value={[formData.volume]}
+              onValueChange={handleVolumeChange}
+              min={0}
+              max={1}
+              step={0.05}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={saveClip} disabled={!formData.name.trim() || !formData.url.trim()}>
+              {editingId ? "Salvar alterações" : "Adicionar clipe"}
+            </Button>
+            {editingId && (
+              <Button variant="ghost" onClick={() => { setShowForm(false); setEditingId(null); setFormData({ category: "join", name: "", url: "", volume: 0.5 }); }}>
+                Cancelar
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {clips.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-8 text-center">
+          <Mic className="mx-auto h-10 w-10 text-muted2" />
+          <p className="mt-2 text-xs text-muted2">Nenhum clipe criado ainda.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {clips.map((clip) => (
+            <div key={clip.id} className="rounded-xl border border-white/10 bg-sidebar/50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#7383FF]/20 text-[#7383FF]">
+                    {CATEGORIES.find(([k]) => k === clip.category)?.[1] ?? clip.category}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-bold text-white truncate">{clip.name}</p>
+                    <p className="text-[10px] text-muted2 truncate max-w-xs">{clip.url}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => playClip(clip)}
+                    aria-label={playingId === clip.id ? "Parar" : "Reproduzir"}
+                  >
+                    {playingId === clip.id ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => { setFormData(clip); setEditingId(clip.id); setShowForm(true); }}
+                    aria-label="Editar"
+                  >
+                    <Volume2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => deleteClip(clip.id)}
+                    className="text-red-400 hover:text-red-300"
+                    aria-label="Excluir"
+                  >
+                    <MicOff className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

@@ -31,8 +31,6 @@ export function FavoritesPage() {
   const [draggedId, setDraggedId] = useState<number | null>(null);
 
   useEffect(() => {
-    // Sincroniza a ordem editável com o servidor assim que os favoritos carregam.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (favorites.data) setOrder(favorites.data.map(item => item.id));
   }, [favorites.data]);
 

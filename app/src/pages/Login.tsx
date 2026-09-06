@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/PasswordField";
-import { LoginAlternatives } from "@/components/auth/LoginAlternatives";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 import { MigrationBanner } from "@/components/MigrationBanner";
 import { Seo } from "@/lib/seo";
@@ -49,11 +48,6 @@ export default function Login() {
       setServerError(friendlyError(error.message, error.data?.code));
     },
   });
-
-  const handleAuthenticated = async () => {
-    await utils.auth.me.invalidate();
-    navigate("/channels/@me");
-  };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -174,11 +168,6 @@ export default function Login() {
                 {login.isPending ? "Entrando..." : "Entrar"}
               </Button>
             </form>
-
-            <LoginAlternatives
-              username={username}
-              onAuthenticated={handleAuthenticated}
-            />
 
             <p className="mt-6 text-sm text-muted2">
               Não tem uma conta?{" "}

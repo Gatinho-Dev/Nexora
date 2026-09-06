@@ -28,15 +28,12 @@ export function ServerCommunitySettings({ details }: { details: ServerDetailsDTO
   const [spamProtectionEnabled, setSpamProtectionEnabled] = useState(true);
   const [minimumModerationEnabled, setMinimumModerationEnabled] = useState(true);
   useEffect(() => {
-    // Hidrata o formulário de comunidade assim que os dados carregam.
     if (!community.isFetched) return;
-    /* eslint-disable react-hooks/set-state-in-effect */
     setEnabled(Boolean(community.data?.enabledAt));
     setRulesChannelId(community.data?.rulesChannelId ?? null);
     setAnnouncementChannelId(community.data?.announcementChannelId ?? null);
     setSpamProtectionEnabled(community.data?.spamProtectionEnabled ?? true);
     setMinimumModerationEnabled(community.data?.minimumModerationEnabled ?? true);
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [community.data, community.isFetched]);
   const update = trpc.advanced.server.updateCommunity.useMutation({
     onSuccess: () => {
@@ -80,9 +77,7 @@ export function ServerOnboardingSettings({ details }: { details: ServerDetailsDT
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
   const [optionRules, setOptionRules] = useState<Record<string, OnboardingOptionRule>>({});
   useEffect(() => {
-    // Hidrata o formulário de onboarding assim que os dados carregam.
     if (!onboarding.isFetched) return;
-    /* eslint-disable react-hooks/set-state-in-effect */
     setEnabled(onboarding.data?.config?.enabled ?? false);
     setRequireRules(onboarding.data?.config?.requireRules ?? true);
     setWelcomeTitle(onboarding.data?.config?.welcomeTitle ?? "");
@@ -94,7 +89,6 @@ export function ServerOnboardingSettings({ details }: { details: ServerDetailsDT
       onboardingOptionRuleKey(questionIndex, optionIndex),
       { roleIds: option.roleIds ?? [], channelIds: option.channelIds ?? [], interests: (option.interests ?? []).join(", ") },
     ]))));
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [onboarding.data, onboarding.isFetched]);
   const update = trpc.advanced.server.updateOnboarding.useMutation({ onSuccess: () => { toast.success("Onboarding publicado."); void utils.advanced.server.onboarding.invalidate({ serverId }); }, onError: error => toast.error(error.message) });
   const save = () => update.mutate({ serverId, enabled, requireRules, welcomeTitle: welcomeTitle.trim() || null, welcomeMessage: welcomeMessage.trim() || null, coverImageUrl: coverImageUrl.trim() || null, questions: questions.filter(item => item.prompt.trim()).map((question, questionIndex) => ({ prompt: question.prompt.trim(), required: question.required, multiple: question.multiple, options: question.optionsText.split("\n").map(value => value.trim()).filter(Boolean).map((label, optionIndex) => {
@@ -133,16 +127,13 @@ export function ServerGuideSettings({ details }: { details: ServerDetailsDTO }) 
   const [resources, setResources] = useState("");
   const [recommendedChannelIds, setRecommendedChannelIds] = useState<number[]>([]);
   useEffect(() => {
-    // Hidrata o guia do servidor assim que os dados carregam.
     if (!guide.data) return;
-    /* eslint-disable react-hooks/set-state-in-effect */
     setWelcome(guide.data.welcomeMessage ?? "");
     setRules((guide.data.rules ?? []).join("\n"));
     setTasks((guide.data.tasks ?? []).map(task => task.label).join("\n"));
     setFaq((guide.data.faq ?? []).map(item => `${item.question} | ${item.answer}`).join("\n"));
     setResources((guide.data.resources ?? []).map(resource => `${resource.label} | ${resource.url}`).join("\n"));
     setRecommendedChannelIds(guide.data.recommendedChannelIds ?? []);
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [guide.data]);
   const update = trpc.advanced.server.updateGuide.useMutation({ onSuccess: () => { toast.success("Guia atualizado."); void utils.advanced.server.guide.invalidate({ serverId }); }, onError: error => toast.error(error.message) });
   const lines = (value: string) => value.split("\n").map(item => item.trim()).filter(Boolean);

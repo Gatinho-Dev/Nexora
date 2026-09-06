@@ -64,10 +64,6 @@ export const env = {
   appSecret: required("APP_SECRET"),
   isProduction: process.env.NODE_ENV === "production",
   databaseUrl,
-  /** WebAuthn: relying-party identifier usado nas credenciais passkey. */
-  passkeyRpId: process.env.PASSKEY_RP_ID ?? "nexorachat.cloud",
-  /** Origem (origin) aceita nas cerimônias WebAuthn. */
-  passkeyOrigin: process.env.PASSKEY_ORIGIN ?? "https://nexorachat.cloud",
   ownerUnionId: process.env.OWNER_UNION_ID ?? "",
   ownerUnionIds: [process.env.OWNER_UNION_ID ?? "", ...csv("NEXORA_OWNER_UNION_IDS")]
     .filter(Boolean),

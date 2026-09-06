@@ -658,34 +658,6 @@ export type WSServerEvent =
   | { t: "server:refresh"; serverId: number }
   | { t: "events:refresh"; serverId: number }
   | { t: "stage:hands"; channelId?: number; userIds: number[] }
-  | { t: "preferences:refresh"; scope: string }
-  | { t: "stage:refresh"; channelId: number }
-  | { t: "soundboard:refresh"; serverId: number }
-  | { t: "onboarding:refresh"; serverId: number }
-  | { t: "forum:refresh"; channelId: number }
-  | {
-      t: "voice:priority";
-      serverId: number;
-      userId: number;
-      enabled: boolean;
-      attenuation: number;
-    }
-  | { t: "support:refresh" }
-  | { t: "stage:request"; channelId: number; userId: number }
-  | {
-      t: "stage:moderation";
-      channelId: number;
-      action: "accept" | "reject" | "audience" | "mute" | "remove";
-    }
-  | {
-      t: "soundboard:play";
-      channelId: number;
-      soundId: number;
-      userId: number;
-      url: string;
-      volume: number;
-    }
-  | { t: "pins:refresh"; channelId: number }
   | { t: "group:update"; conversationId: number }
   | { t: "dm:refresh" }
   | {

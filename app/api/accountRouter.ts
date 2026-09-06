@@ -56,7 +56,7 @@ const profileGameSchema = z.object({
   imageUrl: z.string().max(500).nullable().optional(),
 });
 
-export async function issueSession(
+async function issueSession(
   ctx: { req: Request; resHeaders: Headers },
   user: { id: number; unionId: string },
 ) {

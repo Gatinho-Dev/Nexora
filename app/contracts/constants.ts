@@ -27,18 +27,6 @@ export const PERMISSIONS = [
   "CONNECT",
   "SPEAK",
   "STREAM",
-  "BYPASS_SLOWMODE",
-  "USE_SOUNDBOARD",
-  "MANAGE_SOUNDBOARD",
-  "REQUEST_TO_SPEAK",
-  "PRIORITY_SPEAKER",
-  "PIN_MESSAGES",
-  "MANAGE_FORUMS",
-  "MANAGE_STAGE",
-  "MANAGE_EVENTS",
-  "MANAGE_COMMUNITY",
-  "MANAGE_ONBOARDING",
-  "VIEW_SERVER_INSIGHTS",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -72,11 +60,6 @@ export const RateLimits = {
   groupCreate: { limit: 4, windowMs: 60 * 60_000 },
   groupInviteCreate: { limit: 10, windowMs: 60 * 60_000 },
   groupMemberChange: { limit: 30, windowMs: 60_000 },
-  securityChallenge: { limit: 6, windowMs: 60_000 },
-  ticketCreate: { limit: 3, windowMs: 60 * 60_000 },
-  soundboardPlay: { limit: 10, windowMs: 10_000 },
-  search: { limit: 20, windowMs: 60_000 },
-  scheduledMessage: { limit: 20, windowMs: 60 * 60_000 },
 } as const;
 
 // ── Groups (conversas privadas em grupo) ─────────────────────

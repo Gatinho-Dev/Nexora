@@ -218,7 +218,6 @@ export const messages = mysqlTable(
     replyToId: bigint("replyToId", { mode: "number", unsigned: true }),
     threadId: bigint("threadId", { mode: "number", unsigned: true }),
     tag: varchar("tag", { length: 24 }),
-    clientNonce: varchar("clientNonce", { length: 64 }),
     editedAt: timestamp("editedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
@@ -1765,6 +1764,3 @@ export type UserConnection = typeof userConnections.$inferSelect;
 export type RobloxActivity = typeof robloxActivity.$inferSelect;
 export type ExternalOauthState = typeof externalOauthStates.$inferSelect;
 export type RichPresenceActivity = typeof richPresenceActivities.$inferSelect;
-
-// ── Advanced communication package (additive tables) ─────────
-export * from "./advancedSchema";
