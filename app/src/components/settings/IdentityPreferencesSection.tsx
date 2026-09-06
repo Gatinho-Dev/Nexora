@@ -39,8 +39,10 @@ export function IdentityPreferencesSection() {
   const [duration, setDuration] = useState("never");
 
   useEffect(() => {
+    // Hidrata os campos do formulário assim que o perfil carrega.
     if (!profile.isFetched) return;
     const details = profile.data?.details;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setDisplayName(details?.displayName ?? user?.name ?? "");
     setPronouns(details?.pronouns ?? "");
     setLocation(details?.location ?? "");
@@ -48,12 +50,16 @@ export function IdentityPreferencesSection() {
     setAbout(details?.about ?? user?.bio ?? "");
     setPrivacy((details?.privacy as Record<string, Visibility> | null) ?? {});
     setFields((profile.data?.fields ?? []).map(field => ({ label: field.label, value: field.value, visibility: field.visibility })));
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [profile.data, profile.isFetched, user?.bio, user?.name]);
   useEffect(() => {
+    // Hidrata status/presença do formulário assim que o status carrega.
     if (!status.isFetched) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setStatusText(status.data?.text ?? "");
     setStatusEmoji(status.data?.emoji ?? "");
     setPresence(status.data?.presence ?? "online");
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [status.data, status.isFetched]);
 
   const setUsernameMutation = trpc.account.setUsername.useMutation();

@@ -76,6 +76,18 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   CONNECT: "Conectar ao canal de voz",
   SPEAK: "Falar",
   STREAM: "Transmitir vídeo e tela",
+  BYPASS_SLOWMODE: "Ignorar modo lento",
+  USE_SOUNDBOARD: "Usar soundboard",
+  MANAGE_SOUNDBOARD: "Gerenciar soundboard",
+  REQUEST_TO_SPEAK: "Pedir para falar no Stage",
+  PRIORITY_SPEAKER: "Falante prioritário",
+  PIN_MESSAGES: "Fixar mensagens",
+  MANAGE_FORUMS: "Gerenciar fóruns",
+  MANAGE_STAGE: "Gerenciar Stage",
+  MANAGE_EVENTS: "Gerenciar eventos",
+  MANAGE_COMMUNITY: "Gerenciar comunidade",
+  MANAGE_ONBOARDING: "Gerenciar onboarding",
+  VIEW_SERVER_INSIGHTS: "Ver insights do servidor",
 };
 
 const PERMISSION_DESCRIPTIONS: Partial<Record<Permission, string>> = {
@@ -90,6 +102,18 @@ const PERMISSION_DESCRIPTIONS: Partial<Record<Permission, string>> = {
   CONNECT: "Entrar em canais de voz.",
   SPEAK: "Usar o microfone em canais de voz.",
   STREAM: "Usar câmera e compartilhar a tela.",
+  BYPASS_SLOWMODE: "Não sofrer o intervalo do modo lento do canal.",
+  USE_SOUNDBOARD: "Tocar sons do soundboard do servidor.",
+  MANAGE_SOUNDBOARD: "Adicionar e remover sons do soundboard.",
+  REQUEST_TO_SPEAK: "Solicitar para falar em canais Stage.",
+  PRIORITY_SPEAKER: "Ser marcado com prioridade de fala no Stage.",
+  PIN_MESSAGES: "Fixar e remover fixações de mensagens.",
+  MANAGE_FORUMS: "Criar e gerenciar categorias e tags de fóruns.",
+  MANAGE_STAGE: "Iniciar e moderar canais Stage.",
+  MANAGE_EVENTS: "Criar e gerenciar eventos do servidor.",
+  MANAGE_COMMUNITY: "Configurar comunidade, guia e regras.",
+  MANAGE_ONBOARDING: "Criar e editar o onboarding do servidor.",
+  VIEW_SERVER_INSIGHTS: "Acessar as métricas do servidor.",
 };
 
 type Tab =

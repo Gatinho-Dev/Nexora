@@ -1515,10 +1515,13 @@ function AppearanceTab() {
   });
 
   useEffect(() => {
+    // Sincroniza a aparência local com o servidor e aplica no DOM ao carregar.
     if (!preferences.data) return;
     const next = parseAppearancePreferences(preferences.data.data);
+    /* eslint-disable react-hooks/set-state-in-effect */
     setAppearance(next);
     applyAppearancePreferences(next);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [preferences.data]);
 
   const save = (patch: Partial<AppearancePreferences>) => {
@@ -1747,7 +1750,12 @@ function ShortcutsTab() {
   });
 
   useEffect(() => {
-    if (preferences.data) setLocalKeybinds(parseKeybinds(preferences.data.data));
+    // Hidrata os atalhos de teclado assim que as preferências carregam.
+    if (preferences.data) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setLocalKeybinds(parseKeybinds(preferences.data.data));
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
   }, [preferences.data]);
 
   const streamerRaw = preferences.data?.data.streamerMode;
