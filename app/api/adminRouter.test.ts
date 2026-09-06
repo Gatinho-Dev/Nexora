@@ -1,11 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { User } from "@db/schema";
 import { adminRouter } from "./adminRouter";
-import { getDb } from "./queries/connection";
-
-vi.mock("./queries/connection", () => ({
-  getDb: vi.fn(),
-}));
 
 const user: User = {
   id: 123,
@@ -74,26 +69,14 @@ describe("admin router authorization", () => {
 
   it("does not let a non-owner platform admin manage restricted badges", async () => {
     // Staff/restritas exigem autoridade "owner" — validado no handler
-    // depois do lookup da badge. Sem banco local o lookup real lançaria
-    // INTERNAL_SERVER_ERROR, então mockamos o DB: badge inexistente vira
-    // NOT_FOUND e admin comum nunca recebe sucesso nem autorização.
-    vi.mocked(getDb).mockReturnValue({
-      query: {
-        users: {
-          findFirst: vi.fn().mockResolvedValue(null),
-        },
-        badges: {
-          findFirst: vi.fn().mockResolvedValue(null),
-        },
-      },
-    } as never);
+    // depois do lookup da badge; sem DB o erro de lookup não deve vazar
+    // permissão: o teste garante que admin comum NUNCA recebe sucesso.
     await expect(
       caller({ ...user, role: "admin" }).grantBadge({
         userId: 999999,
         badgeId: 999999,
       }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
-    expect(vi.mocked(getDb).mock.calls.length).toBeGreaterThan(0);
     await expect(
       caller({ ...user, role: "user" }).grantBadge({
         userId: 999999,

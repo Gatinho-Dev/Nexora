@@ -10,9 +10,6 @@ import { PasswordField } from "@/components/auth/PasswordField";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 import { MigrationBanner } from "@/components/MigrationBanner";
 import { Seo } from "@/lib/seo";
-import { Fingerprint } from "lucide-react";
-import { startAuthentication } from "@simplewebauthn/browser";
-import { toast } from "sonner";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]+$/;
 const GENERIC_ERROR =
@@ -81,37 +78,6 @@ export default function Register() {
       );
     },
   });
-
-  const beginPasskey = trpc.advanced.security.beginPasskeyLogin.useMutation();
-  const finishPasskey = trpc.advanced.security.finishPasskeyLogin.useMutation();
-  const passkeyPending = beginPasskey.isPending || finishPasskey.isPending;
-
-  const authenticateWithPasskey = async () => {
-    if (!trimmedUsername || usernameError !== null) {
-      toast.error(
-        "Preencha um nome de usuário válido antes de usar uma passkey.",
-      );
-      return;
-    }
-    try {
-      const start = await beginPasskey.mutateAsync({
-        username: trimmedUsername,
-      });
-      const response = await startAuthentication({
-        optionsJSON: start.options,
-      });
-      await finishPasskey.mutateAsync({
-        challengeId: start.challengeId,
-        response,
-      });
-      await utils.auth.me.invalidate();
-      navigate("/channels/@me");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Não foi possível autenticar.",
-      );
-    }
-  };
 
   const passwordsMismatch =
     confirmPassword !== "" && confirmPassword !== password;
@@ -293,28 +259,6 @@ export default function Register() {
                 {register.isPending ? "Criando conta..." : "Criar conta"}
               </Button>
             </form>
-
-            <div className="mt-5 space-y-3 border-t border-white/[0.07] pt-5">
-              <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.14em] text-faint">
-                <span className="h-px flex-1 bg-white/[0.07]" />
-                Outras formas de entrar
-                <span className="h-px flex-1 bg-white/[0.07]" />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={passkeyPending}
-                onClick={() => void authenticateWithPasskey()}
-                className="min-h-11 w-full border-white/10 bg-white/[0.03]"
-              >
-                {passkeyPending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Fingerprint className="size-4 text-[#8290ff]" />
-                )}
-                Usar passkey
-              </Button>
-            </div>
 
             <p className="mt-6 text-sm text-muted2">
               Já tem uma conta?{" "}

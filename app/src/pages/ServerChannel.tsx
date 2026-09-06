@@ -7,9 +7,6 @@ import { MemberList } from "@/components/MemberList";
 import { ChatArea } from "@/components/chat/ChatArea";
 import { VoiceView } from "@/components/VoiceView";
 import { ForumView } from "@/components/ForumView";
-import { ChannelPinsPopover } from "@/components/chat/ChannelPinsPopover";
-import { ServerGuideDialog } from "@/components/onboarding/ServerGuideDialog";
-import { ServerOnboardingFlow } from "@/components/onboarding/ServerOnboardingFlow";
 import { SidebarPortal } from "@/components/SidebarPortal";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { Users, X, Menu } from "lucide-react";
@@ -36,7 +33,6 @@ export function ServerChannel() {
   const setMembersOpen = useAppStore(s => s.setMembersOpen);
   const [desktopMembers, setDesktopMembers] = useState(true);
   const [followOpen, setFollowOpen] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
   const follow = trpc.announce.follow.useMutation({
     onSuccess: () => {
       toast.success("Seguindo canal de anúncios.");
@@ -128,10 +124,6 @@ export function ServerChannel() {
   const channel = details.data.channels.find(
     c => c.id === Number(channelIdParam)
   );
-  const canPin =
-    details.data.myPermissions.includes("MANAGE_MESSAGES") ||
-    details.data.myPermissions.includes("MANAGE_CHANNELS") ||
-    details.data.myPermissions.includes("ADMINISTRATOR");
   const canManageMessages =
     details.data.myPermissions.includes("MANAGE_MESSAGES");
   const canRead = details.data.myPermissions.includes("READ_MESSAGES");
@@ -169,9 +161,6 @@ export function ServerChannel() {
           >
             Seguidores
           </button>
-        )}
-        {channel.type === "TEXT" && (
-          <ChannelPinsPopover channelId={channel.id} canManage={canPin} />
         )}
         <NotificationsBell onOpenProfile={onOpenProfile} />
         {channel.type === "TEXT" && (
@@ -334,17 +323,6 @@ export function ServerChannel() {
         </div>
       )}
 
-      {/* Guia do servidor (acesso rápido pelo header quando não há canal) */}
-      {!channel && (
-        <button
-          type="button"
-          onClick={() => setGuideOpen(true)}
-          className="absolute right-4 top-[4.5rem] z-10 rounded-lg border border-white/[0.07] bg-sidebar px-3 py-2 text-xs font-semibold text-bodyx shadow-lg hover:border-[#7383ff]/30 hover:text-white"
-        >
-          Abrir guia do servidor
-        </button>
-      )}
-
       {/* Member list side panel */}
       {channel?.type === "TEXT" && desktopMembers && (
         <div className="hidden md:flex h-full shrink-0">
@@ -385,13 +363,6 @@ export function ServerChannel() {
           </div>
         </div>
       )}
-
-      <ServerGuideDialog
-        open={guideOpen}
-        onOpenChange={setGuideOpen}
-        details={details.data}
-      />
-      <ServerOnboardingFlow details={details.data} />
     </div>
   );
 }

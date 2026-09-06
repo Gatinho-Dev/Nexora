@@ -30,31 +30,6 @@ const FriendsPage = lazy(() =>
     default: module.FriendsPage,
   }))
 );
-const FavoritesPage = lazy(() =>
-  import("./pages/FavoritesPage").then(module => ({
-    default: module.FavoritesPage,
-  }))
-);
-const GlobalSearchPage = lazy(() =>
-  import("./pages/GlobalSearchPage").then(module => ({
-    default: module.GlobalSearchPage,
-  }))
-);
-const SavedMessagesPage = lazy(() =>
-  import("./pages/SavedMessagesPage").then(module => ({
-    default: module.SavedMessagesPage,
-  }))
-);
-const ScheduledMessagesPage = lazy(() =>
-  import("./pages/ScheduledMessagesPage").then(module => ({
-    default: module.ScheduledMessagesPage,
-  }))
-);
-const FollowedThreadsPage = lazy(() =>
-  import("./pages/FollowedThreadsPage").then(module => ({
-    default: module.FollowedThreadsPage,
-  }))
-);
 const OfficialAnnouncements = lazy(() =>
   import("./pages/OfficialAnnouncements").then(module => ({
     default: module.OfficialAnnouncements,
@@ -226,46 +201,6 @@ export default function App() {
           element={
             <Deferred>
               <DMRequests />
-            </Deferred>
-          }
-        />
-        <Route
-          path="/channels/@me/favorites"
-          element={
-            <Deferred>
-              <FavoritesPage />
-            </Deferred>
-          }
-        />
-        <Route
-          path="/channels/@me/search"
-          element={
-            <Deferred>
-              <GlobalSearchPage />
-            </Deferred>
-          }
-        />
-        <Route
-          path="/channels/@me/saved"
-          element={
-            <Deferred>
-              <SavedMessagesPage />
-            </Deferred>
-          }
-        />
-        <Route
-          path="/channels/@me/scheduled"
-          element={
-            <Deferred>
-              <ScheduledMessagesPage />
-            </Deferred>
-          }
-        />
-        <Route
-          path="/channels/@me/threads"
-          element={
-            <Deferred>
-              <FollowedThreadsPage />
             </Deferred>
           }
         />
