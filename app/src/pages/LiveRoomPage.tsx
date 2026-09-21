@@ -3,13 +3,16 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   Copy,
+  Loader2,
   LogOut,
   Mic,
   MicOff,
   MonitorUp,
   PhoneOff,
   Share2,
+  Smartphone,
   Video,
   VideoOff,
   MessageSquare,
@@ -18,6 +21,13 @@ import {
   MonitorStop,
   Settings2,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 import { Seo } from "@/lib/seo";
 import { useLiveRoom } from "@/hooks/useLiveRoom";
@@ -62,6 +72,38 @@ export default function LiveRoomPage() {
   const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
+
+  // ── Mobile Camera (celular como câmera) ─────────────────────
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const camSourceExplicitRef = useRef(false);
+  const connected = room.companionState.connected;
+  const requestPending = room.companionState.requestPending;
+  // Banner de aprovação: visível enquanto houver pedido pendente; um
+  // timeout o esconde após 30s (o pedido continua no menu da seta).
+  const [bannerExpired, setBannerExpired] = useState(false);
+  const bannerSessionRef = useRef<string | null>(null);
+  const requestSessionId = room.companionState.sessionId;
+  useEffect(() => {
+    if (requestPending && requestSessionId !== bannerSessionRef.current) {
+      // Pedido novo: reseta a expiração e mostra o banner.
+      bannerSessionRef.current = requestSessionId;
+      setBannerExpired(false);
+    }
+  }, [requestPending, requestSessionId]);
+  useEffect(() => {
+    if (!requestPending || bannerExpired) return;
+    const id = setTimeout(() => setBannerExpired(true), 30_000);
+    return () => clearTimeout(id);
+  }, [requestPending, bannerExpired]);
+  const approveBannerVisible = requestPending && !bannerExpired;
+  // Desconexão do celular: restaura a webcam local se o usuário ligou uma.
+  const prevConnectedRef = useRef(false);
+  useEffect(() => {
+    if (prevConnectedRef.current && !connected && camera) {
+      void liveRtc.enableCamera();
+    }
+    prevConnectedRef.current = connected;
+  }, [connected, camera]);
 
   const shareUrl = useMemo(
     () => `${window.location.origin}/live/${roomCode}`,
@@ -600,16 +642,90 @@ export default function LiveRoomPage() {
           <span>{muted ? "Ativar microfone" : "Desativar microfone"}</span>
         </button>
 
-        <button
-          type="button"
-          className={`live-ctrl ${camera ? "live-ctrl--ok" : "live-ctrl--idle"}`}
-          onClick={() => void toggleCamera()}
-          aria-pressed={camera}
-          title={camera ? "Desativar câmera" : "Ativar câmera"}
-        >
-          {camera ? <Video aria-hidden /> : <VideoOff aria-hidden />}
-          <span>{camera ? "Desativar câmera" : "Ativar câmera"}</span>
-        </button>
+        <div className="live-ctrl-group">
+          <button
+            type="button"
+            className={`live-ctrl live-ctrl--split ${camera ? "live-ctrl--ok" : "live-ctrl--idle"}`}
+            onClick={() => void toggleCamera()}
+            aria-pressed={camera}
+            title={camera ? "Desativar câmera" : "Ativar câmera"}
+          >
+            {camera ? <Video aria-hidden /> : <VideoOff aria-hidden />}
+            <span>{camera ? "Desativar câmera" : "Ativar câmera"}</span>
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={`live-ctrl live-ctrl--chevron ${camera ? "live-ctrl--ok" : "live-ctrl--idle"}`}
+                aria-label="Opções de câmera"
+                title="Opções de câmera"
+              >
+                <ChevronDown aria-hidden />
+                {connected && <span className="live-ctrl__dot" aria-hidden />}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" sideOffset={8}>
+              {requestPending && room.companionState.sessionId && (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    room.approveCompanion(room.companionState.sessionId!)
+                  }
+                >
+                  <Check className="mr-2 h-4 w-4 text-emerald-500" />
+                  Permitir celular como câmera
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onSelect={() => {
+                  camSourceExplicitRef.current = true;
+                  void room.setLiveCameraSource("local");
+                }}
+              >
+                <Video className="mr-2 h-4 w-4" />
+                Usar câmera deste dispositivo
+              </DropdownMenuItem>
+              {connected && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    camSourceExplicitRef.current = true;
+                    void room.setLiveCameraSource("companion");
+                  }}
+                >
+                  <Smartphone className="mr-2 h-4 w-4 text-emerald-500" />
+                  Celular conectado — usar como câmera
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (room.companionState.sessionId) {
+                    setMobileOpen(true);
+                  } else {
+                    room.startCompanionPairing();
+                    setMobileOpen(true);
+                  }
+                }}
+              >
+                <Smartphone className="mr-2 h-4 w-4" />
+                Usar celular como câmera
+              </DropdownMenuItem>
+              {(connected || room.companionState.sessionId) && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    if (room.companionState.sessionId) {
+                      room.stopCompanion(room.companionState.sessionId);
+                    }
+                    liveRtc.teardownCompanionPeer();
+                  }}
+                  className="text-red-400 focus:text-red-300"
+                >
+                  <PhoneOff className="mr-2 h-4 w-4" />
+                  Desconectar celular
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
 
         <button
           type="button"
@@ -685,6 +801,113 @@ export default function LiveRoomPage() {
           onClose={() => setSettingsOpen(false)}
           onError={message => setPermError(message)}
         />
+      )}
+
+      {mobileOpen && (
+        <div
+          className="live-modal-scrim"
+          onClick={() => setMobileOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="live-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Conectar celular como câmera"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="live-modal__close"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Fechar"
+            >
+              <X aria-hidden />
+            </button>
+            <h2 className="live-modal__title">Conectar celular como câmera</h2>
+            <p className="live-modal__desc">
+              Use a câmera do seu celular na chamada. Escaneie o QR Code — ou
+              digite o código em{" "}
+              <strong>{window.location.host}/mobile-camera</strong>.
+            </p>
+            {room.companionState.code ? (
+              <>
+                <div className="live-qr">
+                  <QRCodeSVG
+                    value={`${window.location.origin}/mobile-camera?code=${room.companionState.code}`}
+                    size={208}
+                    bgColor="#ffffff"
+                    fgColor="#111827"
+                    level="M"
+                  />
+                </div>
+                <p className="live-modal__code">
+                  Código: <strong>{room.companionState.code}</strong>
+                </p>
+                <div className="live-modal__status" aria-live="polite">
+                  {connected ? (
+                    <>
+                      <Check className="h-4 w-4 text-emerald-500" />
+                      <span>Celular conectado</span>
+                    </>
+                  ) : requestPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+                      <span>Celular solicitando conexão…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                      <span>Aguardando conexão…</span>
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="live-qr live-qr--placeholder">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span>Gerando código…</span>
+              </div>
+            )}
+            {connected && room.companionStream && (
+              <video
+                className="live-modal__preview"
+                autoPlay
+                playsInline
+                muted
+                ref={el => {
+                  if (el && el.srcObject !== room.companionStream) {
+                    el.srcObject = room.companionStream;
+                  }
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {approveBannerVisible && room.companionState.sessionId && (
+        <div className="live-approve-banner" role="alertdialog" aria-live="assertive">
+          <Smartphone aria-hidden />
+          <div className="live-approve-banner__text">
+            <strong>Um celular quer ser sua câmera</strong>
+            <span>Permitir a conexão deste dispositivo?</span>
+          </div>
+          <button
+            type="button"
+            className="live-approve-banner__btn live-approve-banner__btn--ok"
+            onClick={() => room.approveCompanion(room.companionState.sessionId!)}
+          >
+            Permitir
+          </button>
+          <button
+            type="button"
+            className="live-approve-banner__btn live-approve-banner__btn--no"
+            onClick={() => room.rejectCompanion(room.companionState.sessionId!)}
+          >
+            Recusar
+          </button>
+        </div>
       )}
     </div>
   );

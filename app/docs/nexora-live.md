@@ -16,6 +16,8 @@ existente.
 | `GET /api/live/rooms/:code` | REST | Estado público: `{ exists, full, nicknames, maxParticipants }`. |
 | `GET /api/live/ice` | REST | Servidores ICE (mesma config de `/api/rtc-config`). |
 | `/ws/live` | WebSocket | Gateway público: join, signaling, chat, estado, kick/end. |
+| `/ws/live-companion` | WebSocket | Nexora Mobile Camera: celular pareia por código (via QR) e transmite câmera/mic P2P para o dono. Aprovação obrigatória do dono; sessão única, TTL e invalidação ao sair. |
+| `/mobile-camera?code=…` | Página | Controlador do celular: prévia em tela cheia, mic/cam/flip, encerrar. |
 
 ## Arquivos criados/modificados
 
@@ -157,6 +159,26 @@ Checklist manual de 2 sessões: A cria → B entra → ambos aparecem no grid �
 voz/vídeo bidirecional → A compartilha tela (B vê em destaque) → chat A→B e
 B→A → B sai (A continua) → A sai → sala expira após 15 min. Reconexão:
 recarregue a aba em até 15s e o participante volta com o mesmo nick/sessão.
+
+### Nexora Mobile Camera (Live)
+
+1. Na sala, abra o chevron ao lado do botão de câmera → "Usar celular como
+   câmera" → aparece o QR + código.
+2. No celular, escaneie (ou abra `/mobile-camera?code=…`) → "Conectar como
+   câmera" → permita câmera/mic.
+3. No PC aparece o banner de aprovação → "Permitir" → o vídeo do celular
+   passa a ser a câmera do participante (com VAD/borda verde funcionando no
+   áudio do celular).
+4. No celular: mic/cam ligam/desligam, 🔄 vira frontal/traseira, 📞 encerra
+   (PC e celular são avisados).
+5. Desligar a webcam do PC não afeta o celular; "Desconectar celular" no
+   menu restaura a câmera local. A sala acabou → celular recebe "Chamada
+   encerrada".
+
+Limitações conhecidas: iOS/Safari não suportam `replaceTrack` em sender com
+`null` em todos os cenários (a troca celular↔webcam no iOS pode exigir
+renegociação — o Live já renegocia via perfect negotiation); screen share
+não existe no iOS; `facingMode` exato é best-effort no Safari.
 
 ## Deploy
 

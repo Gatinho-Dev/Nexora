@@ -66,6 +66,22 @@ export type LiveRtcHandlers = {
   onScreenEnded(): void;
   /** Erro de mídia já traduzido para mensagem amigável. */
   onMediaError(message: string): void;
+  // ── Mobile Camera ──
+  /** Preview do celular (video+audio recebidos de lá). */
+  onCompanionStream(stream: MediaStream | null): void;
+  /** Signaling a enviar ao celular (via live-companion:signal no WS). */
+  onCompanionSignal(data: {
+    description?: RTCSessionDescriptionInit;
+    candidate?: RTCIceCandidateInit | null;
+  }): void;
+  /** Estado do celular: conectado, câmera ativa, erro etc. */
+  onCompanionState(state: {
+    connected?: boolean;
+    cameraActive?: boolean;
+    error?: string;
+  }): void;
+  /** Câmera do celular ligou/desligou — espelha no estado publicado. */
+  onCompanionCameraState(active: boolean): void;
 };
 
 const DEFAULT_ICE: RTCIceServer[] = [
@@ -122,6 +138,15 @@ class LiveRtc {
   /** Sessão de processamento de áudio (ClearVoice) — reutiliza o pipeline oficial. */
   private processingSession: AudioProcessingSession | null = null;
   private audioProcessing: NonNullable<DevicePrefs["audioProcessing"]> = "standard";
+
+  // ── Mobile Camera (celular pareado via QR) ──
+  private companionPc: RTCPeerConnection | null = null;
+  private companionVideoTrack: MediaStreamTrack | null = null;
+  private companionAudioTrack: MediaStreamTrack | null = null;
+  private companionPendingCandidates: (RTCIceCandidateInit | null)[] = [];
+  /** De onde vem o vídeo publicado: webcam local ou celular. */
+  private preferredCameraSource: "local" | "companion" = "local";
+  private cameraSourceExplicit = false;
 
   // ── VAD ──
   private vadContext: AudioContext | null = null;
@@ -221,9 +246,15 @@ class LiveRtc {
   }
 
   private combinedLocalStream(): MediaStream | null {
+    // Com celular pareado: vídeo segue a fonte preferida e o áudio do
+    // celular é a minha voz na sala (o mic local fica de fora).
+    const useCompanionVideo =
+      this.preferredCameraSource === "companion" && !!this.companionVideoTrack;
+    const videoTrack = useCompanionVideo ? this.companionVideoTrack : this.cameraTrack;
+    const audioTrack = this.companionAudioTrack ?? this.micTrack;
     const tracks = [
-      ...(this.micTrack ? [this.micTrack] : []),
-      ...(this.cameraTrack ? [this.cameraTrack] : []),
+      ...(audioTrack ? [audioTrack] : []),
+      ...(videoTrack ? [videoTrack] : []),
     ];
     return tracks.length ? new MediaStream(tracks) : null;
   }
@@ -414,6 +445,9 @@ class LiveRtc {
     this.cameraTrack.onended = () => {
       void this.disableCamera();
     };
+    // O botão de câmera é uma escolha explícita de fonte.
+    this.preferredCameraSource = "local";
+    this.cameraSourceExplicit = true;
     // Senders pré-alocados: replaceTrack sem renegociação.
     for (const peer of this.peers.values()) {
       await peer.videoSender.replaceTrack(this.cameraTrack).catch(() => {});
@@ -427,6 +461,11 @@ class LiveRtc {
     if (track) {
       track.onended = null;
       track.stop();
+    }
+    // Com o celular conectado como fonte, ele volta a ser o vídeo publicado.
+    if (this.companionVideoTrack && this.preferredCameraSource === "companion" && !this.screenTrack) {
+      await this.publishCameraSource();
+      return;
     }
     for (const peer of this.peers.values()) {
       await peer.videoSender.replaceTrack(null).catch(() => {});
@@ -833,6 +872,7 @@ class LiveRtc {
       this.destroyPeer(id, peer);
     }
     this.stopVad();
+    this.teardownCompanionPeer();
     this.micTrack?.stop();
     this.cameraTrack?.stop();
     this.screenTrack?.stop();
@@ -852,6 +892,176 @@ class LiveRtc {
     this.emit("onLocalStream", null);
   }
 
+  // ══ Nexora Mobile Camera (celular pareado via QR) ═══════════
+
+  /** Video/áudio remoto do celular — emitido ao React como stream imutável. */
+  get companionStream(): MediaStream | null {
+    if (!this.companionVideoTrack && !this.companionAudioTrack) return null;
+    const tracks = [
+      ...(this.companionVideoTrack ? [this.companionVideoTrack] : []),
+      ...(this.companionAudioTrack ? [this.companionAudioTrack] : []),
+    ];
+    return new MediaStream(tracks);
+  }
+
+  /** Prepara o peer que recebe a mídia do celular. */
+  private ensureCompanionPeer(): RTCPeerConnection {
+    if (this.companionPc) return this.companionPc;
+    const pc = new RTCPeerConnection({
+      iceServers: this.iceServers,
+      iceCandidatePoolSize: 4,
+    });
+    this.companionPc = pc;
+
+    pc.onicecandidate = event => {
+      this.emit("onCompanionSignal", {
+        candidate: event.candidate ? event.candidate.toJSON() : null,
+      });
+    };
+
+    pc.ontrack = event => {
+      const { track } = event;
+      if (track.kind === "video") {
+        this.companionVideoTrack = track;
+        // O celular vira a câmera automaticamente (a menos que o usuário
+        // tenha fixado a webcam local no menu da seta).
+        if (!this.cameraSourceExplicit) {
+          this.preferredCameraSource = "companion";
+        }
+        track.onmute = () => {
+          this.emit("onCompanionState", { cameraActive: false });
+          if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+            this.emit("onCompanionCameraState", false);
+          }
+        };
+        track.onunmute = () => {
+          this.emit("onCompanionState", { cameraActive: true });
+          if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+            this.emit("onCompanionCameraState", true);
+          }
+        };
+      } else {
+        this.companionAudioTrack = track;
+        // O áudio do celular é a voz do participante no Live: entra no VAD
+        // sob a chave da minha sessão (anel verde de quem fala).
+        if (this.mySessionId) {
+          this.removeVad(this.mySessionId);
+          this.addVad(
+            this.mySessionId,
+            new MediaStream([track])
+          );
+        }
+      }
+      // O áudio do celular é sempre minha voz (mesmo com share ativo);
+      // o vídeo só substitui a câmera quando a tela NÃO está sendo
+      // compartilhada (a tela tem precedência).
+      void this.publishAudioSource();
+      if (!this.screenTrack) {
+        void this.publishCameraSource();
+      }
+      this.emit("onCompanionStream", this.companionStream);
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connected") {
+        this.emit("onCompanionState", { connected: true });
+      }
+      if (pc.connectionState === "failed") {
+        this.emit("onCompanionState", {
+          error: "Falha na conexão com o celular.",
+        });
+      }
+    };
+    return pc;
+  }
+
+  /** Publica nos peers o vídeo da fonte ativa (celular ou webcam). */
+  private async publishCameraSource(): Promise<void> {
+    const useCompanionVideo =
+      this.preferredCameraSource === "companion" && !!this.companionVideoTrack;
+    const videoTrack = useCompanionVideo ? this.companionVideoTrack : this.cameraTrack;
+    for (const peer of this.peers.values()) {
+      await peer.videoSender.replaceTrack(videoTrack ?? null).catch(() => {});
+    }
+    this.emit("onLocalStream", this.combinedLocalStream());
+  }
+
+  /** Publica o áudio ativo (celular > mic local) nos peers. */
+  private async publishAudioSource(): Promise<void> {
+    const audioTrack = this.companionAudioTrack ?? this.micTrack;
+    for (const peer of this.peers.values()) {
+      await peer.micSender.replaceTrack(audioTrack ?? null).catch(() => {});
+    }
+  }
+
+  /** O usuário escolhe a fonte da câmera no menu da seta. */
+  async setCameraSource(source: "local" | "companion"): Promise<void> {
+    if (this.preferredCameraSource === source) return;
+    this.preferredCameraSource = source;
+    this.cameraSourceExplicit = true;
+    // A tela tem precedência — a troca vale a partir do fim do share.
+    if (this.screenTrack) return;
+    await this.publishCameraSource();
+  }
+
+  /** Signaling recebido do celular (offer/ICE) via live-companion:signal. */
+  async handleCompanionSignal(data: {
+    description?: RTCSessionDescriptionInit;
+    candidate?: RTCIceCandidateInit | null;
+  }): Promise<void> {
+    try {
+      const pc = this.ensureCompanionPeer();
+      if (data.description) {
+        if (pc.signalingState !== "stable") return;
+        await pc.setRemoteDescription(data.description);
+        while (this.companionPendingCandidates.length) {
+          await pc.addIceCandidate(
+            this.companionPendingCandidates.shift() ?? null
+          );
+        }
+        if (data.description.type === "offer") {
+          // Resposta implícita: aplica a answer local gerada pelo próprio PC.
+          await pc.setLocalDescription();
+          this.emit("onCompanionSignal", {
+            description: pc.localDescription?.toJSON(),
+          });
+        }
+      } else if (data.candidate !== undefined) {
+        if (!pc.remoteDescription) {
+          this.companionPendingCandidates.push(data.candidate);
+        } else {
+          await pc.addIceCandidate(data.candidate);
+        }
+      }
+    } catch (error) {
+      console.error("[live] companion signaling failed", error);
+    }
+  }
+
+  /** Celular caiu de vez — derruba o peer e restaura a webcam local. */
+  teardownCompanionPeer(): void {
+    const pc = this.companionPc;
+    this.companionPc = null;
+    this.companionVideoTrack = null;
+    this.companionAudioTrack = null;
+    this.companionPendingCandidates = [];
+    this.preferredCameraSource = "local";
+    this.cameraSourceExplicit = false;
+    if (pc) {
+      for (const sender of pc.getSenders()) {
+        sender.replaceTrack(null).catch(() => {});
+      }
+      pc.ontrack = null;
+      pc.onicecandidate = null;
+      pc.onconnectionstatechange = null;
+      pc.close();
+    }
+    this.emit("onCompanionStream", null);
+    this.emit("onCompanionState", { connected: false });
+    if (!this.screenTrack) {
+      void this.publishCameraSource();
+    }
+  }
 }
 
 export const liveRtc = new LiveRtc();

@@ -64,6 +64,22 @@ export type UseLiveRoomResult = {
   clearMediaError(): void;
   /** Incrementa quando o navegador encerra o share por fora. */
   screenEndedSignal: number;
+  // ── Mobile Camera ──
+  /** Preview do vídeo/áudio do celular pareado (quando conectado). */
+  companionStream: MediaStream | null;
+  /** Estado do pareamento/celular. */
+  companionState: {
+    connected: boolean;
+    cameraActive: boolean;
+    requestPending: boolean;
+    sessionId: string | null;
+    code: string | null;
+  };
+  startCompanionPairing(): void;
+  approveCompanion(sessionId: string): void;
+  rejectCompanion(sessionId: string): void;
+  stopCompanion(sessionId: string): void;
+  setLiveCameraSource(source: "local" | "companion"): void;
 };
 
 export function useLiveRoom(): UseLiveRoomResult {
@@ -93,6 +109,23 @@ export function useLiveRoom(): UseLiveRoomResult {
   const sendState = useCallback(() => {
     liveSocket.send({ t: "live:state", ...mediaStateRef.current });
   }, []);
+
+  // ── Mobile Camera (celular pareado) ────────────
+  // Declarado antes dos handlers de WS porque eles o utilizam.
+  const [companionStream, setCompanionStream] = useState<MediaStream | null>(null);
+  const [companionState, setCompanionState] = useState<{
+    connected: boolean;
+    cameraActive: boolean;
+    requestPending: boolean;
+    sessionId: string | null;
+    code: string | null;
+  }>({
+    connected: false,
+    cameraActive: false,
+    requestPending: false,
+    sessionId: null,
+    code: null,
+  });
 
   // ── Handlers de eventos do servidor ─────────────────────────
   useEffect(() => {
@@ -184,12 +217,65 @@ export function useLiveRoom(): UseLiveRoomResult {
           setDeny({ reason: event.reason, message: event.message });
           break;
         }
+        // ── Mobile Camera ──
+        case "live-companion:session": {
+          setCompanionState(prev => ({
+            ...prev,
+            sessionId: event.sessionId,
+            code: event.code,
+          }));
+          break;
+        }
+        case "live-companion:request": {
+          setCompanionState(prev => ({ ...prev, requestPending: true }));
+          break;
+        }
+        case "live-companion:signal": {
+          void liveRtc.handleCompanionSignal(
+            event.data as Parameters<typeof liveRtc.handleCompanionSignal>[0]
+          );
+          break;
+        }
+        case "live-companion:control": {
+          // Controles de estado que não passam pelo RTC (track mute).
+          if (event.action === "camera-on" || event.action === "camera-off") {
+            setCompanionState(prev => ({
+              ...prev,
+              cameraActive: event.action === "camera-on",
+            }));
+          }
+          if (event.action === "disconnect") {
+            // O celular se desconectou por vontade própria.
+            liveRtc.teardownCompanionPeer();
+            setCompanionState(prev => ({
+              ...prev,
+              connected: false,
+              cameraActive: false,
+              requestPending: false,
+              sessionId: null,
+              code: null,
+            }));
+          }
+          break;
+        }
+        case "live-companion:disconnected": {
+          liveRtc.teardownCompanionPeer();
+          setCompanionState(prev => ({
+            ...prev,
+            connected: false,
+            cameraActive: false,
+            requestPending: false,
+            sessionId: null,
+            code: null,
+          }));
+          break;
+        }
       }
     });
     return () => {
       off();
     };
-  }, [sendState]);
+  }, [sendState]);  
 
   // ── Mídia local: stream e falas (VAD) ───────────────────────
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -236,10 +322,28 @@ export function useLiveRoom(): UseLiveRoomResult {
       onConnectionState: state => setRtcState(state),
       onScreenEnded: () => setScreenEndedSignal(n => n + 1),
       onMediaError: message => setMediaError(message),
+      onCompanionStream: stream => setCompanionStream(stream),
+      onCompanionSignal: data => {
+        liveSocket.send({ t: "live-companion:signal", data });
+      },
+      onCompanionState: state => {
+        setCompanionState(prev => ({
+          ...prev,
+          ...(state.connected !== undefined ? { connected: state.connected } : {}),
+          ...(state.cameraActive !== undefined
+            ? { cameraActive: state.cameraActive }
+            : {}),
+        }));
+      },
+      onCompanionCameraState: active => {
+        setCompanionState(prev => ({ ...prev, cameraActive: active }));
+      },
     });
     liveRtc.onSignal = (to, data) => {
       liveSocket.send({ t: "live:signal", to, data });
     };
+    // setCompanionState/setCompanionStream são setters estáveis.
+     
   }, []);
 
   // ── Ações ───────────────────────────────────────────────────
@@ -289,6 +393,16 @@ export function useLiveRoom(): UseLiveRoomResult {
     setMediaError(null);
     mediaStateRef.current = { muted: false, camera: false, screen: false };
     payloadRef.current = null;
+    liveRtc.teardownCompanionPeer();
+    setCompanionState({
+      connected: false,
+      cameraActive: false,
+      requestPending: false,
+      sessionId: null,
+      code: null,
+    });
+    // setCompanionState é setter estável.
+     
   }, []);
 
   const sendChat = useCallback((content: string) => {
@@ -312,6 +426,39 @@ export function useLiveRoom(): UseLiveRoomResult {
     },
     [sendState]
   );
+
+  // ── Ações da Mobile Camera ─────────────────────────
+  const startCompanionPairing = useCallback(() => {
+    liveSocket.send({ t: "live-companion:start" });
+  }, []);
+
+  const approveCompanion = useCallback((sessionId: string) => {
+    liveSocket.send({ t: "live-companion:approve", sessionId });
+    setCompanionState(prev => ({ ...prev, requestPending: false }));
+     
+  }, []);
+
+  const rejectCompanion = useCallback((sessionId: string) => {
+    liveSocket.send({ t: "live-companion:reject", sessionId });
+    setCompanionState(prev => ({ ...prev, requestPending: false }));
+     
+  }, []);
+
+  const stopCompanion = useCallback((sessionId: string) => {
+    liveSocket.send({ t: "live-companion:stop", sessionId });
+    setCompanionState(prev => ({
+      ...prev,
+      connected: false,
+      requestPending: false,
+      sessionId: null,
+      code: null,
+    }));
+     
+  }, []);
+
+  const setLiveCameraSource = useCallback((source: "local" | "companion") => {
+    void liveRtc.setCameraSource(source);
+  }, []);
 
   // Pendência de rejoin: marcada fora do render (callback de status).
   const reconnectPendingRef = useRef(false);
@@ -384,5 +531,13 @@ export function useLiveRoom(): UseLiveRoomResult {
     mediaError,
     clearMediaError: () => setMediaError(null),
     screenEndedSignal,
+    // Mobile Camera
+    companionStream,
+    companionState,
+    startCompanionPairing,
+    approveCompanion,
+    rejectCompanion,
+    stopCompanion,
+    setLiveCameraSource,
   };
 }

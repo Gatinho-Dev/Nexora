@@ -25,6 +25,233 @@
   --live-radius: 1rem;
 }
 
+/* ── Botão de câmera com seta (Mobile Camera) ─────────────── */
+.live-ctrl-group {
+  display: inline-flex;
+}
+
+.live-ctrl--split {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.live-ctrl--chevron {
+  position: relative;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: 1px;
+  padding: 0 0.5rem;
+}
+
+.live-ctrl__dot {
+  position: absolute;
+  top: 0.3125rem;
+  right: 0.3125rem;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--live-green);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--live-bg) 80%, transparent);
+}
+
+/* ── Modal do QR (Mobile Camera) ──────────────────────────── */
+.live-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgb(0 0 0 / 0.55);
+  backdrop-filter: blur(6px);
+  animation: live-fade 0.18s ease;
+}
+
+.live-modal {
+  position: relative;
+  width: min(92vw, 26rem);
+  max-height: 90dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 1.75rem 1.5rem 1.5rem;
+  border-radius: 1.25rem;
+  background: var(--live-card);
+  border: 1px solid var(--live-border);
+  box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.6);
+  animation: live-pop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.live-modal__close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  color: var(--live-muted-fg);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.live-modal__close:hover {
+  background: color-mix(in srgb, var(--live-fg) 8%, transparent);
+  color: var(--live-fg);
+}
+
+.live-modal__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--live-fg);
+}
+
+.live-modal__desc {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--live-muted-fg);
+  text-align: center;
+}
+
+.live-modal__code {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--live-fg);
+  letter-spacing: 0.08em;
+}
+
+.live-modal__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--live-muted-fg);
+}
+
+.live-modal__preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 0.75rem;
+  border: 1px solid var(--live-border);
+  background: #000;
+}
+
+.live-qr {
+  padding: 0.75rem;
+  border-radius: 1rem;
+  background: #ffffff;
+  border: 1px solid var(--live-border);
+  box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.5);
+}
+
+.live-qr--placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 208px;
+  height: 208px;
+  color: var(--live-muted-fg);
+  font-size: 0.8125rem;
+}
+
+/* ── Banner de aprovação do celular ───────────────────────── */
+.live-approve-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(92vw, 30rem);
+  padding: 0.75rem 0.875rem;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--live-card) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid color-mix(in srgb, var(--live-primary) 40%, transparent);
+  box-shadow: 0 18px 50px -16px rgb(0 0 0 / 0.55);
+  color: var(--live-fg);
+  animation: live-pop 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.live-approve-banner__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.live-approve-banner__text strong {
+  font-size: 0.875rem;
+}
+
+.live-approve-banner__text span {
+  font-size: 0.75rem;
+  color: var(--live-muted-fg);
+}
+
+.live-approve-banner__btn {
+  flex-shrink: 0;
+  padding: 0.4375rem 0.875rem;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.live-approve-banner__btn:hover {
+  filter: brightness(1.08);
+}
+
+.live-approve-banner__btn:active {
+  transform: scale(0.96);
+}
+
+.live-approve-banner__btn--ok {
+  background: var(--live-primary);
+  color: var(--live-primary-fg);
+}
+
+.live-approve-banner__btn--no {
+  background: color-mix(in srgb, var(--live-fg) 10%, transparent);
+  color: var(--live-fg);
+}
+
+@keyframes live-pop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.live-modal {
+  animation-name: live-modal-pop;
+}
+
+@keyframes live-modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* ── Badge Beta ─────────────────────────────────────── */
 .live-beta-badge,
 .live-beta-badge--hero {
@@ -378,7 +605,14 @@
 .live-grid--6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .live-grid--spotlight {
+  /* A classe base .live-grid não é aplicada junto — o flex:1 e o gap
+     precisam vir aqui, senão o grid encolhe para o tamanho do conteúdo
+     (cards espremidos quando alguém compartilha a tela). */
+  flex: 1;
   display: grid;
+  gap: 0.75rem;
+  min-height: 0;
+  min-width: 0;
   grid-template-columns: minmax(0, 1fr) minmax(9rem, 16rem);
   grid-template-rows: minmax(0, 1fr);
 }

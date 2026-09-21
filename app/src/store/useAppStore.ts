@@ -121,6 +121,10 @@ type AppState = {
     | "error";
   companionVideo: MediaStream | null;
   companionCameraActive: boolean;
+  /** Pareamento aguardando aprovação do dono (toast de confirmação). */
+  companionRequestPending: boolean;
+  /** De onde vem o vídeo publicado na chamada: webcam local ou celular. */
+  cameraSource: "local" | "companion";
   incomingCall: {
     conversationId: number;
     actorName: string;
@@ -187,6 +191,8 @@ type AppState = {
         | "companionStatus"
         | "companionVideo"
         | "companionCameraActive"
+        | "companionRequestPending"
+        | "cameraSource"
       >
     >
   ) => void;
@@ -254,6 +260,8 @@ export const useAppStore = create<AppState>(set => ({
   companionStatus: "idle",
   companionVideo: null,
   companionCameraActive: false,
+  companionRequestPending: false,
+  cameraSource: "local" as const,
   incomingCall: null,
   mobileNavOpen: false,
   mobileMembersOpen: false,
@@ -523,6 +531,8 @@ export const useAppStore = create<AppState>(set => ({
       companionStatus: "idle",
       companionVideo: null,
       companionCameraActive: false,
+      companionRequestPending: false,
+      cameraSource: "local",
     }),
 
   setIncomingCall: call => set({ incomingCall: call }),
