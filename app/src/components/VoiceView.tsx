@@ -209,6 +209,7 @@ export function VoiceView({
   const companionStatus = useAppStore(s => s.companionStatus);
   const companionCode = useAppStore(s => s.companionCode);
   const companionSessionId = useAppStore(s => s.companionSessionId);
+  const companionRequestPending = useAppStore(s => s.companionRequestPending);
   const speakingByUser = useAppStore(s => s.speakingByUser);
   const localVideo = useAppStore(s => s.localVideo);
   const remoteStreams = useAppStore(s => s.remoteStreams);
@@ -735,6 +736,31 @@ export function VoiceView({
               </TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="center" sideOffset={6}>
+              {companionRequestPending && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    if (companionSessionId)
+                      voiceManager.approveCompanion(companionSessionId);
+                  }}
+                >
+                  <Check className="mr-2 h-4 w-4 text-emerald-400" />
+                  Permitir celular como câmera
+                </DropdownMenuItem>
+              )}
+              {companionStatus === "video-ready" && (
+                <DropdownMenuItem
+                  onSelect={() => voiceManager.setCameraSource("companion")}
+                >
+                  <Smartphone className="mr-2 h-4 w-4 text-emerald-400" />
+                  Celular conectado — usar como câmera
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onSelect={() => voiceManager.setCameraSource("local")}
+              >
+                <Video className="mr-2 h-4 w-4" />
+                Usar câmera deste dispositivo
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => {
                   if (companionSessionId) {
@@ -747,8 +773,17 @@ export function VoiceView({
                 }}
               >
                 <Smartphone className="mr-2 h-4 w-4" />
-                Usar outro dispositivo como câmera
+                Usar celular como câmera
               </DropdownMenuItem>
+              {companionSessionId && (
+                <DropdownMenuItem
+                  onSelect={() => void voiceManager.stopCompanionCamera()}
+                  className="text-red-400 focus:text-red-300"
+                >
+                  <PhoneOff className="mr-2 h-4 w-4" />
+                  Desconectar celular
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 

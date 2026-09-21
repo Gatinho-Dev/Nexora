@@ -447,7 +447,17 @@ export type CompanionControlAction =
   | "toggle-deafen"
   | "toggle-camera"
   | "toggle-screen"
-  | "leave-call";
+  | "leave-call"
+  /** Câmera do celular ligada (envia vídeo de novo). */
+  | "camera-on"
+  /** Câmera do celular desligada (PC volta a mostrar sem vídeo). */
+  | "camera-off"
+  /** Microfone do celular ligado. */
+  | "mic-on"
+  /** Microfone do celular desligado (silêncio enviado). */
+  | "mic-off"
+  /** Celular pede para se desconectar (não encerra a chamada). */
+  | "disconnect";
 
 export type CompanionStatus = "pending" | "paired" | "video-ready" | "disconnected";
 
@@ -473,7 +483,9 @@ export type WSPublicServerEvent =
   | { t: "paired"; code: string; session: CompanionSessionPublic }
   | { t: "companion:state"; code: string; session: CompanionSessionPublic }
   | { t: "companion:signal"; code: string; data: unknown }
-  | { t: "companion:error"; code: string; message: string };
+  | { t: "companion:error"; code: string; message: string }
+  /** Pareamento válido, aguardando o dono aprovar no computador. */
+  | { t: "companion:pending"; code: string };
 
 // ── Segurança: denúncias / apelações / casos ──────────────────
 export type ReportTargetType =
@@ -603,7 +615,11 @@ export type WSClientEvent =
     }
   | { t: "companion:start"; voiceSessionId?: string }
   | { t: "companion:signal"; sessionId: string; data: unknown }
-  | { t: "companion:stop"; sessionId: string };
+  | { t: "companion:stop"; sessionId: string }
+  /** Dono aprovou o pareamento solicitado pelo celular. */
+  | { t: "companion:approve"; sessionId: string }
+  /** Dono recusou o pareamento solicitado pelo celular. */
+  | { t: "companion:reject"; sessionId: string };
 
 /** Atividade de jogo (Roblox) transmitida em tempo real e retornada por query. */
 export type RobloxActivityDTO = {
@@ -706,6 +722,8 @@ export type WSServerEvent =
       data: unknown;
     }
   | { t: "companion:disconnected"; sessionId: string }
+  /** Um celular está tentando parear — o dono precisa aprovar. */
+  | { t: "companion:request"; sessionId: string }
   | {
       t: "poll:update";
       messageId: number;

@@ -13,27 +13,27 @@ import {
   Smartphone,
   SwitchCamera,
   TriangleAlert,
-  WifiOff,
   CheckCircle2,
 } from "lucide-react";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 
 /**
- * Nexora Mobile Camera — página do celular.
+ * Nexora Mobile Camera — página do celular para o Nexora Live.
  *
- * O celular pareia com a chamada via código curto (QR), envia a oferta
- * WebRTC e transmite câmera/mic P2P para o dispositivo principal. Nenhum
- * login é necessário: o código de pareamento é temporário e de uso único.
+ * O celular escaneia o QR exibido no PC (rota /mobile-camera?code=…),
+ * pareia via /ws/live-companion e transmite câmera/mic P2P para o
+ * participante do Live. Sem login: o código é temporário, de uso único
+ * e ainda precisa ser aprovado pelo dono no computador.
  */
 
 type Phase =
-  | "idle" // código na URL aguardando "Conectar"
-  | "connecting" // pedindo permissões + pareando
-  | "pending" // pareamento válido, aguardando aprovação no PC
-  | "ready" // transmitindo
-  | "reconnecting" // queda breve de rede — religando
-  | "disconnected" // desconectado manualmente
-  | "ended" // encerrado pelo dispositivo principal
+  | "idle"
+  | "connecting"
+  | "pending"
+  | "ready"
+  | "reconnecting"
+  | "disconnected"
+  | "ended"
   | "error";
 
 type FacingMode = "user" | "environment";
@@ -44,7 +44,7 @@ const VIDEO_CONSTRAINTS = {
   frameRate: { ideal: 30 },
 };
 
-export default function CompanionPage() {
+export default function MobileCameraPage() {
   const [searchParams] = useSearchParams();
   const urlCode = searchParams.get("code") ?? "";
   const [activeCode, setActiveCode] = useState(urlCode);
@@ -54,9 +54,8 @@ export default function CompanionPage() {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const facingRef = useRef<FacingMode>("user");
-  /** Evita reconectar depois de saída intencional. */
   const finishedRef = useRef(false);
-  const reconnectAttemptRef = useRef(0);
+  const attemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Referência estável ao start (usado pela reconexão interna). */
   const startRef = useRef<(code: string, isReconnect?: boolean) => Promise<void>>(
@@ -65,27 +64,18 @@ export default function CompanionPage() {
   /** True quando a prévia local está montada com stream. */
   const [hasPreview, setHasPreview] = useState(false);
 
-  const [phase, setPhase] = useState<Phase>(urlCode ? "idle" : "idle");
+  const [phase, setPhase] = useState<Phase>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [facing, setFacing] = useState<FacingMode>("user");
   const [confirmLeave, setConfirmLeave] = useState(false);
-  const [connectionLabel, setConnectionLabel] = useState("Conectando ao Nexora…");
 
-  // ── Helpers de envio ─────────────────────────────────────────
   const send = useCallback((data: unknown) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
     }
   }, []);
-
-  const sendControl = useCallback(
-    (action: string) => {
-      send({ t: "companion:control", code: activeCode, action });
-    },
-    [send, activeCode]
-  );
 
   // ── WebRTC ───────────────────────────────────────────────────
   const ensurePeer = useCallback(() => {
@@ -108,12 +98,10 @@ export default function CompanionPage() {
     };
 
     pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connected") setPhase("ready");
       if (pc.connectionState === "failed") {
         setPhase("error");
-        setErrorMsg("A conexão com a chamada falhou.");
-      }
-      if (pc.connectionState === "connected") {
-        setPhase("ready");
+        setErrorMsg("A conexão com a sala falhou.");
       }
     };
 
@@ -127,7 +115,10 @@ export default function CompanionPage() {
   const handleSignal = useCallback(
     async (data: unknown) => {
       if (!data || typeof data !== "object") return;
-      const msg = data as { description?: RTCSessionDescriptionInit; candidate?: unknown };
+      const msg = data as {
+        description?: RTCSessionDescriptionInit;
+        candidate?: unknown;
+      };
       try {
         const pc = ensurePeer();
         if (msg.description) {
@@ -144,9 +135,9 @@ export default function CompanionPage() {
           await pc.addIceCandidate(msg.candidate as RTCIceCandidateInit);
         }
       } catch (error) {
-        console.error("[MOBILE-CAM] Falha no signaling", error);
+        console.error("[MOBILE-LIVE] Falha no signaling", error);
         setPhase("error");
-        setErrorMsg("Não foi possível conectar à chamada.");
+        setErrorMsg("Não foi possível conectar à sala.");
       }
     },
     [ensurePeer, send, activeCode]
@@ -164,7 +155,7 @@ export default function CompanionPage() {
           data: { description: pc.localDescription?.toJSON() },
         });
       } catch (error) {
-        console.error("[MOBILE-CAM] Falha ao criar oferta", error);
+        console.error("[MOBILE-LIVE] Falha ao criar oferta", error);
         setPhase("error");
         setErrorMsg("Não foi possível iniciar a câmera.");
       }
@@ -190,7 +181,7 @@ export default function CompanionPage() {
 
   useEffect(() => cleanup, [cleanup]);
 
-  // ── Conexão (pareamento + mídia) ─────────────────────────────
+  // ── Conexão ──────────────────────────────────────────────────
   const start = useCallback(
     async (codeToPair: string, isReconnect = false) => {
       setErrorMsg(null);
@@ -203,9 +194,6 @@ export default function CompanionPage() {
 
       if (!isReconnect) {
         setPhase("connecting");
-        setConnectionLabel("Conectando ao Nexora…");
-
-        // Permissões: vídeo sempre; áudio quando o navegador permitir.
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
             audio: true,
@@ -220,18 +208,16 @@ export default function CompanionPage() {
         } catch {
           setPhase("error");
           setErrorMsg(
-            "Permissão de câmera necessária. Permita o acesso à câmera nas configurações do navegador e toque em tentar novamente."
+            "Permissão de câmera necessária. Permita o acesso nas configurações do navegador e tente novamente."
           );
           return;
         }
       } else {
-        setConnectionLabel("Reconectando…");
-        // PC antigo morreu com a queda — um novo é criado com as tracks atuais.
         pcRef.current?.close();
         pcRef.current = null;
       }
 
-      const ws = new WebSocket(websocketUrl("/ws/companion"));
+      const ws = new WebSocket(websocketUrl("/ws/live-companion"));
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -248,9 +234,8 @@ export default function CompanionPage() {
         const m = msg as { t?: string; message?: string };
         switch (m.t) {
           case "paired":
-            reconnectAttemptRef.current = 0;
+            attemptsRef.current = 0;
             setPhase("connecting");
-            setConnectionLabel("Sincronizando com a chamada…");
             createOffer();
             break;
           case "companion:pending":
@@ -261,12 +246,7 @@ export default function CompanionPage() {
             break;
           case "companion:error":
             finishedRef.current = true;
-            setPhase(
-              typeof m.message === "string" &&
-                m.message.toLowerCase().includes("recusou")
-                ? "error"
-                : "ended"
-            );
+            setPhase("error");
             setErrorMsg(m.message ?? "Erro ao parear o dispositivo.");
             break;
           default:
@@ -277,25 +257,21 @@ export default function CompanionPage() {
       ws.onclose = event => {
         wsRef.current = null;
         if (finishedRef.current) return;
-
-        // 4000 = o dispositivo principal encerrou/invalidou a sessão.
         if (event.code === 4000) {
-          setPhase("ended");
+          // Recusado pelo dono ou desconectado por ele.
+          setPhase("error");
+          setErrorMsg("A conexão foi recusada ou encerrada no computador.");
           return;
         }
-
-        // Queda de rede: tenta religar com o mesmo código (o servidor
-        // guarda o lugar por alguns segundos).
-        if (reconnectAttemptRef.current < 5) {
-          reconnectAttemptRef.current += 1;
+        if (attemptsRef.current < 5) {
+          attemptsRef.current += 1;
           setPhase("reconnecting");
           reconnectTimerRef.current = setTimeout(
             () => void startRef.current(codeToPair, true),
-            1500 * reconnectAttemptRef.current
+            1500 * attemptsRef.current
           );
           return;
         }
-
         setPhase("error");
         setErrorMsg("A conexão foi perdida. Verifique sua internet.");
       };
@@ -312,13 +288,17 @@ export default function CompanionPage() {
     startRef.current = start;
   }, [start]);
 
-  // ── Controles do celular ─────────────────────────────────────
+  // ── Controles ────────────────────────────────────────────────
   function toggleMic() {
     const track = streamRef.current?.getAudioTracks()[0];
     if (!track) return;
     track.enabled = !track.enabled;
     setMicOn(track.enabled);
-    sendControl(track.enabled ? "mic-on" : "mic-off");
+    send({
+      t: "companion:control",
+      code: activeCode,
+      action: track.enabled ? "mic-on" : "mic-off",
+    });
   }
 
   function toggleCam() {
@@ -326,21 +306,25 @@ export default function CompanionPage() {
     if (!track) return;
     track.enabled = !track.enabled;
     setCamOn(track.enabled);
-    sendControl(track.enabled ? "camera-on" : "camera-off");
+    send({
+      t: "companion:control",
+      code: activeCode,
+      action: track.enabled ? "camera-on" : "camera-off",
+    });
   }
 
   async function flipCamera() {
     const stream = streamRef.current;
     if (!stream) return;
-    const next: FacingMode = facingRef.current === "user" ? "environment" : "user";
+    const next: FacingMode =
+      facingRef.current === "user" ? "environment" : "user";
     let newStream: MediaStream;
     try {
       newStream = await navigator.mediaDevices.getUserMedia({
         video: { ...VIDEO_CONSTRAINTS, facingMode: { ideal: next } },
       });
     } catch {
-      // Sem segunda câmera (ou permissão): mantém a atual.
-      return;
+      return; // sem segunda câmera — mantém a atual
     }
     const newTrack = newStream.getVideoTracks()[0];
     const oldTrack = stream.getVideoTracks()[0];
@@ -352,7 +336,6 @@ export default function CompanionPage() {
     facingRef.current = next;
     setFacing(next);
 
-    // replaceTrack em todos os senders — sem renegociação.
     for (const sender of pcRef.current?.getSenders() ?? []) {
       if (sender.track?.kind === "video") {
         await sender.replaceTrack(newTrack).catch(() => {});
@@ -368,11 +351,10 @@ export default function CompanionPage() {
   }
 
   function disconnect() {
-    sendControl("disconnect");
+    send({ t: "companion:control", code: activeCode, action: "disconnect" });
     setConfirmLeave(false);
-    setPhase("disconnected");
     cleanup();
-    finishedRef.current = true;
+    setPhase("disconnected");
   }
 
   const transmitting = phase === "ready" || phase === "connecting";
@@ -388,12 +370,11 @@ export default function CompanionPage() {
                 phase === "ready" ? "bg-emerald-400" : "bg-amber-400"
               )}
             />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold leading-tight">
-                {phase === "ready" ? "Nexora • Câmera conectada" : "Conectando…"}
-              </p>
-              <p className="truncate text-xs text-white/50">{connectionLabel}</p>
-            </div>
+            <p className="text-sm font-semibold">
+              {phase === "ready"
+                ? "Nexora Live • Câmera conectada"
+                : "Conectando…"}
+            </p>
           </header>
           <div className="relative min-h-0 flex-1 px-3">
             <video
@@ -431,12 +412,16 @@ export default function CompanionPage() {
               >
                 {camOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
               </ControlButton>
-              <ControlButton active={false} label="Virar câmera" onClick={() => void flipCamera()}>
+              <ControlButton
+                active={false}
+                label="Virar câmera"
+                onClick={() => void flipCamera()}
+              >
                 <SwitchCamera className="h-5 w-5" />
               </ControlButton>
               <ControlButton
                 active={false}
-                label="Encerrar chamada"
+                label="Desconectar"
                 danger
                 onClick={() => setConfirmLeave(true)}
               >
@@ -448,16 +433,17 @@ export default function CompanionPage() {
           {confirmLeave && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
               <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#2b2d31] p-5 text-center">
-                <h2 className="text-base font-bold">Encerrar chamada?</h2>
+                <h2 className="text-base font-bold">Desconectar câmera?</h2>
                 <p className="mt-1 text-sm text-white/60">
-                  Isso desconectará o celular e encerrará a conexão com este dispositivo.
+                  A sala continua ativa no seu computador — só este celular para
+                  de transmitir.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Button variant="secondary" onClick={() => setConfirmLeave(false)}>
                     Cancelar
                   </Button>
                   <Button variant="destructive" onClick={disconnect}>
-                    Encerrar
+                    Desconectar
                   </Button>
                 </div>
               </div>
@@ -467,7 +453,7 @@ export default function CompanionPage() {
       )}
 
       {phase === "idle" && (
-        <CompanionIdle
+        <IdleScreen
           initialCode={urlCode}
           onStart={c => {
             setActiveCode(c);
@@ -475,48 +461,35 @@ export default function CompanionPage() {
           }}
         />
       )}
-
       {phase === "pending" && (
         <PhaseScreen
           icon={<Loader2 className="h-10 w-10 animate-spin text-[#5865F2]" />}
           title="Aguardando aprovação…"
-          description="Toque em “Permitir” no menu da câmera no seu computador para conectar este celular."
+          description="Toque em “Permitir” no computador para conectar este celular à sala."
         />
       )}
-
       {phase === "connecting" && !hasPreview && (
         <PhaseScreen
           icon={<Loader2 className="h-10 w-10 animate-spin text-[#5865F2]" />}
-          title="Conectando ao Nexora…"
-          description="Solicitando acesso à câmera e pareando com a chamada."
+          title="Conectando ao Nexora Live…"
+          description="Solicitando acesso à câmera e pareando com a sala."
         />
       )}
-
       {phase === "reconnecting" && (
         <PhaseScreen
           icon={<Loader2 className="h-10 w-10 animate-spin text-amber-400" />}
           title="Reconectando…"
-          description="A conexão caiu por um instante. Voltando para a chamada."
+          description="A conexão caiu por um instante. Voltando para a sala."
         />
       )}
-
       {phase === "disconnected" && (
         <PhaseScreen
           icon={<CheckCircle2 className="h-10 w-10 text-white/50" />}
           title="Celular desconectado"
-          description="Conecte novamente pelo Nexora quando quiser usar a câmera deste dispositivo."
+          description="Escaneie o QR code novamente para reconectar."
+          action={{ label: "Voltar", onClick: () => (window.location.href = "/live") }}
         />
       )}
-
-      {phase === "ended" && (
-        <PhaseScreen
-          icon={<PhoneOff className="h-10 w-10 text-white/50" />}
-          title="Chamada encerrada"
-          description="A câmera foi liberada. Pode fechar esta página."
-          action={{ label: "Voltar", onClick: () => (window.location.href = "/") }}
-        />
-      )}
-
       {phase === "error" && (
         <PhaseScreen
           icon={<TriangleAlert className="h-10 w-10 text-amber-400" />}
@@ -527,7 +500,7 @@ export default function CompanionPage() {
             onClick: () => {
               cleanup();
               finishedRef.current = false;
-              reconnectAttemptRef.current = 0;
+              attemptsRef.current = 0;
               setPhase("idle");
             },
           }}
@@ -536,8 +509,6 @@ export default function CompanionPage() {
     </main>
   );
 }
-
-// ── Telas simples ──────────────────────────────────────────────
 
 function PhaseScreen({
   icon,
@@ -564,7 +535,7 @@ function PhaseScreen({
   );
 }
 
-function CompanionIdle({
+function IdleScreen({
   initialCode,
   onStart,
 }: {
@@ -581,31 +552,25 @@ function CompanionIdle({
           <h1 className="text-lg font-bold">Nexora Mobile Camera</h1>
           <p className="text-sm text-white/60">
             {hasInitialCode
-              ? "Vamos usar a câmera deste dispositivo na sua chamada. Ao tocar em conectar, a Nexora vai pedir acesso à câmera e ao microfone."
-              : "Use este dispositivo como câmera da sua chamada. Informe o código exibido no QR code da chamada."}
+              ? "Vamos usar a câmera deste dispositivo na sala do Nexora Live. Ao tocar em conectar, a Nexora vai pedir acesso à câmera e ao microfone."
+              : "Use este dispositivo como câmera da sala. Informe o código exibido no QR code da sala do Nexora Live."}
           </p>
         </div>
-        {hasInitialCode && (
-          <p className="mb-4 rounded-lg border border-[#5865F2]/30 bg-[#5865F2]/10 px-3 py-2 text-center font-mono text-lg tracking-[0.3em] text-white">
+        {hasInitialCode ? (
+          <p className="mb-4 rounded-lg border border-[#5865F2]/30 bg-[#5865F2]/10 px-3 py-2 text-center font-mono text-lg tracking-[0.3em]">
             {initialCode}
           </p>
-        )}
-        {!hasInitialCode && (
-          <>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-white/50">
-              Código de pareamento
-            </label>
-            <input
-              value={composingCode}
-              onChange={e =>
-                setComposingCode(
-                  e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)
-                )
-              }
-              placeholder="Ex: AB12CD34"
-              className="mb-4 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-center text-lg font-mono tracking-[0.3em] outline-none focus:ring-2 focus:ring-[#5865F2]"
-            />
-          </>
+        ) : (
+          <input
+            value={composingCode}
+            onChange={e =>
+              setComposingCode(
+                e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8)
+              )
+            }
+            placeholder="Ex: AB12CD34"
+            className="mb-4 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-center text-lg font-mono tracking-[0.3em] outline-none focus:ring-2 focus:ring-[#5865F2]"
+          />
         )}
         <Button
           className="w-full"
@@ -615,10 +580,6 @@ function CompanionIdle({
           <Smartphone className="mr-2 h-4 w-4" />
           Conectar como câmera
         </Button>
-        <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-white/40">
-          <WifiOff className="h-3 w-3" />
-          O código expira em poucos minutos e é de uso único.
-        </p>
       </div>
     </div>
   );

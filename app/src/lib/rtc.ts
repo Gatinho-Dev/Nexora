@@ -130,6 +130,10 @@ class VoiceManager {
   private companionPendingCandidates: (RTCIceCandidateInit | null)[] = [];
   private companionVideoTrack: MediaStreamTrack | null = null;
   private companionSessionId: string | null = null;
+  /** De onde deve vir o vídeo publicado: webcam local ou celular. */
+  private preferredCameraSource: "local" | "companion" = "local";
+  /** Vira true quando o usuário escolhe a fonte manualmente (menu da seta). */
+  private cameraSourceExplicit = false;
   private knownParticipantIds = new Set<number>();
   private mutedBeforeDeafen = false;
   private reconnectDeadline: ReturnType<typeof setTimeout> | null = null;
@@ -936,6 +940,32 @@ class VoiceManager {
     });
   }
 
+  /** Um celular está solicitando parear — o dono precisa aprovar no PC. */
+  handleCompanionRequest(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    useAppStore.getState().setVoiceSession({ companionRequestPending: true });
+  }
+
+  /** Dono aprovou: o celular envia a oferta WebRTC em seguida. */
+  approveCompanion(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    useAppStore.getState().setVoiceSession({ companionRequestPending: false });
+    realtime.send({ t: "companion:approve", sessionId });
+  }
+
+  /** Dono recusou: invalida a sessão e limpa o estado local. */
+  rejectCompanion(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    this.companionSessionId = null;
+    realtime.send({ t: "companion:reject", sessionId });
+    useAppStore.getState().setVoiceSession({
+      companionRequestPending: false,
+      companionStatus: "idle",
+      companionSessionId: null,
+      companionCode: null,
+    });
+  }
+
   private createCompanionPeer() {
     if (this.companionPc) return;
     this.companionPendingCandidates = [];
@@ -963,15 +993,38 @@ class VoiceManager {
       const track = videoTrack.find(t => t.kind === "video");
       if (track) {
         this.companionVideoTrack = track;
-        this.publishVideoTrack(track).catch(() => {});
+        // O celular vira a câmera automaticamente (a menos que o usuário
+        // tenha escolhido a webcam local explicitamente no menu).
+        if (!this.cameraSourceExplicit) {
+          this.preferredCameraSource = "companion";
+        }
+        track.onmute = () => {
+          // Câmera do celular desligada pelo próprio celular.
+          useAppStore.getState().setVoiceSession({ companionCameraActive: false });
+          if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+            this.sendState({ camera: false });
+          }
+        };
+        track.onunmute = () => {
+          useAppStore.getState().setVoiceSession({ companionCameraActive: true });
+          if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+            this.sendState({ camera: true });
+          }
+        };
+        if (!this.screenTrack && this.preferredCameraSource === "companion") {
+          this.publishVideoTrack(track).catch(() => {});
+        }
         this.refreshLocalVideo();
         useAppStore.getState().setVoiceSession({
           cameraOn: true,
+          cameraSource: this.preferredCameraSource,
           companionVideo: new MediaStream([track]),
           companionStatus: "video-ready",
           companionCameraActive: true,
         });
-        this.sendState({ camera: true });
+        if (!this.screenTrack && this.preferredCameraSource === "companion") {
+          this.sendState({ camera: true });
+        }
       }
     };
 
@@ -1031,6 +1084,29 @@ class VoiceManager {
       case "toggle-screen":
         this.toggleCompanionScreen();
         break;
+      // ── Nexora Mobile Camera: controles granulares do celular ──
+      case "camera-on":
+        useAppStore.getState().setVoiceSession({ companionCameraActive: true });
+        if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+          this.sendState({ camera: true });
+        }
+        break;
+      case "camera-off":
+        useAppStore.getState().setVoiceSession({ companionCameraActive: false });
+        if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+          this.sendState({ camera: false });
+        }
+        break;
+      case "mic-on":
+      case "mic-off":
+        // O celular muta a própria track — nada a fazer além do VAD,
+        // que naturalmente deixa de detectar fala quando mudo.
+        break;
+      case "disconnect":
+        // O celular se desconectou (não encerra a chamada do Nexora):
+        // solta o peer e restaura a webcam local.
+        void this.stopCompanionCamera();
+        break;
       case "leave-call":
         void this.leave();
         break;
@@ -1050,6 +1126,29 @@ class VoiceManager {
     });
   }
 
+  /** Publica a webcam local ou o vídeo do celular como câmera da chamada. */
+  async setCameraSource(source: "local" | "companion") {
+    if (this.preferredCameraSource === source) return;
+    this.preferredCameraSource = source;
+    this.cameraSourceExplicit = true;
+    useAppStore.getState().setVoiceSession({ cameraSource: source });
+    // A tela tem precedência — a troca vale a partir do fim do share.
+    if (this.screenTrack) return;
+    const track =
+      source === "companion" ? this.companionVideoTrack : this.cameraTrack;
+    if (track) {
+      await this.publishVideoTrack(track);
+      this.sendState({ camera: true });
+    } else {
+      // Fonte escolhida não está disponível: deixa de enviar vídeo.
+      for (const peer of this.peers.values()) {
+        if (peer.videoSender) await peer.videoSender.replaceTrack(null).catch(() => {});
+      }
+      this.sendState({ camera: false });
+    }
+    this.refreshLocalVideo();
+  }
+
   async stopCompanionCamera() {
     if (this.companionSessionId) {
       realtime.send({ t: "companion:stop", sessionId: this.companionSessionId });
@@ -1061,10 +1160,19 @@ class VoiceManager {
       companionStatus: "idle",
       companionVideo: null,
       companionCameraActive: false,
+      companionRequestPending: false,
       companionSessionId: null,
       companionCode: null,
     });
-    this.sendState({ camera: false });
+    // Restaura a webcam local se a chamada estava publicando o celular.
+    if (this.cameraTrack && !this.screenTrack) {
+      await this.publishVideoTrack(this.cameraTrack);
+      this.sendState({ camera: true });
+      useAppStore.getState().setVoiceSession({ cameraOn: true });
+    } else {
+      this.sendState({ camera: false });
+    }
+    this.refreshLocalVideo();
   }
 
   private disconnectCompanionPeer() {
@@ -1072,6 +1180,8 @@ class VoiceManager {
     this.companionPc = null;
     this.companionPendingCandidates = [];
     this.companionVideoTrack = null;
+    this.preferredCameraSource = "local";
+    this.cameraSourceExplicit = false;
     if (pc) {
       for (const sender of pc.getSenders()) sender.replaceTrack(null).catch(() => {});
       pc.ontrack = null;

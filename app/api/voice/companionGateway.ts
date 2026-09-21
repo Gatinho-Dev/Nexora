@@ -25,6 +25,9 @@ import {
   * companion device and the call owner over WebRTC.
   */
  
+ /** Tolerância para o celular religar o WS após queda breve de rede. */
+ const COMPANION_RECONNECT_GRACE_MS = 10_000;
+
  function isPublicEvent(value: unknown): value is WSPublicClientEvent {
    if (!value || typeof value !== "object") return false;
    const event = value as Record<string, unknown>;
@@ -76,8 +79,10 @@ import {
      }
    );
  
-  wss.on("connection", (ws: WebSocket) => {
+      wss.on("connection", (ws: WebSocket) => {
      let pairedCode: string | null = null;
+    /** Tolerância para o celular religar o WS (troca de rede/Wi-Fi). */
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
  
      ws.on("message", raw => {
        let event: unknown;
@@ -108,16 +113,35 @@ import {
          }
          pairedCode = event.code;
          session.companionSocket = ws;
-         session.status = "paired";
-         sendPublic(ws, {
-           t: "paired",
-           code: event.code,
-           session: toPublic(session),
-         });
-         sendToUsers([session.ownerUserId], {
-           t: "companion:paired",
-           sessionId: session.id,
-         });
+         if (reconnectTimer) {
+           clearTimeout(reconnectTimer);
+           reconnectTimer = null;
+         }
+
+         // Estado no servidor é a fonte da verdade (a aprovação acontece
+         // no gateway autenticado /ws, via realtime.ts): "pending" = sessão
+         // recém-criada aguardando o dono aprovar; "paired"/"video-ready"
+         // = este celular já foi aprovado e está reconectando.
+         const isReconnect =
+           session.status === "paired" || session.status === "video-ready";
+         if (isReconnect) {
+           sendPublic(ws, {
+             t: "paired",
+             code: event.code,
+             session: toPublic(session),
+           });
+           sendToUsers([session.ownerUserId], {
+             t: "companion:paired",
+             sessionId: session.id,
+           });
+         } else {
+           session.status = "pending";
+           sendPublic(ws, { t: "companion:pending", code: event.code });
+           sendToUsers([session.ownerUserId], {
+             t: "companion:request",
+             sessionId: session.id,
+           });
+         }
          sendToUsers([session.ownerUserId], {
            t: "companion:state",
            sessionId: session.id,
@@ -128,9 +152,7 @@ import {
  
        if (!pairedCode) return;
        const session = getCompanionSessionByCode(pairedCode);
-       if (!session || session.companionSocket !== ws) return;
- 
-       if (event.t === "companion:ready") {
+       if (!session || session.companionSocket !== ws) return;       if (event.t === "companion:ready") {
          session.status = "video-ready";
          sendToUsers([session.ownerUserId], {
            t: "companion:state",
@@ -139,7 +161,10 @@ import {
          });
          return;
        }
- 
+
+       // Sinalização (offer/answer/ICE) só depois de aprovado pelo dono.
+       if (session.status === "pending") return;
+
        if (event.t === "companion:signal") {
          sendToUsers([session.ownerUserId], {
            t: "companion:signal",
@@ -168,20 +193,33 @@ import {
      ws.on("close", () => {
        if (!pairedCode) return;
        const session = getCompanionSessionByCode(pairedCode);
-       if (session && session.companionSocket === ws) {
-         session.companionSocket = null;
-         session.status = "disconnected";
-         sendToUsers([session.ownerUserId], {
-           t: "companion:disconnected",
-           sessionId: session.id,
-         });
-         sendToUsers([session.ownerUserId], {
-           t: "companion:state",
-           sessionId: session.id,
-           session: toPublic(session),
-         });
+       if (!session || session.companionSocket !== ws) return;
+
+       // Nunca aprovado (aguardando/recusado): dispende a sessão.
+       if (session.status === "pending") {
          disbandCompanionSession(session);
+         pairedCode = null;
+         return;
        }
+
+       // Queda breve (troca de Wi-Fi/dados): guarda o lugar por 10s.
+       session.companionSocket = null;
+       sendToUsers([session.ownerUserId], {
+         t: "companion:state",
+         sessionId: session.id,
+         session: toPublic(session),
+       });
+       reconnectTimer = setTimeout(() => {
+         const current = getCompanionSessionByCode(pairedCode ?? "");
+         if (current && current.companionSocket === null) {
+           sendToUsers([current.ownerUserId], {
+             t: "companion:disconnected",
+             sessionId: current.id,
+           });
+           disbandCompanionSession(current);
+         }
+       }, COMPANION_RECONNECT_GRACE_MS);
+       reconnectTimer.unref?.();
      });
    });
  

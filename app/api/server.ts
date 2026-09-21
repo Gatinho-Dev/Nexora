@@ -3,6 +3,7 @@ import { serveStaticFiles } from "./lib/vite";
 import { attachRealtime } from "./realtime";
 import { attachCompanionGateway } from "./voice/companionGateway";
 import { attachLiveGateway } from "./live/gateway";
+import { attachLiveCompanionGateway } from "./live/liveCompanionGateway";
 import { startLiveRoomSweeper } from "./live/rooms";
 import app from "./boot";
 import { resumePendingModeration } from "./services/mediaModeration";
@@ -34,4 +35,5 @@ const server = serve({ fetch: app.fetch, port, hostname: "0.0.0.0" }, () => {
 attachRealtime(server as unknown as import("http").Server);
 attachCompanionGateway(server as unknown as import("http").Server);
 attachLiveGateway(server as unknown as import("http").Server);
+attachLiveCompanionGateway(server as unknown as import("http").Server);
 startLiveRoomSweeper();

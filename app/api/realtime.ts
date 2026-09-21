@@ -35,6 +35,7 @@ import {
   getCompanionSessionForOwner,
   refreshCompanionExpiry,
   disbandCompanionSession,
+  toPublic,
 } from "./voice/companion";
 import { insertSystemMessage, userName } from "./services/groupService";
 import { activeServerTimeout } from "./services/serverModeration";
@@ -1067,6 +1068,48 @@ async function handleEvent(client: Client, event: WSClientEvent) {
           })
         );
         ws.close(4000, "owner-stopped");
+      }
+      disbandCompanionSession(session);
+      break;
+    }
+    case "companion:approve": {
+      const session = getCompanionSessionForOwner(
+        event.sessionId,
+        client.userId
+      );
+      if (!session || !session.companionSocket) return;
+      session.status = "paired";
+      session.companionSocket.send(
+        JSON.stringify({
+          t: "paired",
+          code: session.code,
+          session: toPublic(session),
+        })
+      );
+      send(client, { t: "companion:paired", sessionId: session.id });
+      send(client, {
+        t: "companion:state",
+        sessionId: session.id,
+        session: toPublic(session),
+      });
+      break;
+    }
+    case "companion:reject": {
+      const session = getCompanionSessionForOwner(
+        event.sessionId,
+        client.userId
+      );
+      if (!session) return;
+      const ws = session.companionSocket;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            t: "companion:error",
+            code: session.code,
+            message: "O proprietário recusou a conexão deste celular.",
+          })
+        );
+        ws.close(4000, "owner-rejected");
       }
       disbandCompanionSession(session);
       break;

@@ -605,6 +605,10 @@ export function removeSession(sessionId: string): void {
     sessionIndex.delete(sessionId);
     return;
   }
+  // O celular da Mobile Camera desta sessão cai junto com o dono.
+  void import("./liveCompanionBridge").then(m =>
+    m.notifyOwnerGone(sessionId)
+  );
   removeParticipant(room, sessionId);
 }
 
@@ -722,6 +726,12 @@ export function endRoomByHost(hostSessionId: string): boolean {
   const code = sessionIndex.get(hostSessionId);
   const room = code ? rooms.get(code) : undefined;
   if (!room || room.hostSessionId !== hostSessionId) return false;
+  // Todos os celulares pareados com a sala caem com ela.
+  for (const participant of room.participants.keys()) {
+    void import("./liveCompanionBridge").then(m =>
+      m.notifyOwnerGone(participant)
+    );
+  }
   endRoom(room.code);
   return true;
 }
@@ -754,6 +764,27 @@ export function roomOfSession(sessionId: string): string | null {
   return sessionIndex.get(sessionId) ?? null;
 }
 
+/** Envia um evento WS para todas as conexões de uma sessão (mobile camera). */
+export function sendToSessionSockets(
+  sessionId: string,
+  event: unknown
+): void {
+  const code = sessionIndex.get(sessionId);
+  if (!code) return;
+  const participant = rooms.get(code)?.participants.get(sessionId);
+  if (!participant) return;
+  const payload = JSON.stringify(event);
+  for (const connection of participant.connections.values()) {
+    if (connection.socket.readyState === 1) {
+      try {
+        connection.socket.send(payload);
+      } catch {
+        // socket morrendo; o close handler resolve
+      }
+    }
+  }
+}
+
 /** Número de salas ativas neste processo (observabilidade/testes). */
 export function liveRoomCount(): number {
   return rooms.size;
@@ -767,3 +798,130 @@ export function resetLiveRoomsForTests() {
   rooms.clear();
   sessionIndex.clear();
 }
+
+// ── Mobile Camera: pareamento de celular com uma sessão do Live ──
+// Mesmo modelo do companion do Nexora tradicional, mas sem ownerUserId:
+// a "posse" aqui é a posse do sessionToken da sessão da sala (o celular
+// nunca conhece o token — só o gateway autenticado o usa).
+
+export type LiveCompanionSession = {
+  id: string;
+  /** Código curto que vai no QR Code (não é segredo de conta). */
+  code: string;
+  /** Sessão da sala à qual o celular vai servir como câmera. */
+  ownerSessionId: string;
+  roomCode: string;
+  companionSocket: unknown;
+  createdAt: number;
+  expiresAt: number;
+};
+
+const LIVE_COMPANION_TTL_MS = 5 * 60_000;
+
+export function createLiveCompanionSession(input: {
+  ownerSessionId: string;
+  sessionToken: string;
+  roomCode: string;
+}): LiveCompanionSession | null {
+  cleanupExpiredLiveCompanions();
+  const participant = authParticipant(input.ownerSessionId, input.sessionToken);
+  if (!participant || participant.sessionId !== input.ownerSessionId) return null;
+
+  // Um celular por sessão: substitui a sessão anterior (invalida o token).
+  for (const [id, existing] of liveCompanionsByOwner) {
+    if (existing.ownerSessionId === input.ownerSessionId) {
+      liveCompanionSessions.delete(id);
+      liveCompanionsByCode.delete(existing.code);
+      liveCompanionsByOwner.delete(id);
+    }
+  }
+
+  const now = Date.now();
+  const bytes = randomBytes(8);
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    code += LIVE_CODE_ALPHABET[bytes[i] % LIVE_CODE_ALPHABET.length];
+  }
+  while (liveCompanionsByCode.has(code)) {
+    code = code.slice(1) + LIVE_CODE_ALPHABET[randomBytes(1)[0] % LIVE_CODE_ALPHABET.length];
+  }
+  const session: LiveCompanionSession = {
+    id: randomUUID(),
+    code,
+    ownerSessionId: input.ownerSessionId,
+    roomCode: input.roomCode,
+    companionSocket: null,
+    createdAt: now,
+    expiresAt: now + LIVE_COMPANION_TTL_MS,
+  };
+  liveCompanionSessions.set(session.id, session);
+  liveCompanionsByCode.set(session.code, session.id);
+  liveCompanionsByOwner.set(session.id, session);
+  return session;
+}
+
+export function getLiveCompanionByCode(code: string): LiveCompanionSession | undefined {
+  const id = liveCompanionsByCode.get(code);
+  if (!id) return undefined;
+  const session = liveCompanionSessions.get(id);
+  if (!session) return undefined;
+  if (Date.now() > session.expiresAt) {
+    liveCompanionSessions.delete(id);
+    liveCompanionsByCode.delete(code);
+    liveCompanionsByOwner.delete(id);
+    return undefined;
+  }
+  return session;
+}
+
+export function getLiveCompanionForOwner(
+  sessionId: string,
+  sessionToken: string,
+  companionId: string
+): LiveCompanionSession | undefined {
+  const session = liveCompanionSessions.get(companionId);
+  if (!session || session.ownerSessionId !== sessionId) return undefined;
+  if (Date.now() > session.expiresAt) {
+    liveCompanionSessions.delete(companionId);
+    liveCompanionsByCode.delete(session.code);
+    liveCompanionsByOwner.delete(companionId);
+    return undefined;
+  }
+  // A posse é provada pelo sessionToken da sessão da sala.
+  const participant = authParticipant(sessionId, sessionToken);
+  if (!participant || participant.sessionId !== sessionId) return undefined;
+  return session;
+}
+
+export function disbandLiveCompanion(session: LiveCompanionSession): void {
+  liveCompanionSessions.delete(session.id);
+  liveCompanionsByCode.delete(session.code);
+  liveCompanionsByOwner.delete(session.id);
+}
+
+export function refreshLiveCompanionExpiry(session: LiveCompanionSession): void {
+  session.expiresAt = Date.now() + LIVE_COMPANION_TTL_MS;
+}
+
+function cleanupExpiredLiveCompanions() {
+  const now = Date.now();
+  for (const [id, session] of liveCompanionSessions) {
+    if (now > session.expiresAt) {
+      liveCompanionSessions.delete(id);
+      liveCompanionsByCode.delete(session.code);
+      liveCompanionsByOwner.delete(id);
+    }
+  }
+}
+
+/** Quando a sessão do dono sai da sala, o celular dela cai junto. */
+export function liveCompanionForSessionOf(sessionId: string): LiveCompanionSession | null {
+  for (const session of liveCompanionSessions.values()) {
+    if (session.ownerSessionId === sessionId) return session;
+  }
+  return null;
+}
+
+const liveCompanionSessions = new Map<string, LiveCompanionSession>();
+const liveCompanionsByCode = new Map<string, string>();
+const liveCompanionsByOwner = new Map<string, LiveCompanionSession>();

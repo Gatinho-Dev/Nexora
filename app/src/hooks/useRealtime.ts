@@ -190,6 +190,14 @@ export function useRealtime(myUserId: number | undefined) {
           voiceManager.handleCompanionPaired(event.sessionId);
           break;
         }
+        case "companion:request": {
+          voiceManager.handleCompanionRequest(event.sessionId);
+          toast.info("Um celular está tentando se conectar como câmera.", {
+            description: "Abra o menu da câmera para permitir ou recusar.",
+            duration: 10000,
+          });
+          break;
+        }
         case "companion:signal": {
           voiceManager.handleCompanionSignal(
             event.sessionId,

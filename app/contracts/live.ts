@@ -95,7 +95,13 @@ export type WSLiveClientEvent =
   | { t: "live:kick"; sessionId: string }
   | { t: "live:end" }
   | { t: "live:leave" }
-  | { t: "ping" };
+  | { t: "ping" }
+  // ── Nexora Mobile Camera (dono ↔ celular) ─────────────────
+  | { t: "live-companion:start" }
+  | { t: "live-companion:approve"; sessionId: string }
+  | { t: "live-companion:reject"; sessionId: string }
+  | { t: "live-companion:stop"; sessionId: string }
+  | { t: "live-companion:signal"; data: unknown };
 
 export type WSLiveServerEvent =
   | { t: "live:joined"; payload: LiveJoinPayload }
@@ -110,7 +116,26 @@ export type WSLiveServerEvent =
   | { t: "live:kicked" }
   | { t: "live:ended" }
   | { t: "live:denied"; reason: LiveDenyReason; message: string }
-  | { t: "pong" };
+  | { t: "pong" }
+  // ── Nexora Mobile Camera (pareamento via QR) ────────────────
+  /** Sessão de pareamento criada (código que vai no QR). */
+  | { t: "live-companion:session"; sessionId: string; code: string }
+  /** Um celular está tentando parear — o dono precisa aprovar. */
+  | { t: "live-companion:request"; sessionId: string }
+  /** Signaling do celular (offer/answer/ICE). */
+  | { t: "live-companion:signal"; data: unknown }
+  /** Controle do celular: camera-on/off, mic-on/off, disconnect. */
+  | { t: "live-companion:control"; action: LiveCompanionAction }
+  /** Celular caiu de vez (sem reconexão dentro da graça). */
+  | { t: "live-companion:disconnected" };
+
+/** Ações de controle enviadas pelo celular pareado. */
+export type LiveCompanionAction =
+  | "camera-on"
+  | "camera-off"
+  | "mic-on"
+  | "mic-off"
+  | "disconnect";
 
 // ── Helpers de nick (compartilhados cliente/servidor) ────────
 // Caracteres de controle/invisíveis (unicode escapes evitam no-control-regex).

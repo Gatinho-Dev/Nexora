@@ -11,6 +11,7 @@ import {
 } from "@contracts/live";
 import { env } from "../lib/env";
 import {
+  createLiveCompanionSession,
   detachSocket,
   endRoomByHost,
   joinRoom,
@@ -20,6 +21,12 @@ import {
   removeSession,
   updateState,
 } from "./rooms";
+import {
+  approveLiveCompanion,
+  rejectLiveCompanion,
+  stopLiveCompanion,
+  relayOwnerSignal,
+} from "./liveCompanionBridge";
 import { isValidSignalData } from "../realtime";
 /**
  * Gateway WebSocket público do Nexora Live (/ws/live).
@@ -146,6 +153,11 @@ export function attachLiveGateway(server: HttpServer) {
           "live:kick",
           "live:end",
           "live:leave",
+          "live-companion:start",
+          "live-companion:approve",
+          "live-companion:reject",
+          "live-companion:stop",
+          "live-companion:signal",
         ].includes(t)
       ) {
         return;
@@ -303,6 +315,66 @@ export function attachLiveGateway(server: HttpServer) {
           removeSession(connection.sessionId);
           connection.roomCode = null;
         }
+        return;
+      }
+
+      // ── Nexora Mobile Camera (dono ↔ celular) ───────────────
+      // A posse da sessão é provada pelo sessionToken (nunca aceito após
+      // o primeiro join — vem da conexão que fez o join).
+      case "live-companion:start": {
+        if (!connection.sessionId || !connection.sessionToken) return;
+        const code = connection.roomCode;
+        if (!code) return;
+        const session = createLiveCompanionSession({
+          ownerSessionId: connection.sessionId,
+          sessionToken: connection.sessionToken,
+          roomCode: code,
+        });
+        if (!session) return;
+        send(ws, {
+          t: "live-companion:session",
+          sessionId: session.id,
+          code: session.code,
+        });
+        return;
+      }
+
+      case "live-companion:approve": {
+        if (!connection.sessionId || !connection.sessionToken) return;
+        approveLiveCompanion(
+          connection.sessionId,
+          connection.sessionToken,
+          String((event as Record<string, unknown>).sessionId ?? "")
+        );
+        return;
+      }
+
+      case "live-companion:reject": {
+        if (!connection.sessionId || !connection.sessionToken) return;
+        rejectLiveCompanion(
+          connection.sessionId,
+          connection.sessionToken,
+          String((event as Record<string, unknown>).sessionId ?? "")
+        );
+        return;
+      }
+
+      case "live-companion:stop": {
+        // Dono desconectou o celular manualmente.
+        if (!connection.sessionId || !connection.sessionToken) return;
+        stopLiveCompanion(
+          connection.sessionId,
+          connection.sessionToken,
+          String((event as Record<string, unknown>).sessionId ?? "")
+        );
+        return;
+      }
+
+      case "live-companion:signal": {
+        if (!connection.sessionId) return;
+        const data = (event as Record<string, unknown>).data;
+        if (!isValidSignalData(data)) return;
+        relayOwnerSignal(connection.sessionId, data);
         return;
       }
     }
