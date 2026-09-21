@@ -21,6 +21,7 @@ import {
   MonitorUp,
   Palette,
   Paperclip,
+  Radio,
   Server,
   ShieldCheck,
   Video,
@@ -237,15 +238,29 @@ function AuthActions({
 
   if (isAuthenticated) {
     return (
-      <Link className="landing-button landing-button--primary" to="/channels/@me">
-        Abrir Nexora
-        <ArrowRight aria-hidden />
-      </Link>
+      <>
+        <Link className="landing-button landing-button--ghost" to="/live">
+          Nexora Live
+          <span className="landing-beta-badge" aria-label="Recurso em beta">
+            Beta
+          </span>
+        </Link>
+        <Link className="landing-button landing-button--primary" to="/channels/@me">
+          Abrir Nexora
+          <ArrowRight aria-hidden />
+        </Link>
+      </>
     );
   }
 
   return (
     <>
+      <Link className="landing-button landing-button--ghost" to="/live">
+        Nexora Live
+        <span className="landing-beta-badge" aria-label="Recurso em beta">
+          Beta
+        </span>
+      </Link>
       <Link className="landing-button landing-button--ghost" to="/login">
         Entrar
       </Link>
@@ -445,6 +460,19 @@ export default function Landing() {
                     Entrar
                   </Link>
                 </div>
+              </Reveal>
+              <Reveal delay={280}>
+                <Link
+                  className="landing-button landing-button--ghost landing-hero__live"
+                  to="/live"
+                  aria-label="Nexora Live: converse sem criar uma conta"
+                >
+                  <Radio aria-hidden />
+                  Nexora Live — converse sem criar uma conta
+                  <span className="landing-beta-badge" aria-label="Recurso em beta">
+                    Beta
+                  </span>
+                </Link>
               </Reveal>
             </div>
 

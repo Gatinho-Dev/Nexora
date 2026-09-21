@@ -50,6 +50,7 @@ import { upsertExternalConnection } from "./integrations/connectionService";
 import { startExternalPresenceWorker } from "./integrations/presenceWorker";
 import type { IntegrationProviderId } from "./integrations/types";
 import { createHash, randomUUID } from "node:crypto";
+import liveHttp from "./live/http";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -723,6 +724,9 @@ app.get("/api/gifs/search", async c => {
     );
   }
 });
+
+// ── Nexora Live (salas temporárias sem cadastro) ─────────────
+app.route("/", liveHttp);
 
 app.use("/api/trpc/*", async c => {
   return fetchRequestHandler({

@@ -2,6 +2,8 @@ import { serve } from "@hono/node-server";
 import { serveStaticFiles } from "./lib/vite";
 import { attachRealtime } from "./realtime";
 import { attachCompanionGateway } from "./voice/companionGateway";
+import { attachLiveGateway } from "./live/gateway";
+import { startLiveRoomSweeper } from "./live/rooms";
 import app from "./boot";
 import { resumePendingModeration } from "./services/mediaModeration";
 import { resumePendingDeepReviews } from "./services/reports/deepMediaReview";
@@ -31,3 +33,5 @@ const server = serve({ fetch: app.fetch, port, hostname: "0.0.0.0" }, () => {
 });
 attachRealtime(server as unknown as import("http").Server);
 attachCompanionGateway(server as unknown as import("http").Server);
+attachLiveGateway(server as unknown as import("http").Server);
+startLiveRoomSweeper();

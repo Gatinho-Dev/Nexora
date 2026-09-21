@@ -63,6 +63,8 @@ const PrivacyPage = lazy(() =>
 const TermsPage = lazy(() =>
   import("./pages/LegalDocs").then(module => ({ default: module.TermsPage }))
 );
+const LiveLobby = lazy(() => import("./pages/LiveLobby"));
+const LiveRoomPage = lazy(() => import("./pages/LiveRoomPage"));
 
 function PageLoader() {
   return (
@@ -123,6 +125,22 @@ export default function App() {
         element={
           <Deferred>
             <CompanionPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/live"
+        element={
+          <Deferred>
+            <LiveLobby />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/live/:roomCode"
+        element={
+          <Deferred>
+            <LiveRoomPage />
           </Deferred>
         }
       />

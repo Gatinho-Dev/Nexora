@@ -248,6 +248,29 @@
   gap: 8px;
 }
 
+/* Badge Beta — usado nos botões "Nexora Live" da nav/hero */
+.landing-beta-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  margin-left: 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  color: var(--nexora-cobalt);
+  background: rgb(70 84 216 / 0.1);
+  border: 1px solid rgb(70 84 216 / 0.32);
+}
+
+.dark .landing-beta-badge {
+  color: #a5b0ff;
+  background: rgb(122 134 244 / 0.16);
+  border-color: rgb(122 134 244 / 0.38);
+}
+
 .landing-auth-loading > span:not(.sr-only) {
   display: block;
   width: 74px;
@@ -317,6 +340,13 @@
   color: var(--nexora-quiet);
   font-size: clamp(1rem, 1.5vw, 1.18rem);
   line-height: 1.62;
+}
+
+.landing-hero__live {
+  margin-top: 0.75rem;
+  width: fit-content;
+  gap: 0.5rem;
+  border-style: dashed;
 }
 
 .landing-hero__actions {
@@ -950,7 +980,14 @@
     font-size: 1rem;
   }
 
-  .landing-hero__actions {
+  .landing-hero__live {
+  margin-top: 0.75rem;
+  width: fit-content;
+  gap: 0.5rem;
+  border-style: dashed;
+}
+
+.landing-hero__actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     margin-block-start: 24px;
