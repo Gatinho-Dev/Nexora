@@ -47,7 +47,10 @@ const VIDEO_CONSTRAINTS = {
 export default function CompanionPage() {
   const [searchParams] = useSearchParams();
   const urlCode = searchParams.get("code") ?? "";
-  const [activeCode, setActiveCode] = useState(urlCode);
+  /** Código ativo em ref: os closures do WebRTC rodam antes do re-render
+   *  quando o usuário digita o código no input (setActiveCode é async), e
+   *  enviar signaling com code="" faz o gateway descartar em silêncio. */
+  const codeRef = useRef(urlCode);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -57,6 +60,8 @@ export default function CompanionPage() {
   /** Evita reconectar depois de saída intencional. */
   const finishedRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
+  /** Candidatos ICE que chegarem antes do remote description. */
+  const pendingCandidatesRef = useRef<(RTCIceCandidateInit | null)[]>([]);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Referência estável ao start (usado pela reconexão interna). */
   const startRef = useRef<(code: string, isReconnect?: boolean) => Promise<void>>(
@@ -82,9 +87,9 @@ export default function CompanionPage() {
 
   const sendControl = useCallback(
     (action: string) => {
-      send({ t: "companion:control", code: activeCode, action });
+      send({ t: "companion:control", code: codeRef.current, action });
     },
-    [send, activeCode]
+    [send]
   );
 
   // ── WebRTC ───────────────────────────────────────────────────
@@ -102,7 +107,7 @@ export default function CompanionPage() {
     pc.onicecandidate = event => {
       send({
         t: "companion:signal",
-        code: activeCode,
+        code: codeRef.current,
         data: { candidate: event.candidate ? event.candidate.toJSON() : null },
       });
     };
@@ -122,7 +127,7 @@ export default function CompanionPage() {
       for (const track of stream.getTracks()) pc.addTrack(track, stream);
     }
     return pc;
-  }, [send, activeCode]);
+  }, [send]);
 
   const handleSignal = useCallback(
     async (data: unknown) => {
@@ -131,17 +136,29 @@ export default function CompanionPage() {
       try {
         const pc = ensurePeer();
         if (msg.description) {
-          if (pc.signalingState !== "stable") return;
+          // Este lado é o OFERENTE (createOffer após o pareamento), então a
+          // answer chega em "have-local-offer" — o guard de "stable" a
+          // descartava e a conexão nunca completava. Rollback implícito
+          // resolve o caso raro de um offer inesperado em "have-remote-offer".
+          if (
+            pc.signalingState === "have-remote-offer" &&
+            msg.description.type === "offer"
+          ) {
+            await pc.setRemoteDescription({ type: "rollback" });
+          }
           await pc.setRemoteDescription(msg.description);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          send({
-            t: "companion:signal",
-            code: activeCode,
-            data: { description: pc.localDescription?.toJSON() },
-          });
+          while (pendingCandidatesRef.current.length) {
+            await pc.addIceCandidate(
+              pendingCandidatesRef.current.shift() ?? null
+            );
+          }
         } else if (msg.candidate !== undefined) {
-          await pc.addIceCandidate(msg.candidate as RTCIceCandidateInit);
+          const candidate = msg.candidate as RTCIceCandidateInit | null;
+          if (!pc.remoteDescription) {
+            pendingCandidatesRef.current.push(candidate);
+          } else {
+            await pc.addIceCandidate(candidate);
+          }
         }
       } catch (error) {
         console.error("[MOBILE-CAM] Falha no signaling", error);
@@ -149,7 +166,7 @@ export default function CompanionPage() {
         setErrorMsg("Não foi possível conectar à chamada.");
       }
     },
-    [ensurePeer, send, activeCode]
+    [ensurePeer, send]
   );
 
   const createOffer = useCallback(() => {
@@ -160,7 +177,7 @@ export default function CompanionPage() {
         await pc.setLocalDescription(offer);
         send({
           t: "companion:signal",
-          code: activeCode,
+          code: codeRef.current,
           data: { description: pc.localDescription?.toJSON() },
         });
       } catch (error) {
@@ -169,7 +186,7 @@ export default function CompanionPage() {
         setErrorMsg("Não foi possível iniciar a câmera.");
       }
     })();
-  }, [ensurePeer, send, activeCode]);
+  }, [ensurePeer, send]);
 
   // ── Cleanup ──────────────────────────────────────────────────
   const cleanup = useCallback(() => {
@@ -470,7 +487,7 @@ export default function CompanionPage() {
         <CompanionIdle
           initialCode={urlCode}
           onStart={c => {
-            setActiveCode(c);
+            codeRef.current = c;
             void start(c);
           }}
         />
