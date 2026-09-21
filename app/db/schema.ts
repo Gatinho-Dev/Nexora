@@ -1714,6 +1714,39 @@ export const robloxActivity = mysqlTable("roblox_activity", {
     .$onUpdate(() => new Date()),
 });
 
+// ── Nexora Live (salas temporárias sem cadastro) ─────────────
+// Somente o metadado da sala é persistido: participantes e chat vivem em
+// memória enquanto a sala existir (ver api/live/rooms.ts) e nunca vão para o
+// banco. O sweeper marca salas vazias como 'expired' e o runtime as remove.
+export const liveRooms = mysqlTable(
+  "live_rooms",
+  {
+    id: serial("id").primaryKey(),
+    /** Código curto da URL /live/{roomCode}. */
+    roomCode: varchar("roomCode", { length: 8 }).notNull().unique(),
+    /** Nome opcional definido pelo criador no momento da criação. */
+    name: varchar("name", { length: 40 }),
+    /** sha256 do hostToken efêmero — o token cruso nunca é armazenado. */
+    hostTokenHash: varchar("hostTokenHash", { length: 64 }),
+    /** sessionId do participante que assumiu o host no join. */
+    hostSessionId: varchar("hostSessionId", { length: 64 }),
+    status: mysqlEnum("status", ["active", "expired"])
+      .default("active")
+      .notNull(),
+    maxParticipants: int("maxParticipants").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    lastActivityAt: timestamp("lastActivityAt").defaultNow().notNull(),
+    /** Preenchido quando a sala entra em expiração (vazia ou encerrada). */
+    expiresAt: timestamp("expiresAt"),
+  },
+  table => ({
+    statusIdx: index("live_rooms_status_idx").on(
+      table.status,
+      table.lastActivityAt
+    ),
+  })
+);
+
 // ── Types ─────────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -1763,4 +1796,5 @@ export type AccountSession = typeof accountSessions.$inferSelect;
 export type UserConnection = typeof userConnections.$inferSelect;
 export type RobloxActivity = typeof robloxActivity.$inferSelect;
 export type ExternalOauthState = typeof externalOauthStates.$inferSelect;
+export type LiveRoom = typeof liveRooms.$inferSelect;
 export type RichPresenceActivity = typeof richPresenceActivities.$inferSelect;
