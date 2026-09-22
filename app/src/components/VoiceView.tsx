@@ -445,6 +445,35 @@ export function VoiceView({
         </div>
       </div>
 
+      {companionRequestPending && companionSessionId && (
+        <div
+          role="alert"
+          className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-[#5865F2]/30 bg-[#5865F2]/15 px-4 py-2"
+        >
+          <p className="flex items-center gap-2 text-xs font-semibold text-white">
+            <Smartphone className="h-4 w-4 text-[#8b94ff]" />
+            Um celular quer se conectar como sua câmera.
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="h-7 bg-[#23A559] px-3 text-xs text-white hover:bg-[#1e8c4b]"
+              onClick={() => voiceManager.approveCompanion(companionSessionId)}
+            >
+              <Check className="mr-1 h-3.5 w-3.5" />
+              Permitir
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-7 bg-white/10 px-3 text-xs text-white hover:bg-white/20"
+              onClick={() => voiceManager.rejectCompanion(companionSessionId)}
+            >
+              Recusar
+            </Button>
+          </div>
+        </div>
+      )}
       {playbackBlocked && (
         <button
           type="button"
