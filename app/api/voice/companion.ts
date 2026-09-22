@@ -66,16 +66,33 @@ export function toPublic(session: CompanionSession): CompanionSessionPublic {
   };
 }
 
+/**
+ * Resolve a sessão de câmera externa pertencente a um dono.
+ *
+ * `key` pode ser tanto o `session.id` (UUID, usado nos eventos do dono —
+ * `companion:approve`, `companion:signal`, `companion:stop`…) quanto o
+ * `sessionId` da chamada de voz (usado em `createCompanionSession`). Antes
+ * era necessário o id da sessão de voz exato, então aprovar com o UUID
+ * falhava em silêncio e o celular ficava preso em "aguardando aprovação".
+ */
 export function getCompanionSessionForOwner(
-  sessionId: string,
+  key: string,
   ownerUserId: number
 ): CompanionSession | undefined {
-  const owner = sessionsByOwner.get(sessionId);
-  if (owner !== ownerUserId) return undefined;
-  const session = sessions.get(sessionId);
-  if (!session) return undefined;
+  let session = sessions.get(key);
+  if (!session) {
+    for (const s of sessions.values()) {
+      if (s.sessionId === key) {
+        session = s;
+        break;
+      }
+    }
+  }
+  if (!session || session.ownerUserId !== ownerUserId) return undefined;
   if (Date.now() > session.expiresAt) {
     sessions.delete(session.id);
+    expiresByCode.delete(session.code);
+    sessionsByOwner.delete(session.sessionId);
     return undefined;
   }
   return session;
