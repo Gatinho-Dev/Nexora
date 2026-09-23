@@ -1,0 +1,6 @@
+# Build artifacts
+/target
+# Pacotes gerados localmente
+*.deb
+*.exe
+dist/
