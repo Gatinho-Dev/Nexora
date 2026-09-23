@@ -143,3 +143,5 @@ O CLI **não** cria backend nem endpoints paralelos: reutiliza tRPC (`auth.me`, 
 - **Terminal quebrado após fechar**: não deveria acontecer (restore em `Drop` + handlers de pânico); se ocorrer, `reset` no terminal.
 - **Sem realtime**: verifique conectividade com `NEXORA_API_URL`; o status bar mostra `● Conectado / ○ Desconectado / ◐ Reconectando...`.
 - **Servidor self-hosted**: exporte `NEXORA_API_URL` antes de abrir.
+
+# versão registrada no CI
