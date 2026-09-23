@@ -37,6 +37,7 @@ pub fn open_browser(url: &str) -> Result<()> {
     }
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         std::process::Command::new("cmd")
             .args(["/C", "start", "", url])
             .creation_flags(0x08000000) // CREATE_NO_WINDOW

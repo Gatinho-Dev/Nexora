@@ -85,15 +85,31 @@ impl Storage {
 
     pub fn save_token(&self, token: &str) -> Result<()> {
         use std::io::Write;
-        use std::os::unix::fs::OpenOptionsExt;
 
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(self.token_path())
-            .with_context(|| "abrindo arquivo de sessão")?;
+        let mut file = {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .mode(0o600)
+                    .open(self.token_path())
+                    .with_context(|| "abrindo arquivo de sessão")?
+            }
+            #[cfg(not(unix))]
+            {
+                // Windows: o arquivo herda as permissões do perfil do usuário
+                // (diretório de config já é privado do usuário).
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(self.token_path())
+                    .with_context(|| "abrindo arquivo de sessão")?
+            }
+        };
         file.write_all(token.as_bytes())?;
         #[cfg(not(unix))]
         {
