@@ -7,6 +7,7 @@ mod api {
 mod auth;
 mod events;
 mod models;
+mod mouse;
 mod realtime;
 mod storage;
 mod theme;
@@ -311,7 +312,7 @@ async fn async_main() -> Result<()> {
             events::AppEvent::Key(code, mods) => {
                 handle_key(&mut app, code, mods, &send_tx, &load_tx, &theme);
             }
-            events::AppEvent::Mouse(m) => handle_mouse(&mut app, m),
+            events::AppEvent::Mouse(m) => handle_mouse(&mut app, m, &load_tx),
         }
 
         // Toast expira.
@@ -732,57 +733,62 @@ fn handle_servers_keys(
     }
 }
 
-fn handle_mouse(app: &mut App, m: crossterm::event::MouseEvent) {
-    use crossterm::event::MouseEventKind as MK;
+fn handle_mouse(
+    app: &mut App,
+    m: crossterm::event::MouseEvent,
+    load_tx: &mpsc::UnboundedSender<(Option<i64>, Option<i64>)>,
+) {
+    use crossterm::event::{MouseButton, MouseEventKind as MK};
+
     match m.kind {
-        MK::ScrollUp => match app.view {
-            View::Chat if app.chat_focus == ChatFocus::History => app.scroll_history(3),
-            _ => {}
-        },
-        MK::ScrollDown => match app.view {
-            View::Chat if app.chat_focus == ChatFocus::History => {
-                app.history_scroll = app.history_scroll.saturating_sub(3);
+        // Scroll: histórico do chat, ou listas (seleção move com a roda).
+        MK::ScrollUp | MK::ScrollDown => {
+            let up = m.kind == MK::ScrollUp;
+            match app.view {
+                View::Chat => {
+                    if app.chat_focus == ChatFocus::History {
+                        if up {
+                            app.scroll_history(3);
+                        } else {
+                            app.history_scroll = app.history_scroll.saturating_sub(3);
+                        }
+                    }
+                }
+                View::Friends => {
+                    let delta = if up { -1 } else { 1 };
+                    app.move_friend_selection(delta);
+                }
+                View::Servers => {
+                    let delta = if up { -1i32 } else { 1 };
+                    let max = app.channels.len().saturating_sub(1) as i32;
+                    let next = (app.dm_selected as i32 + delta).clamp(0, max);
+                    app.dm_selected = next as usize;
+                }
+                _ => {}
             }
-            _ => {}
-        },
-        _ => {
-            // Cliques em elementos: a posição exata depende do layout;
-            // aqui tratamos clique simples como "abrir selecionado".
-            if m.kind == MK::Down(crossterm::event::MouseButton::Left) {
-                match app.view {
-                    View::Friends => {
-                        let _ = open_selected_friend(app);
-                    }
-                    View::Servers => {
-                        handle_servers_keys(app, crossterm::event::KeyCode::Enter, &dummy_load_tx());
-                    }
+        }
+        // Clique esquerdo: hit-test por posição.
+        MK::Down(MouseButton::Left) | MK::Drag(MouseButton::Left) => {
+            if let Some(kind) = mouse::hit_test(m.row, m.column) {
+                // Clique em item de lista também move a seleção para ele.
+                match kind {
+                    mouse::ZoneKind::Conversation(idx) => app.dm_selected = idx,
+                    mouse::ZoneKind::Friend(idx) => app.friend_selected = idx,
                     _ => {}
                 }
+                let opened = mouse::apply_click(app, kind);
+                if opened {
+                    // Dispara a carga do histórico da conversa/canal aberto.
+                    let _ = load_tx.send((app.open_conversation, app.open_channel));
+                }
+            } else if app.view == View::Chat && m.row > 0 {
+                // Clique fora de zonas no chat: foca o input (comportamento
+                // esperado de um cliente de mensagens).
+                app.chat_focus = ChatFocus::Input;
             }
         }
+        _ => {}
     }
-}
-
-fn dummy_load_tx() -> mpsc::UnboundedSender<(Option<i64>, Option<i64>)> {
-    let (tx, _rx) = mpsc::unbounded_channel();
-    tx
-}
-
-fn open_selected_friend(app: &mut App) -> Result<(), ()> {
-    let friends = app.visible_friends();
-    if let Some(f) = friends.get(app.friend_selected) {
-        let friend_id = f.id;
-        if let Some(c) = app
-            .conversations
-            .iter()
-            .find(|c| c.members.iter().any(|m| m.id == friend_id))
-        {
-            let cid = c.id;
-            app.open_conversation_chat(cid);
-            return Ok(());
-        }
-    }
-    Err(())
 }
 
 // Silence unused import warning for ApiError when not used in tests.

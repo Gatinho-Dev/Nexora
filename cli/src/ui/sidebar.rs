@@ -45,6 +45,20 @@ pub fn draw(f: &mut Frame, app: &App, theme: &Theme, area: Rect) {
 
     let friends_active = app.view == View::Friends;
     let servers_active = app.view == View::Servers;
+    // Zonas clicáveis dos atalhos (linhas do bloco de atalhos).
+    // top tem 4 linhas: separador + Amigos + Servidores (+ padding).
+    crate::mouse::register(crate::mouse::HitZone {
+        row: top.y + 1,
+        col: top.x,
+        width: top.width,
+        kind: crate::mouse::ZoneKind::ShortcutFriends,
+    });
+    crate::mouse::register(crate::mouse::HitZone {
+        row: top.y + 2,
+        col: top.x,
+        width: top.width,
+        kind: crate::mouse::ZoneKind::ShortcutServers,
+    });
     let shortcuts = Paragraph::new(vec![
         Line::from(Span::styled(
             "  ─────────────",
@@ -158,6 +172,13 @@ pub fn draw(f: &mut Frame, app: &App, theme: &Theme, area: Rect) {
                 Span::styled(truncate(&name, 14), name_style),
                 badge,
             ]));
+            // Zona clicável da DM (linha do nome).
+            crate::mouse::register(crate::mouse::HitZone {
+                row: list_area.y + (lines.len() as u16) - 1,
+                col: list_area.x,
+                width: list_area.width,
+                kind: crate::mouse::ZoneKind::Conversation(i),
+            });
             if !preview.is_empty() && list_area.height > 4 {
                 lines.push(Line::from(Span::styled(
                     format!("     {preview}"),

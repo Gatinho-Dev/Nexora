@@ -62,6 +62,39 @@ pub fn draw(f: &mut Frame, app: &App, theme: &Theme, area: Rect) {
         " ＋ Adicionar amigo ",
         theme.style_accent(),
     ));
+    // Zonas clicáveis das abas: cada aba tem label+contador+separador.
+    // Larguras calculadas igual aos spans acima.
+    {
+        let mut col = chunks[1].x;
+        for (idx, tab) in FriendTab::ALL.iter().enumerate() {
+            let active = *tab == app.friend_tab;
+            let count = match tab {
+                FriendTab::All => app.friends.iter().filter(|f| f.is_accepted()).count(),
+                FriendTab::Online => app
+                    .friends
+                    .iter()
+                    .filter(|f| f.is_accepted() && app.online.get(&f.id).copied().unwrap_or(false))
+                    .count(),
+                FriendTab::Pending => app.friends.iter().filter(|f| f.is_pending()).count(),
+                FriendTab::Blocked => app.friends.iter().filter(|f| f.is_blocked()).count(),
+            };
+            let w = (if active {
+                format!(" ◆ {} {count} ", tab.label())
+            } else {
+                format!(" ◇ {} {count} ", tab.label())
+            })
+            .chars()
+            .count() as u16
+                + 4; // + separador "  ·  "
+            crate::mouse::register(crate::mouse::HitZone {
+                row: chunks[1].y,
+                col,
+                width: w,
+                kind: crate::mouse::ZoneKind::FriendTab(idx),
+            });
+            col += w;
+        }
+    }
     f.render_widget(Paragraph::new(Line::from(tab_spans)), chunks[1]);
 
     // Busca.
@@ -152,6 +185,13 @@ pub fn draw(f: &mut Frame, app: &App, theme: &Theme, area: Rect) {
             status_suffix,
         ]);
         lines.push(line);
+        // Zona clicável do amigo (linha dele na lista).
+        crate::mouse::register(crate::mouse::HitZone {
+            row: list_area.y + (lines.len() as u16) - 1,
+            col: list_area.x,
+            width: list_area.width,
+            kind: crate::mouse::ZoneKind::Friend(i),
+        });
     }
 
     if friends.is_empty() {

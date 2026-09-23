@@ -16,6 +16,7 @@ use crate::theme::Theme;
 /// Render principal: layout raiz responsivo.
 pub fn draw(f: &mut Frame, app: &App, theme: &Theme) {
     let size = f.area();
+    crate::mouse::begin_frame();
     // Terminal muito pequeno: só status.
     if size.height < 8 || size.width < 40 {
         let _ = f.render_widget(
@@ -100,6 +101,21 @@ fn servers_view(f: &mut Frame, app: &App, theme: &Theme, area: ratatui::layout::
     let mut list_items: Vec<ListItem> = Vec::new();
     if !app.channels.is_empty() {
         list_items.push(ListItem::new("TEXT CHANNELS").style(theme.style_muted()));
+        // Zonas clicáveis: linha do cabeçalho + 1 por canal de texto.
+        {
+            let mut row = inner.y + 1; // +1: pula a linha "TEXT CHANNELS"
+            for ch in app.channels.iter().filter(|c| {
+                matches!(c.kind.as_deref(), Some("TEXT") | None)
+            }) {
+                crate::mouse::register(crate::mouse::HitZone {
+                    row,
+                    col: inner.x,
+                    width: inner.width,
+                    kind: crate::mouse::ZoneKind::Channel(ch.id),
+                });
+                row += 1;
+            }
+        }
         for ch in app.channels.iter().filter(|c| {
             matches!(c.kind.as_deref(), Some("TEXT") | None)
         }) {
