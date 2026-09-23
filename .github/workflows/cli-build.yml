@@ -54,24 +54,26 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      # Toolchain cruzada musl para ARM64 (compilador + linker estáticos).
-      - name: Install aarch64 musl cross toolchain
+      # Cross-compile para ARM64 musl via cross-rs (imagens Docker mantidas,
+      # independente de mirrors externos como musl.cc, que fica fora do ar).
+      - name: Install cross
         if: matrix.target == 'aarch64-unknown-linux-musl'
-        run: |
-          curl -fsSL --retry 5 -o /tmp/musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
-          tar xzf /tmp/musl-cross.tgz -C /opt
-          echo "/opt/aarch64-linux-musl-cross/bin" >> "$GITHUB_PATH"
+        run: cargo install cross --git https://github.com/cross-rs/cross --locked
 
       - name: Run tests (host target)
         if: matrix.target == 'x86_64-unknown-linux-musl'
         working-directory: cli
         run: cargo test --locked
 
-      - name: Build release
+      - name: Build release (aarch64 via cross)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        working-directory: cli
+        run: cross build --release --locked --target ${{ matrix.target }}
+
+      - name: Build release (cargo)
+        if: matrix.target != 'aarch64-unknown-linux-musl'
         working-directory: cli
         run: cargo build --release --locked --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
 
       - name: Build .deb (Linux x64)
         if: matrix.deb
