@@ -36,6 +36,8 @@ export function serveStaticFiles(app: App) {
     "/login",
     "/register",
     "/companion",
+    "/mobile-camera",
+    "/cli/login",
     "/invite",
     "/privacy",
     "/terms",

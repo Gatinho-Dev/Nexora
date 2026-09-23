@@ -7,6 +7,7 @@ const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const CompanionPage = lazy(() => import("./pages/CompanionPage"));
 const MobileCameraPage = lazy(() => import("./pages/MobileCameraPage"));
+const CliLoginPage = lazy(() => import("./pages/CliLoginPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AppLayout = lazy(() =>
   import("./pages/AppLayout").then(module => ({ default: module.AppLayout }))
@@ -134,6 +135,14 @@ export default function App() {
         element={
           <Deferred>
             <MobileCameraPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/cli/login"
+        element={
+          <Deferred>
+            <CliLoginPage />
           </Deferred>
         }
       />

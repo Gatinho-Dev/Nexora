@@ -1182,8 +1182,15 @@ export function attachRealtime(server: HttpServer) {
       }
 
       try {
+        // Nexora CLI (e outros clientes não-navegador) autentica via
+        // Authorization: Bearer com o mesmo JWT de sessão; o Web usa cookie.
+        const bearer = req.headers["authorization"];
+        const bearerToken =
+          typeof bearer === "string" && bearer.startsWith("Bearer ")
+            ? bearer.slice(7)
+            : null;
         const cookies = cookie.parse(req.headers.cookie ?? "");
-        const token = cookies[Session.cookieName];
+        const token = bearerToken ?? cookies[Session.cookieName];
         const claim = token ? await verifySessionToken(token) : null;
         // Sessão deve existir e estar ativa (revogação remota funciona aqui).
         const session = claim ? await resolveActiveSession(claim.sid) : null;

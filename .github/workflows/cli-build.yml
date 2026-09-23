@@ -1,0 +1,115 @@
+name: CLI Build
+
+# Compila o Nexora CLI em todos os alvos e publica artefatos em cada push/PR
+# que tocar o CLI. Releases formais ficam no cli-release.yml (tags v*).
+
+on:
+  push:
+    branches: [main]
+    paths: ["cli/**", ".github/workflows/cli-build.yml"]
+    tags: ["v*"]
+  pull_request:
+    paths: ["cli/**", ".github/workflows/cli-build.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            deb: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            deb: false
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            deb: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            deb: false
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            deb: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-linker (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Run tests (host target)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        working-directory: cli
+        run: cargo test --locked
+
+      - name: Build release
+        working-directory: cli
+        run: cargo build --release --locked --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Build .deb (Linux x64)
+        if: matrix.deb
+        run: bash cli/packaging/deb/build-deb.sh cli/target/x86_64-unknown-linux-gnu/release/nexora
+
+      - name: Package (tar.gz / exe staging)
+        shell: bash
+        run: |
+          VERSION=$(grep -m1 '^version' cli/Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          mkdir -p dist
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-gnu)
+              tar czf dist/nexora-cli-linux-x64.tar.gz -C cli/target/x86_64-unknown-linux-gnu/release nexora
+              ;;
+            aarch64-unknown-linux-gnu)
+              tar czf dist/nexora-cli-linux-arm64.tar.gz -C cli/target/aarch64-unknown-linux-gnu/release nexora
+              ;;
+            x86_64-pc-windows-msvc)
+              cp cli/target/x86_64-pc-windows-msvc/release/nexora.exe dist/NexoraCLI-${VERSION}-x64.exe
+              ;;
+            aarch64-apple-darwin)
+              tar czf dist/nexora-cli-${VERSION}-arm64.tar.gz -C cli/target/aarch64-apple-darwin/release nexora
+              ;;
+            x86_64-apple-darwin)
+              tar czf dist/nexora-cli-${VERSION}-x64.tar.gz -C cli/target/x86_64-apple-darwin/release nexora
+              ;;
+          esac
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexora-cli-${{ matrix.target }}
+          path: dist/*
+
+  release:
+    # Publica na GitHub Release quando a tag é de versão (v*).
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > checksums-sha256.txt
+      - name: Attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

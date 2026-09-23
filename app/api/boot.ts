@@ -31,6 +31,7 @@ import { assertCanInteract } from "./services/accountSafety";
 import { SafetyService, isSafetyKilled } from "./services/safety/safetyService";
 import { ensureCatalog as ensureBadgeCatalog } from "./services/badgeService";
 import { startSessionCleanupJob } from "./auth/sessions";
+import { cliAuth, startCliPairingSweeper } from "./cliAuth";
 import {
   startRobloxPresenceWorker,
   robloxWorkerStatus,
@@ -539,6 +540,9 @@ app.get("/api/rtc-config", c => {
 });
 
 // ── Webhooks públicos (integrações externas) ──────────────────
+// ── Nexora CLI (device flow) ─────────────────────────────────
+app.route("/api/cli", cliAuth);
+
 app.post("/api/webhooks/:id/:token", async c => {
   const id = parseInt(c.req.param("id"));
   const token = c.req.param("token");
@@ -743,6 +747,7 @@ void ensureBadgeCatalog().catch(e =>
   console.warn("[badges] Falha ao semear catálogo:", e)
 );
 startSessionCleanupJob();
+startCliPairingSweeper();
 startRobloxPresenceWorker();
 startExternalPresenceWorker();
 
