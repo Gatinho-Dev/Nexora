@@ -416,6 +416,9 @@ mod tests {
             avatar: None,
             status: Some(status.into()),
             online: Some(true),
+            friendshipId: None,
+            user: None,
+            direction: None,
         }
     }
 

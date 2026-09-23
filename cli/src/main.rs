@@ -491,7 +491,7 @@ fn handle_key(
                                     .conversations
                                     .iter()
                                     .find(|c| {
-                                        c.members.iter().any(|m| m.userId == r.id)
+                                        c.members.iter().any(|m| m.id == r.id)
                                     })
                                     .map(|c| c.id);
                                 app.popup = Popup::None;
@@ -587,7 +587,7 @@ fn handle_friends_keys(
                 if let Some(c) = app
                     .conversations
                     .iter()
-                    .find(|c| c.members.iter().any(|m| m.userId == friend_id))
+                    .find(|c| c.members.iter().any(|m| m.id == friend_id))
                 {
                     let cid = c.id;
                     app.open_conversation_chat(cid);
@@ -752,7 +752,7 @@ fn open_selected_friend(app: &mut App) -> Result<(), ()> {
         if let Some(c) = app
             .conversations
             .iter()
-            .find(|c| c.members.iter().any(|m| m.userId == friend_id))
+            .find(|c| c.members.iter().any(|m| m.id == friend_id))
         {
             let cid = c.id;
             app.open_conversation_chat(cid);

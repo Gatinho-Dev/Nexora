@@ -26,8 +26,8 @@ pub fn draw(f: &mut Frame, app: &App, theme: &Theme, area: Rect) {
                         let other = c
                             .members
                             .iter()
-                            .filter(|m| m.userId != app.my_id)
-                            .find_map(|m| m.user.as_ref());
+                            .filter(|m| m.id != app.my_id)
+                            .find_map(|m| Some(m));
                         match other.and_then(|u| u.username.clone()) {
                             Some(h) => format!("{name}  @{h}"),
                             None => name,
@@ -54,8 +54,8 @@ pub fn draw(f: &mut Frame, app: &App, theme: &Theme, area: Rect) {
             .and_then(|c| {
                 c.members
                     .iter()
-                    .filter(|m| m.userId != app.my_id)
-                    .find_map(|m| app.online.get(&m.userId).copied())
+                    .filter(|m| m.id != app.my_id)
+                    .find_map(|m| app.online.get(&m.id).copied())
             })
             .map(|online| {
                 if online {

@@ -244,7 +244,15 @@ impl Api {
     }
 
     pub async fn friends(&self) -> ApiResult<Vec<Friend>> {
-        self.query("friend.list", Value::Null).await
+        // A API manda o usuário aninhado em `user`; normaliza via Friend::from_api.
+        let raw: Vec<serde_json::Value> = self.query("friend.list", Value::Null).await?;
+        let mut out = Vec::with_capacity(raw.len());
+        for item in raw {
+            if let Some(f) = Friend::from_api(item) {
+                out.push(f);
+            }
+        }
+        Ok(out)
     }
 
     pub async fn conversations(&self) -> ApiResult<Vec<Conversation>> {

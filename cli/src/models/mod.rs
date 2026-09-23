@@ -6,6 +6,7 @@
 #![allow(non_snake_case, dead_code)]
 
 use serde::Deserialize;
+use serde_json::Value;
 
 /// Usuário resumido (auth.me e presença).
 #[allow(dead_code)]
@@ -24,6 +25,7 @@ pub struct User {
 }
 
 /// Item da lista de amigos (friend.list).
+/// Shape real da API: { friendshipId, user: {...}, status, direction }.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct Friend {
@@ -39,6 +41,34 @@ pub struct Friend {
     pub status: Option<String>,
     #[serde(default)]
     pub online: Option<bool>,
+    /// Campos crus da API (usados no from_api).
+    #[serde(default)]
+    pub friendshipId: Option<i64>,
+    #[serde(default)]
+    pub user: Option<User>,
+    #[serde(default)]
+    pub direction: Option<String>,
+}
+
+impl Friend {
+    /// Normaliza o shape da API (user aninhado) para o modelo plano.
+    pub fn from_api(v: Value) -> Option<Friend> {
+        let mut obj = v;
+        // A API não manda `id` no topo — copia do `user.id`.
+        if obj.get("id").is_none() {
+            if let Some(uid) = obj.get("user").and_then(|u| u.get("id")).cloned() {
+                obj["id"] = uid;
+            }
+        }
+        let mut f: Friend = serde_json::from_value(obj).ok()?;
+        if let Some(u) = f.user.take() {
+            f.id = u.id;
+            f.name = u.name;
+            f.username = u.username;
+            f.avatar = u.avatar;
+        }
+        Some(f)
+    }
 }
 
 /// Conversa (dm.list) — DM em grupo ou 1:1.
@@ -62,9 +92,16 @@ pub struct Conversation {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct ConversationMember {
-    pub userId: i64,
+    /// Shape real da API: o usuário vem direto no member ({id, name, ...}).
+    pub id: i64,
     #[serde(default)]
-    pub user: Option<ConversationUser>,
+    pub name: Option<String>,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub avatar: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -134,7 +171,8 @@ pub struct MessageAuthor {
 pub struct Server {
     pub id: i64,
     pub name: String,
-    #[serde(default)]
+    /// A API manda iconUrl; mantemos "icon" como alias.
+    #[serde(default, alias = "icon")]
     pub icon: Option<String>,
     #[serde(default)]
     pub unreadCount: Option<i64>,
@@ -173,12 +211,8 @@ impl Conversation {
         }
         self.members
             .iter()
-            .filter(|m| m.userId != my_id)
-            .find_map(|m| {
-                m.user.as_ref().and_then(|u| {
-                    u.name.clone().or_else(|| u.username.clone())
-                })
-            })
+            .filter(|m| m.id != my_id)
+            .find_map(|m| m.name.clone().or_else(|| m.username.clone()))
             .unwrap_or_else(|| "Conversa".to_string())
     }
 
@@ -267,6 +301,33 @@ impl Message {
 
 #[cfg(test)]
 mod tests {
+    /// Shape EXATO devolvido pela API de produção (verificado via curl):
+    /// friend.list manda o usuário aninhado em `user`, não no topo.
+    #[test]
+    fn parses_real_friend_list_shape() {
+        let item = serde_json::json!({
+            "friendshipId": 1,
+            "user": { "id": 2, "username": "AqueleManoRotiv", "name": "Rotiv", "avatar": "/api/files/2060008" },
+            "status": "accepted",
+            "direction": "outgoing"
+        });
+        let f = Friend::from_api(item).expect("Friend::from_api deve parsear o shape real");
+        assert_eq!(f.id, 2);
+        assert_eq!(f.name.as_deref(), Some("Rotiv"));
+        assert_eq!(f.status.as_deref(), Some("accepted"));
+    }
+
+    #[test]
+    fn parses_real_dm_member_shape() {
+        let raw = serde_json::json!({
+            "id": 2, "isGroup": false,
+            "members": [{ "id": 1, "username": "Lobo_2033", "name": "Gatinho", "avatar": "/api/files/1" }]
+        });
+        let c: Conversation = serde_json::from_value(raw).expect("Conversation deve parsear o shape real da API");
+        assert_eq!(c.members[0].id, 1);
+        assert_eq!(c.display_name(99), "Gatinho");
+    }
+
     use super::*;
 
     #[test]
@@ -291,24 +352,18 @@ mod tests {
             name: None,
             members: vec![
                 ConversationMember {
-                    userId: 1,
-                    user: Some(ConversationUser {
-                        id: 1,
-                        name: Some("Eu".into()),
-                        username: None,
-                        avatar: None,
-                        status: None,
-                    }),
+                    id: 1,
+                    name: Some("Eu".into()),
+                    username: None,
+                    avatar: None,
+                    status: None,
                 },
                 ConversationMember {
-                    userId: 2,
-                    user: Some(ConversationUser {
-                        id: 2,
-                        name: Some("GalLoyalitat".into()),
-                        username: None,
-                        avatar: None,
-                        status: None,
-                    }),
+                    id: 2,
+                    name: Some("GalLoyalitat".into()),
+                    username: None,
+                    avatar: None,
+                    status: None,
                 },
             ],
             lastMessage: None,
@@ -354,6 +409,9 @@ mod tests {
             name: Some("Rotiv".into()),
             username: Some("AqueleManoRotiv".into()),
             avatar: None,
+            friendshipId: None,
+            user: None,
+            direction: None,
             status: status.map(|s| s.to_string()),
             online: Some(true),
         };

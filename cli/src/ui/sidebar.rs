@@ -103,8 +103,8 @@ pub fn draw(f: &mut Frame, app: &App, theme: &Theme, area: Rect) {
             let online = c
                 .members
                 .iter()
-                .filter(|m| m.userId != app.my_id)
-                .find_map(|m| app.online.get(&m.userId).copied())
+                .filter(|m| m.id != app.my_id)
+                .find_map(|m| app.online.get(&m.id).copied())
                 .unwrap_or(false);
             let dot = if online { "●" } else { "○" };
             let dot_style = if online {
