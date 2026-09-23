@@ -1,7 +1,10 @@
 name: CLI Build
 
 # Compila o Nexora CLI em todos os alvos e publica artefatos em cada push/PR
-# que tocar o CLI. Releases formais ficam no cli-release.yml (tags v*).
+# que tocar o CLI. Releases formais ficam no job `release` (tags v*).
+#
+# Linux usa alvos musl (binário estático): roda em qualquer distro,
+# independente da versão da glibc do usuário.
 
 on:
   push:
@@ -23,10 +26,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             deb: true
-          - target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             deb: false
           - target: x86_64-pc-windows-msvc
@@ -47,12 +50,20 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-linker (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Install musl tools (x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      # Toolchain cruzada musl para ARM64 (compilador + linker estáticos).
+      - name: Install aarch64 musl cross toolchain
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          curl -fsSL --retry 5 -o /tmp/musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
+          tar xzf /tmp/musl-cross.tgz -C /opt
+          echo "/opt/aarch64-linux-musl-cross/bin" >> "$GITHUB_PATH"
 
       - name: Run tests (host target)
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.target == 'x86_64-unknown-linux-musl'
         working-directory: cli
         run: cargo test --locked
 
@@ -60,11 +71,11 @@ jobs:
         working-directory: cli
         run: cargo build --release --locked --target ${{ matrix.target }}
         env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-musl-gcc
 
       - name: Build .deb (Linux x64)
         if: matrix.deb
-        run: bash cli/packaging/deb/build-deb.sh cli/target/x86_64-unknown-linux-gnu/release/nexora
+        run: bash cli/packaging/deb/build-deb.sh cli/target/x86_64-unknown-linux-musl/release/nexora
 
       - name: Package (tar.gz / exe staging)
         shell: bash
@@ -72,12 +83,12 @@ jobs:
           VERSION=$(grep -m1 '^version' cli/Cargo.toml | sed 's/.*"\(.*\)"/\1/')
           mkdir -p dist
           case "${{ matrix.target }}" in
-            x86_64-unknown-linux-gnu)
-              tar czf dist/nexora-cli-linux-x64.tar.gz -C cli/target/x86_64-unknown-linux-gnu/release nexora
+            x86_64-unknown-linux-musl)
+              tar czf dist/nexora-cli-linux-x64.tar.gz -C cli/target/x86_64-unknown-linux-musl/release nexora
               mv nexora-cli_*.deb dist/ || echo "aviso: .deb não encontrado"
               ;;
-            aarch64-unknown-linux-gnu)
-              tar czf dist/nexora-cli-linux-arm64.tar.gz -C cli/target/aarch64-unknown-linux-gnu/release nexora
+            aarch64-unknown-linux-musl)
+              tar czf dist/nexora-cli-linux-arm64.tar.gz -C cli/target/aarch64-unknown-linux-musl/release nexora
               ;;
             x86_64-pc-windows-msvc)
               cp cli/target/x86_64-pc-windows-msvc/release/nexora.exe dist/NexoraCLI-${VERSION}-x64.exe
