@@ -74,6 +74,7 @@ jobs:
           case "${{ matrix.target }}" in
             x86_64-unknown-linux-gnu)
               tar czf dist/nexora-cli-linux-x64.tar.gz -C cli/target/x86_64-unknown-linux-gnu/release nexora
+              mv nexora-cli_*.deb dist/ || echo "aviso: .deb não encontrado"
               ;;
             aarch64-unknown-linux-gnu)
               tar czf dist/nexora-cli-linux-arm64.tar.gz -C cli/target/aarch64-unknown-linux-gnu/release nexora
