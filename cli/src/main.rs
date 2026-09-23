@@ -232,6 +232,9 @@ async fn async_main() -> Result<()> {
     // Canal de cargas de histórico: (alvo, resultado devolvido).
     let (load_tx, mut load_rx) = mpsc::unbounded_channel::<(Option<i64>, Option<i64>)>();
     let (loaded_tx, mut loaded_rx) = mpsc::unbounded_channel::<Vec<Message>>();
+    // Canal para carregar os canais de um servidor (server.get).
+    let (srv_load_tx, mut srv_load_rx) = mpsc::unbounded_channel::<i64>();
+    let (srv_channels_tx, mut srv_channels_rx) = mpsc::unbounded_channel::<Vec<crate::models::Channel>>();
 
     // Verificação de atualização em background (não bloqueia).
     // Option<Receiver> para podermos remover a branch do select após o fim.
@@ -275,6 +278,22 @@ async fn async_main() -> Result<()> {
                 });
                 continue;
             }
+            Some(server_id) = srv_load_rx.recv() => {
+                // Carrega os canais do servidor (server.get).
+                let api2 = clone_api(&api, &token);
+                let srv_channels_tx = srv_channels_tx.clone();
+                tokio::spawn(async move {
+                    match api2.server_details(server_id).await {
+                        Ok(details) => { let _ = srv_channels_tx.send(details.channels); }
+                        Err(e) => tracing::warn!("falha ao carregar canais: {e}"),
+                    }
+                });
+                continue;
+            }
+            Some(channels) = srv_channels_rx.recv() => {
+                app.channels = channels;
+                continue;
+            }
             Some(msgs) = loaded_rx.recv() => {
                 if !msgs.is_empty() {
                     for m in msgs {
@@ -310,9 +329,9 @@ async fn async_main() -> Result<()> {
         match ev {
             events::AppEvent::Resize => continue, // próximo loop redesenha
             events::AppEvent::Key(code, mods) => {
-                handle_key(&mut app, code, mods, &send_tx, &load_tx, &theme);
+                handle_key(&mut app, code, mods, &send_tx, &load_tx, &srv_load_tx, &theme);
             }
-            events::AppEvent::Mouse(m) => handle_mouse(&mut app, m, &load_tx),
+            events::AppEvent::Mouse(m) => handle_mouse(&mut app, m, &load_tx, &srv_load_tx),
         }
 
         // Toast expira.
@@ -462,6 +481,7 @@ fn handle_key(
     mods: crossterm::event::KeyModifiers,
     send_tx: &mpsc::UnboundedSender<(Option<i64>, Option<i64>, String)>,
     load_tx: &mpsc::UnboundedSender<(Option<i64>, Option<i64>)>,
+    srv_load_tx: &mpsc::UnboundedSender<i64>,
     theme: &Theme,
 ) {
     use crossterm::event::{KeyCode as K, KeyModifiers as M};
@@ -573,7 +593,7 @@ fn handle_key(
     match app.view {
         View::Friends => handle_friends_keys(app, code, mods, load_tx),
         View::Chat => handle_chat_keys(app, code, mods, send_tx, theme),
-        View::Servers => handle_servers_keys(app, code, load_tx),
+        View::Servers => handle_servers_keys(app, code, load_tx, srv_load_tx),
         View::Settings => {
             if code == K::Esc || code == K::Char('q') {
                 app.back();
@@ -706,17 +726,36 @@ fn handle_servers_keys(
     app: &mut App,
     code: crossterm::event::KeyCode,
     load_tx: &mpsc::UnboundedSender<(Option<i64>, Option<i64>)>,
+    srv_load_tx: &mpsc::UnboundedSender<i64>,
 ) {
     use crossterm::event::KeyCode as K;
     match code {
         K::Esc => app.back(),
-        K::Up => app.dm_selected = app.dm_selected.saturating_sub(1),
+        K::Up => {
+            if app.open_server.is_none() {
+                app.server_selected = app.server_selected.saturating_sub(1);
+            } else {
+                app.dm_selected = app.dm_selected.saturating_sub(1);
+            }
+        }
         K::Down => {
-            let max = app.channels.len().saturating_sub(1);
-            app.dm_selected = (app.dm_selected + 1).min(max);
+            if app.open_server.is_none() {
+                let max = app.servers.len().saturating_sub(1);
+                app.server_selected = (app.server_selected + 1).min(max);
+            } else {
+                let max = app.channels.len().saturating_sub(1);
+                app.dm_selected = (app.dm_selected + 1).min(max);
+            }
         }
         K::Enter => {
-            if let Some(ch) = app.channels.get(app.dm_selected) {
+            if app.open_server.is_none() {
+                // Abre o servidor selecionado (carga dos canais via server.get).
+                if let Some(s) = app.servers.get(app.server_selected) {
+                    let id = s.id;
+                    app.open_server_chat(id);
+                    let _ = srv_load_tx.send(id);
+                }
+            } else if let Some(ch) = app.channels.get(app.dm_selected) {
                 if matches!(ch.kind.as_deref(), Some("TEXT") | None) {
                     let id = ch.id;
                     app.open_channel_chat(id);
@@ -737,6 +776,7 @@ fn handle_mouse(
     app: &mut App,
     m: crossterm::event::MouseEvent,
     load_tx: &mpsc::UnboundedSender<(Option<i64>, Option<i64>)>,
+    srv_load_tx: &mpsc::UnboundedSender<i64>,
 ) {
     use crossterm::event::{MouseButton, MouseEventKind as MK};
 
@@ -777,9 +817,18 @@ fn handle_mouse(
                     _ => {}
                 }
                 let opened = mouse::apply_click(app, kind);
-                if opened {
-                    // Dispara a carga do histórico da conversa/canal aberto.
-                    let _ = load_tx.send((app.open_conversation, app.open_channel));
+                match (kind, opened) {
+                    (mouse::ZoneKind::Server(_), true) => {
+                        // Clique em servidor: carrega os canais (server.get).
+                        if let Some(id) = app.open_server {
+                            let _ = srv_load_tx.send(id);
+                        }
+                    }
+                    (_, true) => {
+                        // Dispara a carga do histórico da conversa/canal aberto.
+                        let _ = load_tx.send((app.open_conversation, app.open_channel));
+                    }
+                    _ => {}
                 }
             } else if app.view == View::Chat && m.row > 0 {
                 // Clique fora de zonas no chat: foca o input (comportamento

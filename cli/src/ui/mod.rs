@@ -64,7 +64,7 @@ pub fn draw(f: &mut Frame, app: &App, theme: &Theme) {
 }
 
 fn servers_view(f: &mut Frame, app: &App, theme: &Theme, area: ratatui::layout::Rect) {
-    use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
+    use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -83,54 +83,95 @@ fn servers_view(f: &mut Frame, app: &App, theme: &Theme, area: ratatui::layout::
         return;
     }
 
-    let _items: Vec<ListItem> = app
-        .servers
-        .iter()
-        .map(|s| {
+    if app.open_server.is_none() {
+        // Lista de servidores (nível 1). Clique/Enter abre o servidor.
+        let mut lines: Vec<ListItem> = Vec::new();
+        lines.push(ListItem::new("SEUS SERVIDORES"));
+        for (i, s) in app.servers.iter().enumerate() {
             let unread = s.unreadCount.unwrap_or(0);
             let suffix = if unread > 0 {
                 format!("  [{unread}]")
             } else {
                 String::new()
             };
-            ListItem::new(format!("● {}{}", s.name, suffix))
-        })
-        .collect();
-
-    // Canal do servidor aberto.
-    let mut list_items: Vec<ListItem> = Vec::new();
-    if !app.channels.is_empty() {
-        list_items.push(ListItem::new("TEXT CHANNELS").style(theme.style_muted()));
-        // Zonas clicáveis: linha do cabeçalho + 1 por canal de texto.
-        {
-            let mut row = inner.y + 1; // +1: pula a linha "TEXT CHANNELS"
-            for ch in app.channels.iter().filter(|c| {
-                matches!(c.kind.as_deref(), Some("TEXT") | None)
-            }) {
-                crate::mouse::register(crate::mouse::HitZone {
-                    row,
-                    col: inner.x,
-                    width: inner.width,
-                    kind: crate::mouse::ZoneKind::Channel(ch.id),
-                });
-                row += 1;
+            let selected = i == app.server_selected.min(app.servers.len() - 1);
+            let pointer = if selected { "▶ " } else { "  " };
+            let mut item = ListItem::new(format!("{pointer}● {}{suffix}", s.name));
+            if selected {
+                item = item.style(theme.style_selection());
             }
+            // Zona clicável (linha 1 = cabeçalho, servidores a partir da 2).
+            crate::mouse::register(crate::mouse::HitZone {
+                row: inner.y + (i as u16) + 1,
+                col: inner.x,
+                width: inner.width,
+                kind: crate::mouse::ZoneKind::Server(i),
+            });
+            lines.push(item);
         }
-        for ch in app.channels.iter().filter(|c| {
-            matches!(c.kind.as_deref(), Some("TEXT") | None)
-        }) {
-            let unread = app.unread.get(&ch.id).copied().unwrap_or(0);
-            let mark = if unread > 0 { format!(" [{unread}]") } else { String::new() };
-            list_items.push(ListItem::new(format!("  # {}{}", ch.name, mark)));
-        }
+        let list = List::new(lines).block(Block::default());
+        f.render_widget(list, inner);
+        return;
     }
 
-    let list = List::new(list_items)
-        .block(Block::default())
-        .highlight_style(theme.style_selection());
-    let mut state = ListState::default();
-    state.select(Some(0));
-    f.render_stateful_widget(list, inner, &mut state);
+    // Servidor aberto: canais de texto (nível 2).
+    let title = app
+        .servers
+        .iter()
+        .find(|s| Some(s.id) == app.open_server)
+        .map(|s| s.name.clone())
+        .unwrap_or_else(|| "Servidor".into());
+    let inner2 = ratatui::layout::Rect {
+        y: inner.y + 1,
+        height: inner.height.saturating_sub(1),
+        ..inner
+    };
+    f.render_widget(
+        Paragraph::new(format!(" {title}"))
+            .style(theme.style_accent()),
+        inner,
+    );
+
+    if app.channels.is_empty() {
+        f.render_widget(
+            Paragraph::new("  Carregando canais…")
+                .style(theme.style_muted()),
+            inner2,
+        );
+        return;
+    }
+
+    let mut lines: Vec<ListItem> = Vec::new();
+    lines.push(ListItem::new("TEXT CHANNELS"));
+    for (i, ch) in app
+        .channels
+        .iter()
+        .filter(|c| matches!(c.kind.as_deref(), Some("TEXT") | None))
+        .enumerate()
+    {
+        let unread = app.unread.get(&ch.id).copied().unwrap_or(0);
+        let mark = if unread > 0 {
+            format!(" [{unread}]")
+        } else {
+            String::new()
+        };
+        let selected = i == app.dm_selected;
+        let pointer = if selected { "▶" } else { " " };
+        let mut item = ListItem::new(format!("{pointer} # {}{mark}", ch.name));
+        if selected {
+            item = item.style(theme.style_selection());
+        }
+        // Zona clicável (+1: linha do cabeçalho).
+        crate::mouse::register(crate::mouse::HitZone {
+            row: inner2.y + (i as u16) + 1,
+            col: inner2.x,
+            width: inner2.width,
+            kind: crate::mouse::ZoneKind::Channel(ch.id),
+        });
+        lines.push(item);
+    }
+    let list = List::new(lines).block(Block::default());
+    f.render_widget(list, inner2);
 }
 
 fn settings_view(f: &mut Frame, app: &App, theme: &Theme, area: ratatui::layout::Rect) {

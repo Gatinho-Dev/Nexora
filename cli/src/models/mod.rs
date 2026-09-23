@@ -76,9 +76,12 @@ impl Friend {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Conversation {
     pub id: i64,
-    /// direct | group
+    /// direct | group — a API real manda apenas `isGroup`; normalizamos.
     #[serde(default)]
     pub kind: Option<String>,
+    /// A API manda isGroup; se ausente, inferimos pelo kind.
+    #[serde(default)]
+    pub isGroup: Option<bool>,
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
@@ -89,6 +92,16 @@ pub struct Conversation {
     pub unreadCount: Option<i64>,
 }
 
+impl Conversation {
+    /// true se esta é uma conversa direta (1:1). isGroup é a fonte da
+    /// verdade da API; kind é inferido quando presente.
+    pub fn is_direct(&self) -> bool {
+        match self.isGroup {
+            Some(g) => !g,
+            None => self.kind.as_deref() == Some("direct"),
+        }
+    }
+}
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct ConversationMember {
@@ -178,19 +191,30 @@ pub struct Server {
     pub unreadCount: Option<i64>,
 }
 
-/// Canal (server.channels ou equivalente).
+/// Canal (server.get → channels). O banco usa o campo `type`.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct Channel {
     pub id: i64,
     pub name: String,
-    /// TEXT | VOICE | STAGE | FORUM
-    #[serde(default)]
+    /// TEXT | VOICE | ANNOUNCEMENT | FORUM | STAGE | MEDIA ("kind" mantido
+    /// como alias para compatibilidade).
+    #[serde(default, alias = "kind")]
     pub kind: Option<String>,
     #[serde(default)]
     pub categoryId: Option<i64>,
     #[serde(default)]
     pub topic: Option<String>,
+}
+
+/// Resposta do server.get — servidor + canais visíveis.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServerDetails {
+    #[allow(dead_code)]
+    pub server: Server,
+    #[serde(default)]
+    pub channels: Vec<Channel>,
 }
 
 /// Evento "ready" do WebSocket — contém o id do usuário conectado.
@@ -333,6 +357,7 @@ mod tests {
     #[test]
     fn conversation_display_name_prefers_group_name() {
         let c = Conversation {
+            isGroup: None,
             id: 1,
             kind: Some("group".into()),
             name: Some("Grupo de testes".into()),
@@ -347,6 +372,7 @@ mod tests {
     #[test]
     fn conversation_dm_uses_other_member() {
         let c = Conversation {
+            isGroup: None,
             id: 2,
             kind: Some("direct".into()),
             name: None,

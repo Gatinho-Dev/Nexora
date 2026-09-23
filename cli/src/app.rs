@@ -94,6 +94,8 @@ pub struct App {
     pub friend_selected: usize,
     pub friend_query: String,
     pub dm_selected: usize,
+    /// Índice de seleção na lista de servidores.
+    pub server_selected: usize,
 
     /// Histórico da conversa/canal aberto, mais antigo primeiro.
     pub messages: Vec<Message>,
@@ -138,6 +140,7 @@ impl App {
             friend_selected: 0,
             friend_query: String::new(),
             dm_selected: 0,
+            server_selected: 0,
             messages: Vec::new(),
             open_conversation: None,
             open_channel: None,
@@ -183,6 +186,21 @@ impl App {
         self.unread.remove(&channel_id);
     }
 
+    /// Abre um servidor (mostra a lista de canais). A carga dos canais é
+    /// feita pelo main via API; aqui só preparamos o estado.
+    pub fn open_server_chat(&mut self, server_id: i64) {
+        self.open_server = Some(server_id);
+        self.channels.clear();
+        self.dm_selected = 0;
+    }
+
+    /// Fecha o servidor aberto (volta para a lista de servidores).
+    pub fn close_server(&mut self) {
+        self.open_server = None;
+        self.channels.clear();
+        self.dm_selected = 0;
+    }
+
     pub fn back(&mut self) {
         match self.view {
             View::Chat => {
@@ -196,7 +214,13 @@ impl App {
                 self.messages.clear();
                 self.input.clear();
             }
-            View::Servers => self.view = View::Friends,
+            View::Servers => {
+                if self.open_server.is_some() {
+                    self.close_server();
+                } else {
+                    self.view = View::Friends;
+                }
+            }
             View::Settings => self.view = View::Friends,
             View::Friends => {}
         }

@@ -24,6 +24,8 @@ pub enum ZoneKind {
     ShortcutFriends,
     /// Atalho "Servidores" da sidebar.
     ShortcutServers,
+    /// Servidor na lista da view de servidores (índice).
+    Server(usize),
     /// Aba da tela de amigos (índice 0..4).
     FriendTab(usize),
     /// Amigo na lista da tela de amigos (índice na lista visível).
@@ -93,6 +95,16 @@ pub fn apply_click(app: &mut App, kind: ZoneKind) -> bool {
             app.view = crate::app::View::Servers;
             false
         }
+        ZoneKind::Server(idx) => {
+            if let Some(s) = app.servers.get(idx) {
+                let id = s.id;
+                app.server_selected = idx;
+                app.open_server_chat(id);
+                true // pede a carga dos canais via server.get
+            } else {
+                false
+            }
+        }
         ZoneKind::FriendTab(i) => {
             app.friend_tab = match i {
                 0 => crate::app::FriendTab::All,
@@ -113,10 +125,7 @@ pub fn apply_click(app: &mut App, kind: ZoneKind) -> bool {
                 let existing = app
                     .conversations
                     .iter()
-                    .find(|c| {
-                        c.kind.as_deref() == Some("direct")
-                            && c.members.iter().any(|m| m.id == fid)
-                    })
+                    .find(|c| c.is_direct() && c.members.iter().any(|m| m.id == fid))
                     .map(|c| c.id);
                 match existing {
                     Some(id) => {

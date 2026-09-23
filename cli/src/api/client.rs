@@ -6,7 +6,7 @@ use reqwest::Client;
 use serde::{de::DeserializeOwned, Deserialize};
 use serde_json::{json, Value};
 
-use crate::models::{Channel, Conversation, Friend, Message, Server, User};
+use crate::models::{Channel, Conversation, Friend, Message, Server, ServerDetails, User};
 
 /// URLs padrão — podem ser sobrescritas por NEXORA_API_URL / NEXORA_WS_URL.
 pub const DEFAULT_API_URL: &str = "https://nexorachat.cloud";
@@ -132,10 +132,11 @@ impl Api {
     pub async fn query<T: DeserializeOwned>(&self, path: &str, input: Value) -> ApiResult<T> {
         let url = match input {
             Value::Null => format!("{}/api/trpc/{path}", self.config.api_url),
+            // tRPC + superjson exige o envelope {"json": <input>} no GET.
             v => format!(
                 "{}/api/trpc/{path}?input={}",
                 self.config.api_url,
-                urlencode(&v.to_string())
+                urlencode(&json!({ "json": v }).to_string())
             ),
         };
         let resp = self
@@ -282,9 +283,10 @@ impl Api {
         } else if let Some(chid) = channel_id {
             input["channelId"] = json!(chid);
         }
-        let raw: Vec<Message> = self.query("message.list", input).await?;
+        // A API retorna { messages, hasMore }.
+        let raw: MessageListResponse = self.query("message.list", input).await?;
         // O histórico vem mais-recente-primeiro; exibimos antigo→novo.
-        let mut out = raw;
+        let mut out = raw.messages;
         out.reverse();
         Ok(out)
     }
@@ -301,8 +303,31 @@ impl Api {
         } else if let Some(chid) = channel_id {
             input["channelId"] = json!(chid);
         }
-        self.mutate("message.send", input).await
+        // A API retorna { message: dto }.
+        let raw: MessageSendResponse = self.mutate("message.send", input).await?;
+        Ok(raw.message)
     }
+
+    /// Detalhes do servidor (server.get) — inclui os canais visíveis.
+    pub async fn server_details(&self, server_id: i64) -> ApiResult<ServerDetails> {
+        self.query("server.get", json!({ "serverId": server_id }))
+            .await
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(non_snake_case)]
+struct MessageListResponse {
+    #[serde(default)]
+    messages: Vec<Message>,
+    #[allow(dead_code)]
+    #[serde(default)]
+    hasMore: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct MessageSendResponse {
+    message: Message,
 }
 
 async fn handle_status(resp: reqwest::Response) -> ApiResult<TrpcBatchResponse> {
@@ -379,6 +404,66 @@ mod tests {
     fn urlencode_escapes_query_input() {
         assert_eq!(urlencode("{\"a b\"}"), "%7B%22a%20b%22%7D");
         assert_eq!(urlencode("abc-1.2~"), "abc-1.2~");
+    }
+
+    /// Shape real do message.list: { messages, hasMore }.
+    #[test]
+    fn parse_message_list_response_real_shape() {
+        let data = r#"{
+            "messages": [
+                {"id": 3027865, "channelId": null, "conversationId": 1,
+                 "authorId": 1, "content": "creu", "replyToId": null,
+                 "tag": null, "createdAt": "2026-09-01T16:19:52.000Z",
+                 "editedAt": null,
+                 "author": {"id": 1, "username": "Lobo_2033", "name": "Gatinho",
+                            "avatar": null, "banner": null, "bio": null,
+                            "customStatus": null}},
+                {"id": 2, "channelId": null, "conversationId": 1,
+                 "authorId": 2, "content": "oi", "replyToId": null, "tag": null,
+                 "createdAt": "2026-09-01T17:00:00.000Z", "editedAt": null,
+                 "author": {"id": 2, "username": "amigo", "name": "Amigo",
+                            "avatar": null, "banner": null, "bio": null,
+                            "customStatus": null}}
+            ],
+            "hasMore": false }"#;
+        let parsed: MessageListResponse = serde_json::from_str(data).unwrap();
+        assert_eq!(parsed.messages.len(), 2);
+        assert_eq!(parsed.messages[0].content, "creu");
+        assert!(!parsed.hasMore);
+    }
+
+    /// Shape real do message.send: { message: dto }.
+    #[test]
+    fn parse_message_send_response_real_shape() {
+        let data = r#"{
+            "message": {"id": 9, "channelId": null, "conversationId": 1,
+                        "authorId": 1, "content": "teste", "replyToId": null,
+                        "tag": null, "createdAt": "2026-09-20T12:00:00.000Z",
+                        "editedAt": null,
+                        "author": {"id": 1, "username": "eu", "name": "Eu",
+                                   "avatar": null, "banner": null, "bio": null,
+                                   "customStatus": null}} }"#;
+        let parsed: MessageSendResponse = serde_json::from_str(data).unwrap();
+        assert_eq!(parsed.message.content, "teste");
+    }
+
+    /// Shape real do dm.list: conversas com isGroup, sem kind.
+    #[test]
+    fn parse_conversation_real_shape_is_direct() {
+        let data = r#"{
+            "id": 2, "isGroup": false,
+            "members": [
+                {"id": 1, "username": "Lobo_2033", "name": "Gatinho",
+                 "avatar": null, "banner": null, "bio": null, "customStatus": null},
+                {"id": 7, "username": "GalLoyalitat", "name": "Gal",
+                 "avatar": null, "banner": null, "bio": null, "customStatus": null}
+            ] }"#;
+        let c: crate::models::Conversation = serde_json::from_str(data).unwrap();
+        assert!(c.is_direct());
+        // Grupo: isGroup true → não é direta.
+        let g: crate::models::Conversation =
+            serde_json::from_str(r#"{"id": 3, "isGroup": true, "members": []}"#).unwrap();
+        assert!(!g.is_direct());
     }
 
     #[test]
