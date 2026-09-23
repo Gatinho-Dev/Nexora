@@ -233,7 +233,8 @@ async fn async_main() -> Result<()> {
     let (loaded_tx, mut loaded_rx) = mpsc::unbounded_channel::<Vec<Message>>();
 
     // Verificação de atualização em background (não bloqueia).
-    let mut update_tx = spawn_update_check(storage.dir().clone());
+    // Option<Receiver> para podermos remover a branch do select após o fim.
+    let mut update_tx = Some(spawn_update_check(storage.dir().clone()));
 
     let mut events = events::spawn_event_loop();
     let theme = load_theme(&settings);
@@ -281,16 +282,26 @@ async fn async_main() -> Result<()> {
                 }
                 continue;
             }
-            res = &mut update_tx => {
-                if let Ok(Ok(Some(info))) = res {
-                    app.update_available = Some(info.latest.major.to_string()
-                        + "." + &info.latest.minor.to_string()
-                        + "." + &info.latest.patch.to_string());
+            // oneshot::Receiver numa branch de select: depois de consumido,
+            // fazemos take() → None e a branch deixa de existir. (Um JoinHandle
+            // aqui daria panic "polled after completion".)
+            Some(res) = async {
+                match update_tx.as_mut() {
+                    Some(rx) => Some(rx.await.ok()),
+                    None => std::future::pending::<Option<Option<UpdateCheckResult>>>().await,
+                }
+            } => {
+                if let Some(Ok(Some(info))) = res {
+                    app.update_available = Some(format!(
+                        "{}.{}.{}", info.latest.major, info.latest.minor, info.latest.patch
+                    ));
                     app.show_toast(
                         format!("↑ Nova versão v{} disponível", app.update_available.as_deref().unwrap_or("")),
                         now_ms(), 8000,
                     );
                 }
+                // Checagem concluída: remove a branch do select (evita re-poll).
+                update_tx.take();
                 continue;
             }
         };
@@ -361,10 +372,22 @@ fn clone_api(_api: &Api, token: &str) -> Api {
     Api::with_config_only(api_url).with_token(Some(token.to_string()))
 }
 
+/// Tipo do resultado da checagem de atualização.
+type UpdateCheckResult = anyhow::Result<Option<update::UpdateInfo>>;
+
 fn spawn_update_check(
     dir: std::path::PathBuf,
-) -> tokio::task::JoinHandle<anyhow::Result<Option<update::UpdateInfo>>> {
+) -> tokio::sync::oneshot::Receiver<UpdateCheckResult> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<UpdateCheckResult>();
     tokio::spawn(async move {
+        let result = run_update_check(dir).await;
+        let _ = tx.send(result);
+    });
+    rx
+}
+
+async fn run_update_check(dir: std::path::PathBuf) -> UpdateCheckResult {
+    {
         // Respeita o intervalo de 24h via settings.last_update_check.
         let storage = Storage::new()?;
         let mut settings = storage.load_settings();
@@ -383,7 +406,7 @@ fn spawn_update_check(
             .build()?;
         let _ = dir;
         update::check_for_update(&client).await
-    })
+    }
 }
 
 fn handle_realtime(app: &mut App, msg: RealtimeMessage) {
