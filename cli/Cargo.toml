@@ -1,6 +1,6 @@
 [package]
 name = "nexora-cli"
-version = "1.0.4"
+version = "1.0.5"
 edition = "2021"
 description = "Nexora CLI — cliente oficial de texto do Nexora para o terminal"
 license = "MIT"
