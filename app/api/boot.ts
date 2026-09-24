@@ -32,6 +32,12 @@ import { SafetyService, isSafetyKilled } from "./services/safety/safetyService";
 import { ensureCatalog as ensureBadgeCatalog } from "./services/badgeService";
 import { startSessionCleanupJob } from "./auth/sessions";
 import { cliAuth, startCliPairingSweeper } from "./cliAuth";
+import { getCliReleases } from "./services/cliReleases";
+import {
+  CLI_RELEASES_URL,
+  CLI_REPOSITORY_NAME,
+  CLI_REPOSITORY_OWNER,
+} from "@contracts/cliReleases";
 import {
   startRobloxPresenceWorker,
   robloxWorkerStatus,
@@ -151,6 +157,31 @@ app.get("/api/health", c =>
     },
   })
 );
+
+app.get("/api/cli/releases", async c => {
+  try {
+    const data = await getCliReleases();
+    c.header(
+      "Cache-Control",
+      "public, max-age=300, stale-while-revalidate=3600, stale-if-error=86400",
+    );
+    return c.json(data);
+  } catch {
+    c.header("Cache-Control", "no-store");
+    return c.json(
+      {
+        repository: `${CLI_REPOSITORY_OWNER}/${CLI_REPOSITORY_NAME}`,
+        fetchedAt: new Date().toISOString(),
+        stale: false,
+        releases: [],
+        latestStable: null,
+        fallbackUrl: CLI_RELEASES_URL,
+        error: "Não foi possível carregar as versões mais recentes.",
+      },
+      503,
+    );
+  }
+});
 
 app.use(bodyLimit({ maxSize: (maxUploadMb + 2) * 1024 * 1024 }));
 

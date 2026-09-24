@@ -8,6 +8,8 @@ const Register = lazy(() => import("./pages/Register"));
 const CompanionPage = lazy(() => import("./pages/CompanionPage"));
 const MobileCameraPage = lazy(() => import("./pages/MobileCameraPage"));
 const CliLoginPage = lazy(() => import("./pages/CliLoginPage"));
+const CliPage = lazy(() => import("./pages/CliPage"));
+const CliReleasesPage = lazy(() => import("./pages/CliReleasesPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AppLayout = lazy(() =>
   import("./pages/AppLayout").then(module => ({ default: module.AppLayout }))
@@ -135,6 +137,22 @@ export default function App() {
         element={
           <Deferred>
             <MobileCameraPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/cli"
+        element={
+          <Deferred>
+            <CliPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/cli/releases"
+        element={
+          <Deferred>
+            <CliReleasesPage />
           </Deferred>
         }
       />

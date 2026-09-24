@@ -384,6 +384,7 @@ export default function Landing() {
                 {link.label}
               </a>
             ))}
+            <Link to="/cli">CLI</Link>
           </nav>
 
           <div className="landing-nav-actions">
@@ -417,6 +418,7 @@ export default function Landing() {
                   {link.label}
                 </a>
               ))}
+              <Link to="/cli">Nexora CLI</Link>
             </nav>
             <div className="landing-mobile-actions">
               <AuthActions
