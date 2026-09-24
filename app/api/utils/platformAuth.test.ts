@@ -14,6 +14,8 @@ const baseUser: User = {
   passwordHash: null,
   name: "Regular",
   email: null,
+  emailHash: null,
+  emailVerifiedAt: null,
   avatar: null,
   banner: null,
   bio: null,

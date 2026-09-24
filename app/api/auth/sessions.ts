@@ -191,7 +191,52 @@ export async function revokeAllOthers(
   return ids;
 }
 
+/** Revoga todas as sessões do usuário, inclusive a atual. Usado após recuperação de senha. */
+export async function revokeAllSessions(userId: number): Promise<string[]> {
+  const rows = await getDb()
+    .select({ id: schema.accountSessions.id })
+    .from(schema.accountSessions)
+    .where(
+      and(
+        eq(schema.accountSessions.userId, userId),
+        isNull(schema.accountSessions.revokedAt),
+      ),
+    );
+  if (rows.length === 0) return [];
+  const ids = rows.map(row => row.id);
+  await getDb()
+    .update(schema.accountSessions)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(schema.accountSessions.userId, userId),
+        isNull(schema.accountSessions.revokedAt),
+      ),
+    );
+  void logSafetyEvent({
+    event: "sessions_revoked_all",
+    targetUserId: userId,
+    metadata: { count: ids.length },
+  }).catch(() => {});
+  return ids;
+}
+
 /** Lista sessões ativas do usuário (revogadas/expiradas fora). */
+/**
+ * Mascara o IP exibido ao usuário (ex.: 203.0.xxx.xxx / 2804:xxxx::).
+ * O IP completo nunca é enviado ao cliente — apenas uma pista aproximada.
+ */
+function maskIpForDisplay(ip: string | null): string | null {
+  if (!ip) return null;
+  if (ip.includes(":")) {
+    const groups = ip.split(":");
+    return `${groups[0]}:xxxx::`;
+  }
+  const octets = ip.split(".");
+  if (octets.length !== 4) return "IP mascarado";
+  return `${octets[0]}.${octets[1]}.xxx.xxx`;
+}
+
 export async function listActiveSessions(userId: number) {
   const rows = await getDb()
     .select({
@@ -214,7 +259,10 @@ export async function listActiveSessions(userId: number) {
     )
     .orderBy(sql`${schema.accountSessions.lastSeenAt} DESC`)
     .limit(50);
-  return rows;
+  return rows.map(row => ({
+    ...row,
+    ipAddress: maskIpForDisplay(row.ipAddress),
+  }));
 }
 
 /** Job periódico: remove sessões expiradas/revogadas antigas (>7 dias). */

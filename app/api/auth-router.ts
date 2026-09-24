@@ -6,8 +6,9 @@ import { createRouter, authedQuery } from "./middleware";
 export const authRouter = createRouter({
   me: authedQuery.query((opts) => {
     // Never expose the password hash to the client
-    const { passwordHash, ...safeUser } = opts.ctx.user;
+    const { passwordHash, emailHash, ...safeUser } = opts.ctx.user;
     void passwordHash; // intentionally unused
+    void emailHash; // never expose the lookup hash
     return safeUser;
   }),
   logout: authedQuery.mutation(async ({ ctx }) => {

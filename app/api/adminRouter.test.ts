@@ -9,6 +9,8 @@ const user: User = {
   passwordHash: null,
   name: "Member",
   email: null,
+  emailHash: null,
+  emailVerifiedAt: null,
   avatar: null,
   banner: null,
   bio: null,

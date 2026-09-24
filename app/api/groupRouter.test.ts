@@ -17,6 +17,8 @@ const user: User = {
   passwordHash: null,
   name: "Daniel",
   email: null,
+  emailHash: null,
+  emailVerifiedAt: null,
   avatar: null,
   banner: null,
   bio: null,

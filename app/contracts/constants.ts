@@ -60,6 +60,10 @@ export const RateLimits = {
   groupCreate: { limit: 4, windowMs: 60 * 60_000 },
   groupInviteCreate: { limit: 10, windowMs: 60 * 60_000 },
   groupMemberChange: { limit: 30, windowMs: 60_000 },
+  /** Desafios de segurança: 2FA, passkeys e QR de login. */
+  securityChallenge: { limit: 10, windowMs: 60_000 },
+  /** Abertura de tickets de suporte. */
+  ticketCreate: { limit: 5, windowMs: 15 * 60_000 },
 } as const;
 
 // ── Groups (conversas privadas em grupo) ─────────────────────
