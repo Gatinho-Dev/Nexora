@@ -5,6 +5,9 @@ import { NexoraAppIcon } from "@/components/NexoraBrand";
 const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const CompanionPage = lazy(() => import("./pages/CompanionPage"));
 const MobileCameraPage = lazy(() => import("./pages/MobileCameraPage"));
 const CliLoginPage = lazy(() => import("./pages/CliLoginPage"));
@@ -121,6 +124,30 @@ export default function App() {
         element={
           <Deferred>
             <Register />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <Deferred>
+            <ForgotPassword />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <Deferred>
+            <ResetPassword />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/verify-email"
+        element={
+          <Deferred>
+            <VerifyEmail />
           </Deferred>
         }
       />

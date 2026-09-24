@@ -169,6 +169,13 @@
       "when": 1788572400000,
       "tag": "0020_profiles_rich_presence",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1789650000000,
+      "tag": "0025_email_auth_security",
+      "breakpoints": true
     }
   ]
 }

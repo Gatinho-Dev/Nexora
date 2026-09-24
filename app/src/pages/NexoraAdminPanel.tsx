@@ -5,6 +5,7 @@ import {
   BellRing,
   ChevronLeft,
   ClipboardList,
+  Gauge,
   LoaderCircle,
   LockKeyhole,
   Megaphone,
@@ -17,10 +18,11 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
 import { SafetySection } from "./admin/SafetySection";
+import { UptimeSection } from "./admin/UptimeSection";
 import { BroadcastsSection as NewBroadcastsSection } from "@/components/admin/BroadcastsSection";
 import { BadgesSection as NewBadgesSection } from "@/components/admin/BadgesSection";
 
-type AdminSection = "broadcasts" | "badges" | "safety";
+type AdminSection = "broadcasts" | "badges" | "safety" | "uptime";
 
 function AdminNavButton({
   active,
@@ -108,6 +110,7 @@ export function NexoraAdminPanel() {
           <AdminNavButton active={section === "broadcasts"} icon={Megaphone} label="Comunicados" description="Mensagens oficiais globais" onClick={() => setSection("broadcasts")} />
           <AdminNavButton active={section === "badges"} icon={BadgeCheck} label="Emblemas" description="Identidade e equipe" onClick={() => setSection("badges")} />
           <AdminNavButton active={section === "safety"} icon={Shield} label="Segurança" description="Casos, ocorrências e IA" onClick={() => setSection("safety")} />
+          <AdminNavButton active={section === "uptime"} icon={Gauge} label="Monitoramento" description="Uptime e resposta da API" onClick={() => setSection("uptime")} />
           <div className="my-3 h-px bg-white/[0.055]" />
           <div className="rounded-lg border border-white/[0.055] bg-[#191b20] p-3">
             <div className="flex items-center gap-2 text-[10px] font-semibold text-[#bdc2ca]">
@@ -152,6 +155,9 @@ export function NexoraAdminPanel() {
           <Button size="sm" variant="ghost" onClick={() => setSection("safety")} className={cn("text-xs", section === "safety" ? "bg-[#5865F2]/15 text-white" : "text-[#9da4ae]")}>
             <Shield className="h-3.5 w-3.5" />Segurança
           </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSection("uptime")} className={cn("text-xs", section === "uptime" ? "bg-[#5865F2]/15 text-white" : "text-[#9da4ae]")}>
+            <Gauge className="h-3.5 w-3.5" />Monitoramento
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => navigate("/channels/@me/official")} className="ml-auto text-xs text-[#9da4ae]">
             <ChevronLeft className="h-3.5 w-3.5" />Sair
           </Button>
@@ -166,6 +172,8 @@ export function NexoraAdminPanel() {
                     <BellRing className="h-3 w-3" />
                   ) : section === "safety" ? (
                     <Shield className="h-3 w-3" />
+                  ) : section === "uptime" ? (
+                    <Gauge className="h-3 w-3" />
                   ) : (
                     <UsersRound className="h-3 w-3" />
                   )}
@@ -176,14 +184,18 @@ export function NexoraAdminPanel() {
                     ? "Comunicados oficiais"
                     : section === "badges"
                       ? "Emblemas de perfil"
-                      : "Segurança e moderação"}
+                      : section === "uptime"
+                        ? "Monitoramento de uptime"
+                        : "Segurança e moderação"}
                 </h2>
                 <p className="mt-1 max-w-2xl text-xs leading-5 text-[#858c96]">
                   {section === "broadcasts"
                     ? "Publique avisos globais em nome da conta verificada Nexora e acompanhe o histórico."
                     : section === "safety"
                       ? "Revise casos de moderação, ocorrências, apelações e monitore a IA de segurança."
-                      : "Crie emblemas e atribua identidade oficial às contas autorizadas."}
+                      : section === "uptime"
+                        ? "Acompanhe a disponibilidade e o tempo de resposta dos monitores do Nexora."
+                        : "Crie emblemas e atribua identidade oficial às contas autorizadas."}
                 </p>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.065] bg-white/[0.03] px-2.5 py-1.5 text-[10px] text-[#8f96a1]">
@@ -195,6 +207,8 @@ export function NexoraAdminPanel() {
               <NewBroadcastsSection />
             ) : section === "badges" ? (
               <NewBadgesSection />
+            ) : section === "uptime" ? (
+              <UptimeSection />
             ) : (
               <SafetySection />
             )}

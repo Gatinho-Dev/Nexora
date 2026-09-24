@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldCheck } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -18,29 +18,39 @@ function friendlyError(message: string, code?: string): string {
   return code === "UNAUTHORIZED" || code === "CONFLICT" ? message : GENERIC_ERROR;
 }
 
-type FieldErrors = { username?: string; password?: string };
+type FieldErrors = { identifier?: string; password?: string; code?: string };
 
 export default function Login() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const { isAuthenticated } = useAuth();
 
-  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [needsTwoFactor, setNeedsTwoFactor] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const usernameRef = useRef<HTMLInputElement>(null);
+  const identifierRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !needsTwoFactor) {
       navigate("/channels/@me", { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, needsTwoFactor]);
 
   const login = trpc.account.login.useMutation({
-    onSuccess: async () => {
+    onSuccess: async result => {
+      if (result.requiresTwoFactor) {
+        setNeedsTwoFactor(true);
+        setCode("");
+        setServerError(null);
+        window.setTimeout(() => codeRef.current?.focus(), 50);
+        return;
+      }
       await utils.auth.me.invalidate();
       navigate("/channels/@me");
     },
@@ -54,20 +64,29 @@ export default function Login() {
     setServerError(null);
 
     const errors: FieldErrors = {};
-    if (!username.trim()) errors.username = "Informe o nome de usuário.";
+    if (!identifier.trim()) errors.identifier = "Informe seu usuário ou e-mail.";
     if (!password) errors.password = "Informe a senha.";
+    if (needsTwoFactor && !code.trim()) errors.code = "Informe o código.";
 
-    if (errors.username) {
-      usernameRef.current?.focus();
+    if (errors.identifier) {
+      identifierRef.current?.focus();
       return;
     }
     if (errors.password) {
       passwordRef.current?.focus();
       return;
     }
+    if (errors.code) {
+      codeRef.current?.focus();
+      return;
+    }
 
     setFieldErrors({});
-    login.mutate({ username: username.trim(), password });
+    login.mutate({
+      identifier: identifier.trim(),
+      password,
+      ...(needsTwoFactor && code.trim() ? { code: code.trim() } : {}),
+    });
   };
 
   const describedBy = (field: keyof FieldErrors) =>
@@ -91,61 +110,123 @@ export default function Login() {
                 Bem-vindo de volta
               </h1>
               <p className="mt-1.5 text-sm text-muted2">
-                Entre na sua conta Nexora.
+                {needsTwoFactor
+                  ? "Confirme com seu segundo fator de autenticação."
+                  : "Entre na sua conta Nexora."}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} noValidate className="space-y-4">
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="username"
-                  className="text-xs font-semibold uppercase tracking-wider text-muted2"
-                >
-                  Usuário
-                </Label>
-                <Input
-                  id="username"
-                  name="username"
-                  ref={usernameRef}
-                  autoComplete="username"
-                  value={username}
-                  onChange={event => {
-                    setUsername(event.target.value);
-                    if (fieldErrors.username) {
-                      setFieldErrors(previous => ({ ...previous, username: undefined }));
-                    }
-                  }}
-                  disabled={login.isPending}
-                  required
-                  aria-invalid={fieldErrors.username ? true : undefined}
-                  aria-describedby={describedBy("username")}
-                  className="h-12 rounded-lg border-black/20 bg-rail text-base text-white"
-                />
-                {fieldErrors.username && (
-                  <p
-                    id="username-error"
-                    role="alert"
-                    className="text-xs font-medium text-red-400"
-                  >
-                    {fieldErrors.username}
-                  </p>
-                )}
-              </div>
+              {!needsTwoFactor && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="identifier"
+                      className="text-xs font-semibold uppercase tracking-wider text-muted2"
+                    >
+                      Nome de usuário ou e-mail
+                    </Label>
+                    <Input
+                      id="identifier"
+                      name="identifier"
+                      ref={identifierRef}
+                      autoComplete="username"
+                      inputMode="email"
+                      value={identifier}
+                      onChange={event => {
+                        setIdentifier(event.target.value);
+                        if (fieldErrors.identifier) {
+                          setFieldErrors(previous => ({ ...previous, identifier: undefined }));
+                        }
+                      }}
+                      disabled={login.isPending}
+                      required
+                      aria-invalid={fieldErrors.identifier ? true : undefined}
+                      aria-describedby={describedBy("identifier")}
+                      className="h-12 rounded-lg border-black/20 bg-rail text-base text-white"
+                    />
+                    {fieldErrors.identifier && (
+                      <p
+                        id="identifier-error"
+                        role="alert"
+                        className="text-xs font-medium text-red-400"
+                      >
+                        {fieldErrors.identifier}
+                      </p>
+                    )}
+                  </div>
 
-              <PasswordField
-                id="password"
-                label="Senha"
-                value={password}
-                onChange={value => {
-                  setPassword(value);
-                  if (fieldErrors.password) {
-                    setFieldErrors(previous => ({ ...previous, password: undefined }));
-                  }
-                }}
-                autoComplete="current-password"
-                error={fieldErrors.password ?? null}
-                inputRef={passwordRef}
-              />
+                  <PasswordField
+                    id="password"
+                    label="Senha"
+                    value={password}
+                    onChange={value => {
+                      setPassword(value);
+                      if (fieldErrors.password) {
+                        setFieldErrors(previous => ({ ...previous, password: undefined }));
+                      }
+                    }}
+                    autoComplete="current-password"
+                    error={fieldErrors.password ?? null}
+                    inputRef={passwordRef}
+                  />
+
+                  <p className="-mt-1 text-right">
+                    <Link
+                      to="/forgot-password"
+                      className="text-xs font-medium text-[#00A8FC] transition-colors hover:text-[#4dbaff] hover:underline"
+                    >
+                      Esqueci minha senha
+                    </Link>
+                  </p>
+                </>
+              )}
+
+              {needsTwoFactor && (
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="code"
+                    className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted2"
+                  >
+                    <ShieldCheck className="size-3.5" aria-hidden />
+                    Código de autenticação
+                  </Label>
+                  <Input
+                    id="code"
+                    name="code"
+                    ref={codeRef}
+                    inputMode="text"
+                    autoComplete="one-time-code"
+                    placeholder="123456 ou código de backup"
+                    value={code}
+                    onChange={event => {
+                      setCode(event.target.value);
+                      if (fieldErrors.code) {
+                        setFieldErrors(previous => ({ ...previous, code: undefined }));
+                      }
+                    }}
+                    disabled={login.isPending}
+                    required
+                    maxLength={32}
+                    aria-invalid={fieldErrors.code ? true : undefined}
+                    aria-describedby={describedBy("code")}
+                    className="h-12 rounded-lg border-black/20 bg-rail text-center text-lg tracking-[0.3em] text-white"
+                  />
+                  {fieldErrors.code && (
+                    <p
+                      id="code-error"
+                      role="alert"
+                      className="text-xs font-medium text-red-400"
+                    >
+                      {fieldErrors.code}
+                    </p>
+                  )}
+                  <p className="text-[11px] leading-4 text-muted2">
+                    Use o código de 6 dígitos do seu app autenticador ou um código
+                    de recuperação.
+                  </p>
+                </div>
+              )}
 
               {serverError && (
                 <div
@@ -165,7 +246,11 @@ export default function Login() {
                 {login.isPending && (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
                 )}
-                {login.isPending ? "Entrando..." : "Entrar"}
+                {login.isPending
+                  ? "Entrando..."
+                  : needsTwoFactor
+                    ? "Verificar e entrar"
+                    : "Entrar"}
               </Button>
             </form>
 

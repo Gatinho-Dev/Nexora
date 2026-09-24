@@ -8,7 +8,7 @@ import {
   requireChannelAccess,
   requireConversationAccess,
 } from "../utils/permissions";
-import { encryptPrivate, decryptPrivate } from "../lib/crypto";
+import { decryptSecret, encryptSecret } from "../lib/crypto";
 import { broadcastPresence, sendToUsers } from "../realtime";
 
 const visibilitySchema = z.enum([
@@ -207,7 +207,7 @@ export const profileFeaturesRouter = createRouter({
         eq(schema.userNotes.authorUserId, ctx.user.id),
         eq(schema.userNotes.targetUserId, input.userId),
       ) });
-      return { content: row ? decryptPrivate(row.encryptedContent, `user-note:${ctx.user.id}`) : null };
+      return { content: row ? decryptSecret(row.encryptedContent) : null };
     }),
 
   setNote: authedQuery
@@ -221,7 +221,7 @@ export const profileFeaturesRouter = createRouter({
           eq(schema.userNotes.targetUserId, input.userId),
         ));
       } else {
-        const encryptedContent = encryptPrivate(content, `user-note:${ctx.user.id}`);
+        const encryptedContent = encryptSecret(content);
         await getDb().insert(schema.userNotes).values({
           authorUserId: ctx.user.id,
           targetUserId: input.userId,

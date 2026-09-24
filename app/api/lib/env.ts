@@ -161,4 +161,26 @@ export const env = {
     30_000,
     Number(process.env.EXTERNAL_PRESENCE_INTERVAL_MS ?? 60_000),
   ),
+
+  // ── Monitoramento de uptime (UptimeRobot) ──────────────────────
+  // Somente servidor: a chave nunca é exposta ao cliente.
+  uptimeRobotApiKey: process.env.UPTIMEROBOT_API_KEY ?? "",
+
+  // ── Passkeys / WebAuthn ───────────────────────────────────────
+  // rpID = domínio efetivo do app; origin = origem completa esperada
+  // pelo autenticador (deve corresponder exatamente, incluindo porta).
+  passkeyRpId:
+    process.env.PASSKEY_RP_ID ??
+    process.env.APP_ORIGIN?.replace(/^https?:\/\//, "").replace(/\/$/, "") ??
+    "nexorachat.cloud",
+  passkeyOrigin:
+    process.env.PASSKEY_ORIGIN ??
+    process.env.APP_ORIGIN ??
+    "https://nexorachat.cloud",
+
+  // ── E-mail transacional (Resend) ───────────────────────────────
+  // Mantido no servidor; nenhum destes valores é enviado ao cliente.
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "",
+  resendLogoUrl: process.env.RESEND_LOGO_URL ?? "",
 };

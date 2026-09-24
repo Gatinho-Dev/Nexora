@@ -6,6 +6,7 @@ import { SecurityCenter } from "../safety/SecurityCenter";
 import { ReportsList } from "../safety/ReportsList";
 import { AppealsSection } from "../safety/AppealsSection";
 import { DevicesSection } from "../settings/DevicesSection";
+import { EmailSection } from "../settings/EmailSection";
 import { ConnectionsSection } from "../settings/ConnectionsSection";
 import { toast } from "sonner";
 import { apiUrl } from "@/lib/endpoints";
@@ -382,6 +383,8 @@ function AccountTab() {
           </p>
         </div>
       </div>
+
+      <EmailSection />
 
       {user?.username ? (
         <div className="space-y-4 rounded-xl bg-sidebar border border-white/10 p-5">
