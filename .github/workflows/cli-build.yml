@@ -96,10 +96,10 @@ jobs:
               cp cli/target/x86_64-pc-windows-msvc/release/nexora.exe dist/NexoraCLI-${VERSION}-x64.exe
               ;;
             aarch64-apple-darwin)
-              tar czf dist/nexora-cli-${VERSION}-arm64.tar.gz -C cli/target/aarch64-apple-darwin/release nexora
+              tar czf dist/nexora-cli-macos-arm64.tar.gz -C cli/target/aarch64-apple-darwin/release nexora
               ;;
             x86_64-apple-darwin)
-              tar czf dist/nexora-cli-${VERSION}-x64.tar.gz -C cli/target/x86_64-apple-darwin/release nexora
+              tar czf dist/nexora-cli-macos-x64.tar.gz -C cli/target/x86_64-apple-darwin/release nexora
               ;;
           esac
 

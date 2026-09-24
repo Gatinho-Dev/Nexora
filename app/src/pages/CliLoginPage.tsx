@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Check, MonitorSmartphone, ShieldCheck, X } from "lucide-react";
+import { apiUrl } from "@/lib/endpoints";
+import { Seo } from "@/lib/seo";
 
 /**
  * Página de autorização do Nexora CLI (device flow).
@@ -32,7 +34,7 @@ export default function CliLoginPage() {
   async function approve() {
     setError(null);
     try {
-      const res = await fetch("/api/cli/device/approve", {
+      const res = await fetch(apiUrl("/api/cli/device/approve"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -56,7 +58,7 @@ export default function CliLoginPage() {
   }
 
   async function deny() {
-    await fetch("/api/cli/device/deny", {
+    await fetch(apiUrl("/api/cli/device/deny"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -66,8 +68,10 @@ export default function CliLoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-chat p-4 text-white select-none">
-      <div className="w-full max-w-md animate-[fadeInUp_0.35s_ease-out] rounded-3xl border border-white/[0.08] bg-panel/80 p-8 shadow-2xl backdrop-blur-xl">
+    <>
+      <Seo noindex canonicalPath="/cli/login" />
+      <div className="flex min-h-dvh items-center justify-center bg-chat p-4 text-white select-none">
+        <div className="w-full max-w-md animate-[fadeInUp_0.35s_ease-out] rounded-3xl border border-white/[0.08] bg-panel/80 p-8 shadow-2xl backdrop-blur-xl">
         {step === "input" && (
           <>
             <div className="mb-6 flex items-center gap-3">
@@ -199,7 +203,8 @@ export default function CliLoginPage() {
             </button>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

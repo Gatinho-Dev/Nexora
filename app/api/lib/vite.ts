@@ -7,7 +7,14 @@ import path from "path";
 type App = Hono<{ Bindings: HttpBindings }>;
 
 export function serveStaticFiles(app: App) {
-  const distPath = path.resolve(import.meta.dirname, "../dist/public");
+  const moduleDirectory = import.meta.dirname;
+  const isSourceModule = moduleDirectory.endsWith(
+    `${path.sep}api${path.sep}lib`
+  );
+  const distPath = path.resolve(
+    moduleDirectory,
+    isSourceModule ? "../../dist/public" : "../dist/public"
+  );
 
   // Assets com hash no nome são imutáveis — cache de 1 ano.
   app.use("/assets/*", async (c, next) => {
@@ -22,7 +29,11 @@ export function serveStaticFiles(app: App) {
   // HTML/ícones/sw: sempre revalida.
   app.use("*", async (c, next) => {
     await next();
-    if (c.res.status === 200 && !c.req.path.startsWith("/assets/")) {
+    if (
+      c.res.status === 200 &&
+      !c.req.path.startsWith("/assets/") &&
+      !c.req.path.startsWith("/api/")
+    ) {
       c.res.headers.set("Cache-Control", "no-cache");
     }
   });
@@ -37,6 +48,7 @@ export function serveStaticFiles(app: App) {
     "/register",
     "/companion",
     "/mobile-camera",
+    "/cli",
     "/cli/login",
     "/invite",
     "/privacy",
