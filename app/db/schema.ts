@@ -1,3 +1,5 @@
+export * from "./advancedSchema";
+
 import {
   mysqlTable,
   mysqlEnum,
@@ -30,6 +32,9 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("passwordHash", { length: 255 }),
   name: varchar("name", { length: 255 }),
   email: varchar("email", { length: 320 }),
+  /** Hash do e-mail normalizado para login e unicidade sem expor PII no índice. */
+  emailHash: char("emailHash", { length: 64 }),
+  emailVerifiedAt: timestamp("emailVerifiedAt"),
   avatar: text("avatar"),
   banner: text("banner"),
   bio: text("bio"),
@@ -81,7 +86,11 @@ export const users = mysqlTable("users", {
     .$onUpdate(() => new Date()),
   lastSignInAt: timestamp("lastSignInAt").defaultNow().notNull(),
   lastSeenAt: timestamp("lastSeenAt"),
-});
+},
+  table => ({
+    emailHashUniq: uniqueIndex("users_email_hash_uniq").on(table.emailHash),
+  }),
+);
 
 // ── Servers ───────────────────────────────────────────────────
 export const servers = mysqlTable(

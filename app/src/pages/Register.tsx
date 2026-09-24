@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, MailCheck, XCircle } from "lucide-react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,17 @@ import { MigrationBanner } from "@/components/MigrationBanner";
 import { Seo } from "@/lib/seo";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]+$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const GENERIC_ERROR =
   "Não foi possível criar sua conta no momento. Tente novamente em instantes.";
+
+function emailValidationError(value: string): string | null {
+  if (!value) return null;
+  if (value.length > 320 || !EMAIL_PATTERN.test(value)) {
+    return "Informe um e-mail válido (ex.: voce@exemplo.com).";
+  }
+  return null;
+}
 
 function usernameValidationError(value: string): string | null {
   if (!value) return null;
@@ -39,7 +48,9 @@ export default function Register() {
   const [debouncedUsername, setDebouncedUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [email, setEmail] = useState("");
   const [serverError, setServerError] = useState<string | null>(null);
+  const [verificationPending, setVerificationPending] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -68,7 +79,12 @@ export default function Register() {
   );
 
   const register = trpc.account.register.useMutation({
-    onSuccess: async () => {
+    onSuccess: async result => {
+      if (result.emailVerificationRequired) {
+        setVerificationPending(true);
+        await utils.auth.me.invalidate();
+        return;
+      }
       await utils.auth.me.invalidate();
       navigate("/channels/@me");
     },
@@ -78,6 +94,9 @@ export default function Register() {
       );
     },
   });
+
+  const trimmedEmail = email.trim();
+  const emailError = emailValidationError(trimmedEmail);
 
   const passwordsMismatch =
     confirmPassword !== "" && confirmPassword !== password;
@@ -89,6 +108,7 @@ export default function Register() {
     usernameError === null &&
     debouncedUsername === trimmedUsername &&
     check.data?.available === true &&
+    emailError === null &&
     password.length >= 6 &&
     confirmPassword === password &&
     !register.isPending;
@@ -101,6 +121,8 @@ export default function Register() {
       username: trimmedUsername,
       displayName: displayName.trim(),
       password,
+      // E-mail é opcional: só é enviado quando informado.
+      ...(trimmedEmail ? { email: trimmedEmail } : {}),
     });
   };
 
@@ -124,6 +146,41 @@ export default function Register() {
       tone: "error",
       text: "Não foi possível verificar agora. Tente novamente.",
     };
+  }
+
+  if (verificationPending) {
+    return (
+      <>
+        <Seo noindex canonicalPath="/register" />
+        <MigrationBanner fixed />
+        <main className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden bg-chat p-4 pt-20 text-white sm:p-6 sm:pt-24">
+          <div aria-hidden className="pointer-events-none absolute inset-0">
+            <div className="absolute left-1/2 top-[-22%] h-[520px] w-[820px] -translate-x-1/2 rounded-full bg-[#5865F2]/20 blur-[140px]" />
+            <div className="absolute bottom-[-28%] right-[-12%] h-[380px] w-[380px] rounded-full bg-[#5865F2]/10 blur-[120px]" />
+          </div>
+          <div className="relative w-full max-w-[400px]">
+            <div className="rounded-2xl border border-white/[0.06] bg-sidebar p-6 text-center shadow-[0_24px_64px_rgba(0,0,0,0.4)] sm:p-8">
+              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#5865F2]/15 text-[#8e9aff]">
+                <MailCheck className="h-6 w-6" aria-hidden />
+              </span>
+              <h1 className="mt-4 text-xl font-bold text-white">Conta criada! 🎉</h1>
+              <p className="mt-2 text-sm leading-6 text-muted2">
+                Enviamos um link de verificação para{" "}
+                <strong className="text-white">{trimmedEmail}</strong>.
+                Confirme o e-mail para proteger sua conta — mas você já pode usar
+                o Nexora normalmente.
+              </p>
+              <Button
+                onClick={() => navigate("/channels/@me")}
+                className="mt-6 h-11 w-full rounded-md bg-[#5865F2] text-base font-semibold text-white hover:bg-[#4752C4]"
+              >
+                Abrir Nexora
+              </Button>
+            </div>
+          </div>
+        </main>
+      </>
+    );
   }
 
   return (
@@ -212,6 +269,41 @@ export default function Register() {
                       <XCircle className="size-3.5 shrink-0" aria-hidden />
                     )}
                     {usernameStatus.text}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="email"
+                  className="text-xs font-semibold uppercase tracking-wider text-muted2"
+                >
+                  E-mail <span className="normal-case opacity-75">(opcional)</span>
+                </Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="voce@exemplo.com"
+                  value={email}
+                  onChange={event => {
+                    setEmail(event.target.value);
+                  }}
+                  disabled={register.isPending}
+                  aria-invalid={emailError ? true : undefined}
+                  aria-describedby={emailError ? "email-error" : undefined}
+                  className="h-12 rounded-lg border-black/20 bg-rail text-base text-white"
+                />
+                {emailError ? (
+                  <p id="email-error" role="alert" className="text-xs font-medium text-red-400">
+                    {emailError}
+                  </p>
+                ) : (
+                  <p className="text-[11px] leading-4 text-muted2">
+                    Usado para verificação, recuperação de senha e alertas de
+                    segurança. Você pode adicionar depois.
                   </p>
                 )}
               </div>

@@ -20,10 +20,10 @@ import {
   generateBackupCodes,
   generateTotpSecret,
   hashBackupCode,
-  verifyBackupCode,
   verifyTotp,
 } from "../services/mfa";
-import { decryptPrivate, encryptPrivate } from "../lib/crypto";
+import { assertTotpOrBackup } from "../services/secondFactor";
+import { decryptSecret, encryptSecret } from "../lib/crypto";
 import { issueSession } from "../accountRouter";
 import { getClientIp } from "../lib/ip";
 import { friendlyDeviceName, parseUserAgent } from "../auth/userAgent";
@@ -42,34 +42,6 @@ function partialIp(value: string | null) {
   if (value.includes(":")) return `${value.split(":").slice(0, 3).join(":")}::/48`;
   const parts = value.split(".");
   return parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : null;
-}
-
-async function assertTotpOrBackup(userId: number, code: string) {
-  const settings = await getDb().query.totpSettings.findFirst({
-    where: and(eq(schema.totpSettings.userId, userId), eq(schema.totpSettings.enabled, true)),
-  });
-  if (!settings) return;
-  const secret = decryptPrivate(settings.encryptedSecret, `totp:${userId}`);
-  if (secret) {
-    const result = verifyTotp(secret, code, {
-      minStepExclusive: settings.lastUsedStep == null ? undefined : Number(settings.lastUsedStep),
-    });
-    if (result.valid && result.step != null) {
-      await getDb().update(schema.totpSettings).set({ lastUsedStep: result.step }).where(eq(schema.totpSettings.userId, userId));
-      return;
-    }
-  }
-  const codes = await getDb().select().from(schema.backupCodes).where(and(
-    eq(schema.backupCodes.userId, userId),
-    isNull(schema.backupCodes.usedAt),
-  ));
-  const match = codes.find(row => verifyBackupCode(code, row.codeHash));
-  if (match) {
-    const result = await getDb().update(schema.backupCodes).set({ usedAt: new Date() }).where(and(eq(schema.backupCodes.id, match.id), isNull(schema.backupCodes.usedAt)));
-    const affected = (result as unknown as [{ affectedRows?: number }])[0]?.affectedRows ?? 0;
-    if (affected === 1) return;
-  }
-  throw new TRPCError({ code: "UNAUTHORIZED", message: "Código de autenticação inválido ou já utilizado." });
 }
 
 async function qrRow(sessionId: string, token: string) {
@@ -169,7 +141,7 @@ export const securityFeaturesRouter = createRouter({
     const current = await getDb().query.totpSettings.findFirst({ where: eq(schema.totpSettings.userId, ctx.user.id) });
     if (current?.enabled) throw new TRPCError({ code: "CONFLICT", message: "A autenticação em duas etapas já está ativa." });
     const secret = generateTotpSecret();
-    const encryptedSecret = encryptPrivate(secret, `totp:${ctx.user.id}`);
+    const encryptedSecret = encryptSecret(secret);
     await getDb().insert(schema.totpSettings).values({ userId: ctx.user.id, encryptedSecret }).onDuplicateKeyUpdate({ set: { encryptedSecret, enabled: false, verifiedAt: null, lastUsedStep: null, updatedAt: new Date() } });
     const username = ctx.user.username ?? `user-${ctx.user.id}`;
     return { secret, uri: buildTotpUri({ secret, username }) };
@@ -179,7 +151,7 @@ export const securityFeaturesRouter = createRouter({
     .input(z.object({ code: z.string().regex(/^\d{6}$/) }))
     .mutation(async ({ ctx, input }) => {
       const row = await getDb().query.totpSettings.findFirst({ where: eq(schema.totpSettings.userId, ctx.user.id) });
-      const secret = row ? decryptPrivate(row.encryptedSecret, `totp:${ctx.user.id}`) : null;
+      const secret = row ? decryptSecret(row.encryptedSecret) : null;
       if (!row || !secret || row.enabled) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Inicie a configuração do autenticador novamente." });
       const verified = verifyTotp(secret, input.code);
       if (!verified.valid || verified.step == null) throw new TRPCError({ code: "UNAUTHORIZED", message: "Código inválido." });

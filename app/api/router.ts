@@ -10,12 +10,14 @@ import { officialRouter } from "./officialRouter";
 import { badgeRouter } from "./badgeRouter";
 import { adminRouter } from "./adminRouter";
 import { safetyRouter } from "./safetyRouter";
+import { uptimeRouter } from "./uptimeRouter";
 import { integrationsRouter } from "./integrationsRouter";
 import { threadRouter, announceRouter, webhookRouter } from "./communityRouters";
 import { pollRouter } from "./pollRouter";
 import { embedRouter } from "./embedRouter";
 import { commandRouter } from "./services/commandRouter";
 import { createRouter, publicQuery } from "./middleware";
+import { advancedRouter } from "./advanced/router";
 
 export const appRouter = createRouter({
   ping: publicQuery.query(() => ({ ok: true, ts: Date.now() })),
@@ -32,10 +34,12 @@ export const appRouter = createRouter({
   badge: badgeRouter,
   admin: adminRouter,
   safety: safetyRouter,
+  uptime: uptimeRouter,
   integrations: integrationsRouter,
   threads: threadRouter,
   poll: pollRouter,
   command: commandRouter,
+  advanced: advancedRouter,
   embed: embedRouter,
   announce: announceRouter,
   webhook: webhookRouter,

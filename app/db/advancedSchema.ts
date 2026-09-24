@@ -1051,6 +1051,36 @@ export const securityEvents = mysqlTable(
   table => ({ userIdx: index("sec_user_idx").on(table.userId, table.id) })
 );
 
+// ── Tokens transacionais de e-mail ─────────────────────────────
+// Apenas o hash SHA-256 do token é persistido. O consumo é atômico para
+// impedir reutilização, mesmo quando duas requisições chegam ao mesmo tempo.
+export const emailActionTokens = mysqlTable(
+  "email_action_tokens",
+  {
+    id: char("id", { length: 36 }).primaryKey(),
+    userId: bigint("userId", { mode: "number", unsigned: true }).notNull(),
+    purpose: mysqlEnum("purpose", [
+      "verify_email",
+      "password_reset",
+      "email_change",
+    ]).notNull(),
+    tokenHash: char("tokenHash", { length: 64 }).notNull(),
+    targetEmail: varchar("targetEmail", { length: 320 }),
+    expiresAt: timestamp("expiresAt").notNull(),
+    consumedAt: timestamp("consumedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    tokenUniq: uniqueIndex("eat_token_uniq").on(table.tokenHash),
+    userPurposeIdx: index("eat_user_purpose_idx").on(
+      table.userId,
+      table.purpose,
+      table.createdAt
+    ),
+    expiryIdx: index("eat_expiry_idx").on(table.expiresAt, table.consumedAt),
+  })
+);
+
 export const tickets = mysqlTable(
   "tickets",
   {
@@ -1208,3 +1238,4 @@ export type ForumPost = typeof forumPosts.$inferSelect;
 export type ScheduledMessage = typeof scheduledMessages.$inferSelect;
 export type Ticket = typeof tickets.$inferSelect;
 export type UserPreference = typeof userPreferences.$inferSelect;
+export type EmailActionToken = typeof emailActionTokens.$inferSelect;

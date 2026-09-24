@@ -145,10 +145,16 @@ export async function finishPasskeyRegistration(input: {
   return { verified: true };
 }
 
-export async function beginPasskeyAuthentication(username: string) {
-  const user = await getDb().query.users.findFirst({
-    where: sql`lower(${schema.users.username}) = ${username.toLowerCase()}`,
-  });
+export async function beginPasskeyAuthentication(identifier: string) {
+  const value = identifier.trim();
+  // Aceita e-mail ou nome de usuário (mesmo contrato do login por senha).
+  const user = value.includes("@")
+    ? await getDb().query.users.findFirst({
+        where: sql`LOWER(TRIM(${schema.users.email})) = ${value.toLowerCase()}`,
+      })
+    : await getDb().query.users.findFirst({
+        where: sql`lower(${schema.users.username}) = ${value.toLowerCase()}`,
+      });
   if (!user) {
     throw new TRPCError({
       code: "NOT_FOUND",
