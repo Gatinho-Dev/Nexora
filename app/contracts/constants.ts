@@ -27,6 +27,19 @@ export const PERMISSIONS = [
   "CONNECT",
   "SPEAK",
   "STREAM",
+  // ── Permissões de recursos avançados ─────────────────────────
+  "MANAGE_FORUMS",
+  "MANAGE_EVENTS",
+  "MANAGE_STAGE",
+  "MANAGE_COMMUNITY",
+  "MANAGE_ONBOARDING",
+  "MANAGE_SOUNDBOARD",
+  "VIEW_SERVER_INSIGHTS",
+  "PIN_MESSAGES",
+  "BYPASS_SLOWMODE",
+  "REQUEST_TO_SPEAK",
+  "PRIORITY_SPEAKER",
+  "USE_SOUNDBOARD",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -47,6 +60,8 @@ export const MODERATOR_PERMISSIONS: Permission[] = [
   "MANAGE_CHANNELS",
   "MANAGE_MESSAGES",
   "KICK_MEMBERS",
+  "PIN_MESSAGES",
+  "BYPASS_SLOWMODE",
 ];
 
 // ── Rate limits (easy to tweak) ───────────────────────────────
@@ -64,6 +79,12 @@ export const RateLimits = {
   securityChallenge: { limit: 10, windowMs: 60_000 },
   /** Abertura de tickets de suporte. */
   ticketCreate: { limit: 5, windowMs: 15 * 60_000 },
+  /** Busca global de mensagens. */
+  search: { limit: 20, windowMs: 60_000 },
+  /** Criação/edição de mensagens agendadas. */
+  scheduledMessage: { limit: 10, windowMs: 60_000 },
+  /** Reprodução de sons do Soundboard. */
+  soundboardPlay: { limit: 30, windowMs: 60_000 },
 } as const;
 
 // ── Groups (conversas privadas em grupo) ─────────────────────

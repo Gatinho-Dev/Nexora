@@ -513,10 +513,17 @@ export const adminRouter = createRouter({
       if (!authority) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão." });
       }
-      const [user, badge] = await Promise.all([
+      // Não exponha detalhes de infraestrutura quando a consulta de autorização
+      // falhar. A resposta genérica também evita que um admin descubra a
+      // existência de registros por meio de mensagens de banco de dados.
+      const lookup = await Promise.all([
         getDb().query.users.findFirst({ where: eq(schema.users.id, input.userId) }),
         getDb().query.badges.findFirst({ where: eq(schema.badges.id, input.badgeId) }),
-      ]);
+      ]).catch(() => null);
+      if (!lookup) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário ou badge não encontrado." });
+      }
+      const [user, badge] = lookup;
       if (!user) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado." });
       }

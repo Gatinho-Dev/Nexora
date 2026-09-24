@@ -733,6 +733,43 @@ export type WSServerEvent =
     }
   | { t: "server:refresh"; serverId: number }
   | { t: "events:refresh"; serverId: number }
+  | { t: "pins:refresh"; channelId: number }
+  | {
+      t: "preferences:refresh";
+      scope:
+        | "profile"
+        | "favorites"
+        | "server-folders"
+        | "server-order"
+        | "user"
+        | "audio-clips";
+    }
+  | { t: "forum:refresh"; channelId: number }
+  | { t: "stage:refresh"; channelId: number }
+  | { t: "stage:request"; channelId: number; userId: number }
+  | {
+      t: "stage:moderation";
+      channelId: number;
+      action: "accept" | "reject" | "audience" | "mute" | "remove";
+    }
+  | { t: "onboarding:refresh"; serverId: number }
+  | { t: "soundboard:refresh"; serverId: number }
+  | {
+      t: "soundboard:play";
+      channelId: number;
+      soundId: number;
+      userId: number;
+      url: string;
+      volume: number;
+    }
+  | { t: "support:refresh" }
+  | {
+      t: "voice:priority";
+      serverId: number;
+      userId: number;
+      enabled: boolean;
+      attenuation: number;
+    }
   | { t: "stage:hands"; channelId?: number; userIds: number[] }
   | { t: "group:update"; conversationId: number }
   | { t: "dm:refresh" }

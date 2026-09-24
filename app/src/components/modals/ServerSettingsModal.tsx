@@ -76,6 +76,18 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   CONNECT: "Conectar ao canal de voz",
   SPEAK: "Falar",
   STREAM: "Transmitir vídeo e tela",
+  MANAGE_FORUMS: "Gerenciar fóruns",
+  MANAGE_EVENTS: "Gerenciar eventos",
+  MANAGE_STAGE: "Gerenciar Stage",
+  MANAGE_COMMUNITY: "Gerenciar comunidade",
+  MANAGE_ONBOARDING: "Gerenciar onboarding",
+  MANAGE_SOUNDBOARD: "Gerenciar Soundboard",
+  VIEW_SERVER_INSIGHTS: "Ver insights do servidor",
+  PIN_MESSAGES: "Fixar mensagens",
+  BYPASS_SLOWMODE: "Ignorar modo lento",
+  REQUEST_TO_SPEAK: "Pedir para falar",
+  PRIORITY_SPEAKER: "Falar com prioridade",
+  USE_SOUNDBOARD: "Usar o Soundboard",
 };
 
 const PERMISSION_DESCRIPTIONS: Partial<Record<Permission, string>> = {

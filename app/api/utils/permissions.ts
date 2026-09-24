@@ -108,6 +108,54 @@ export async function requirePermission(
   return perms;
 }
 
+/**
+ * Throws FORBIDDEN unless the user is a member holding at least one of the
+ * given permissions. Usado por recursos que aceitam mais de um cargo de
+ * gestor (ex.: "MANAGE_FORUMS ou MANAGE_CHANNELS").
+ */
+export async function requireAnyPermission(
+  userId: number,
+  serverId: number,
+  permissions: readonly Permission[],
+): Promise<Set<Permission>> {
+  const perms = await getMemberPermissions(userId, serverId);
+  if (!perms) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Você não é membro deste servidor.",
+    });
+  }
+  if (!permissions.some(permission => perms.has(permission))) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Você não tem permissão para fazer isso.",
+    });
+  }
+  return perms;
+}
+
+/**
+ * Filtra os canais visíveis ao usuário para uma permissão específica.
+ * Aplica as permissões efetivas do canal (cargos → categoria → canal),
+ * então canais ocultos ou negados não aparecem no resultado.
+ */
+export async function filterVisibleChannels<T extends typeof schema.channels.$inferSelect>(
+  userId: number,
+  channels: readonly T[],
+  permission: Permission,
+): Promise<T[]> {
+  if (channels.length === 0) return [];
+  const results = await Promise.all(
+    channels.map(async channel => ({
+      channel,
+      perms: await getEffectiveChannelPermissions(userId, channel),
+    })),
+  );
+  return results
+    .filter(result => result.perms?.has(permission))
+    .map(result => result.channel);
+}
+
 /** Highest role position. The owner is always above every role. */
 export async function getHighestRolePosition(userId: number, serverId: number) {
   const db = getDb();
