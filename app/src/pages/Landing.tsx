@@ -661,24 +661,43 @@ export default function Landing() {
       </main>
 
       <footer className="landing-footer">
-        <div className="landing-shell landing-footer__row">
-          <div className="landing-footer__brand">
-            <NexoraAppIcon className="landing-footer__icon" decorative />
-            <span>Nexora</span>
-            <small>© {year}</small>
+        <div className="landing-shell">
+          <div className="landing-footer__row">
+            <div className="landing-footer__brand">
+              <NexoraAppIcon className="landing-footer__icon" decorative />
+              <span>Nexora</span>
+              <small>© {year}</small>
+            </div>
+            <nav aria-label="Links do rodapé">
+              <Link to="/privacy">Privacidade</Link>
+              <Link to="/legal/terms">Termos</Link>
+              <Link to="/legal/guidelines">Diretrizes</Link>
+              <a
+                href="#seguranca"
+                onClick={event => scrollToSection(event, "seguranca")}
+              >
+                Segurança
+              </a>
+              <a href="mailto:suporte@nexorachat.cloud">Contato</a>
+            </nav>
           </div>
-          <nav aria-label="Links do rodapé">
-            <Link to="/privacy">Privacidade</Link>
-            <Link to="/legal/terms">Termos</Link>
-            <Link to="/legal/guidelines">Diretrizes</Link>
-            <a
-              href="#seguranca"
-              onClick={event => scrollToSection(event, "seguranca")}
-            >
-              Segurança
-            </a>
-            <a href="mailto:suporte@nexorachat.cloud">Contato</a>
-          </nav>
+          <div className="landing-footer__credit">
+            <div className="landing-footer__credit-brand">
+              <img
+                className="landing-footer__credit-logo"
+                src="/furrys.png"
+                alt="Logo da Furry's Life Inc."
+                width={500}
+                height={500}
+                loading="lazy"
+                decoding="async"
+              />
+              <div className="landing-footer__credit-copy">
+                <p>Feito pela Furry's Life Inc.</p>
+                <p>© 2026 Furry's Life Inc. Todos os direitos reservados.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </footer>
     </div>
