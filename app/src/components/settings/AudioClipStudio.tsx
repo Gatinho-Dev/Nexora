@@ -1,4 +1,4 @@
-import { Loader2, AlertCircle, Mic, MicOff, Play, Square, Volume2 } from "lucide-react";
+import { Mic, MicOff, Play, Square, Volume2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";

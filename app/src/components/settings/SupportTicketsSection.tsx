@@ -8,19 +8,60 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useState } from "react";
 
+/** Espelha os enums `category` e `status` de schema.tickets no backend. */
+type TicketCategory =
+  | "account"
+  | "moderation"
+  | "report"
+  | "bug"
+  | "billing"
+  | "security"
+  | "ban";
+type TicketStatus =
+  | "OPEN"
+  | "IN_PROGRESS"
+  | "WAITING_USER"
+  | "RESOLVED"
+  | "CLOSED";
+
+const TICKET_CATEGORIES: { value: TicketCategory; label: string }[] = [
+  { value: "report", label: "Geral" },
+  { value: "bug", label: "Bug report" },
+  { value: "account", label: "Conta" },
+  { value: "security", label: "Segurança" },
+  { value: "moderation", label: "Moderação" },
+  { value: "ban", label: "Banimento" },
+  { value: "billing", label: "Pagamento" },
+];
+
+const STATUS_STYLES: Record<TicketStatus, string> = {
+  OPEN: "bg-emerald-500/20 text-emerald-300",
+  IN_PROGRESS: "bg-amber-500/20 text-amber-300",
+  WAITING_USER: "bg-sky-500/20 text-sky-300",
+  RESOLVED: "bg-emerald-500/20 text-emerald-300",
+  CLOSED: "bg-slate-500/20 text-slate-300",
+};
+
+const STATUS_LABELS: Record<TicketStatus, string> = {
+  OPEN: "Aberto",
+  IN_PROGRESS: "Em andamento",
+  WAITING_USER: "Aguardando você",
+  RESOLVED: "Resolvido",
+  CLOSED: "Fechado",
+};
+
 export function SupportTicketsSection() {
   const { user } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
-  const [category, setCategory] = useState("general");
+  const [category, setCategory] = useState<TicketCategory>("report");
 
-  const tickets = trpc.support.tickets.useQuery(
-    { userId: user?.id ?? 0 },
-    { enabled: !!user }
-  );
+  const tickets = trpc.advanced.support.myTickets.useQuery(undefined, {
+    enabled: !!user,
+  });
 
-  const createTicket = trpc.support.createTicket.useMutation({
+  const createTicket = trpc.advanced.support.createTicket.useMutation({
     onSuccess: () => {
       toast.success("Ticket criado com sucesso.");
       setSubject("");
@@ -56,14 +97,14 @@ export function SupportTicketsSection() {
             <Label>Categoria</Label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => setCategory(e.target.value as TicketCategory)}
               className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white"
             >
-              <option value="general">Geral</option>
-              <option value="bug">Bug report</option>
-              <option value="feature">Sugestão</option>
-              <option value="account">Conta</option>
-              <option value="safety">Segurança</option>
+              {TICKET_CATEGORIES.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-2">
@@ -119,18 +160,14 @@ export function SupportTicketsSection() {
                     <span className="font-bold text-white">{ticket.subject}</span>
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                        ticket.status === "open"
-                          ? "bg-emerald-500/20 text-emerald-300"
-                          : ticket.status === "in_progress"
-                          ? "bg-amber-500/20 text-amber-300"
-                          : "bg-slate-500/20 text-slate-300"
+                        STATUS_STYLES[ticket.status] ?? "bg-slate-500/20 text-slate-300"
                       }`}
                     >
-                      {ticket.status}
+                      {STATUS_LABELS[ticket.status] ?? ticket.status}
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-muted2 line-clamp-2">
-                    {ticket.message}
+                    {TICKET_CATEGORIES.find(c => c.value === ticket.category)?.label ?? ticket.category}
                   </p>
                   <p className="mt-1 text-[10px] text-muted2">
                     {new Date(ticket.createdAt).toLocaleString("pt-BR")}

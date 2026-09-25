@@ -1,6 +1,5 @@
 import { Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
 import { trpc } from "@/providers/trpc";
 
 export function IdentityPreferencesSection() {

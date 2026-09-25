@@ -224,6 +224,8 @@ export const messages = mysqlTable(
     }),
     authorId: bigint("authorId", { mode: "number", unsigned: true }).notNull(),
     content: text("content").notNull(),
+    /** Idempotency key for scheduled delivery and client retries. */
+    clientNonce: varchar("clientNonce", { length: 64 }),
     replyToId: bigint("replyToId", { mode: "number", unsigned: true }),
     threadId: bigint("threadId", { mode: "number", unsigned: true }),
     tag: varchar("tag", { length: 24 }),
