@@ -267,6 +267,7 @@ export const messages = mysqlTable(
     replyToId: bigint("replyToId", { mode: "number", unsigned: true }),
     threadId: bigint("threadId", { mode: "number", unsigned: true }),
     tag: varchar("tag", { length: 24 }),
+    clientNonce: varchar("clientNonce", { length: 64 }),
     editedAt: timestamp("editedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
@@ -285,6 +286,10 @@ export const messages = mysqlTable(
       table.conversationId,
       table.authorId,
       table.id
+    ),
+    authorNonceIdx: uniqueIndex("msg_author_nonce_uniq").on(
+      table.authorId,
+      table.clientNonce
     ),
   })
 );

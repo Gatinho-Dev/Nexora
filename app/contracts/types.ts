@@ -785,6 +785,53 @@ export type WSServerEvent =
     }
   | { t: "server:refresh"; serverId: number }
   | { t: "discovery:refresh" }
+  | { t: "pins:refresh"; serverId?: number; channelId?: number }
+  | {
+      t: "preferences:refresh";
+      userId?: number;
+      serverId?: number;
+      scope?: string;
+    }
+  | { t: "forum:refresh"; serverId?: number; channelId?: number }
+  | {
+      t: "stage:refresh";
+      serverId?: number;
+      channelId?: number;
+      sessionId?: number | null;
+    }
+  | {
+      t: "stage:request";
+      serverId?: number;
+      channelId?: number;
+      userId?: number;
+    }
+  | {
+      t: "stage:moderation";
+      serverId?: number;
+      channelId?: number;
+      action?: string;
+    }
+  | { t: "onboarding:refresh"; serverId?: number }
+  | { t: "soundboard:refresh"; serverId?: number; channelId?: number }
+  | {
+      t: "soundboard:play";
+      serverId?: number;
+      channelId?: number;
+      soundId?: number;
+      userId?: number;
+      url?: string;
+      volume?: number;
+    }
+  | {
+      t: "voice:priority";
+      serverId?: number;
+      channelId?: number;
+      userId?: number;
+      priority?: number;
+      enabled?: boolean;
+      attenuation?: number;
+    }
+  | { t: "support:refresh"; userId?: number; ticketId?: number }
   | { t: "events:refresh"; serverId: number }
   | { t: "pins:refresh"; channelId: number }
   | {
