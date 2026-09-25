@@ -59,7 +59,16 @@ describe("admin router authorization", () => {
       code: "FORBIDDEN",
     });
     await expect(
-      caller(user).grantBadge({ userId: 1, badgeId: 1 }),
+      caller(user).grantBadge({ userId: 1, badgeId: 1 })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("does not let a regular authenticated user manage partnerships or featured servers", async () => {
+    await expect(
+      caller(user).setServerPartnership({ serverId: 1, partnered: true })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller(user).setServerFeatured({ serverId: 1, featured: true })
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
@@ -77,13 +86,13 @@ describe("admin router authorization", () => {
       caller({ ...user, role: "admin" }).grantBadge({
         userId: 999999,
         badgeId: 999999,
-      }),
+      })
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(
       caller({ ...user, role: "user" }).grantBadge({
         userId: 999999,
         badgeId: 999999,
-      }),
+      })
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });

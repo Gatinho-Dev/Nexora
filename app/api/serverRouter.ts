@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
-import { createRouter, authedQuery } from "./middleware";
+import { createRouter, authedQuery, publicQuery } from "./middleware";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
+import type { Server, User } from "@db/schema";
 import {
   DEFAULT_MEMBER_PERMISSIONS,
   MODERATOR_PERMISSIONS,
@@ -15,7 +16,10 @@ import type {
   MemberDTO,
   RoleDTO,
   ServerDetailsDTO,
+  ServerDiscoveryDTO,
+  ServerDiscoveryPage,
   ServerDTO,
+  DiscoveryCategoryDTO,
 } from "@contracts/types";
 import { rateLimit } from "./utils/rateLimit";
 import {
@@ -29,6 +33,7 @@ import {
 } from "./utils/permissions";
 import { logServerAudit } from "./services/serverAudit";
 import {
+  broadcastToAll,
   broadcastToServer,
   getVoiceSummaryForChannels,
   sendToUsers,
@@ -77,6 +82,95 @@ async function requireOwner(userId: number, serverId: number) {
 async function refreshServer(serverId: number) {
   await broadcastToServer(serverId, { t: "server:refresh", serverId });
 }
+
+async function assertServerJoinAllowed(
+  user: User,
+  server: Server,
+  acceptedRules: boolean
+) {
+  const db = getDb();
+  const banned = await db.query.bans.findFirst({
+    where: and(
+      eq(schema.bans.serverId, server.id),
+      eq(schema.bans.userId, user.id)
+    ),
+  });
+  if (banned) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Você está banido deste servidor.",
+    });
+  }
+  if (server.rulesEnabled && (server.rules?.length ?? 0) > 0 && !acceptedRules) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Você precisa aceitar as regras deste servidor.",
+    });
+  }
+  if (server.verificationLevel !== "none" && !user.email) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Este servidor exige uma conta com e-mail cadastrado.",
+    });
+  }
+  if (
+    ["medium", "high", "maximum"].includes(server.verificationLevel) &&
+    user.createdAt.getTime() > Date.now() - 5 * 60_000
+  ) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Sua conta precisa ter pelo menos 5 minutos para entrar neste servidor.",
+    });
+  }
+}
+
+function discoveryCategoryDTO(
+  category: typeof schema.discoveryCategories.$inferSelect | null
+): DiscoveryCategoryDTO | null {
+  if (!category) return null;
+  return {
+    id: category.id,
+    slug: category.slug,
+    name: category.name,
+    icon: category.icon,
+    position: category.position,
+  };
+}
+
+function discoveryQueryPattern(value: string): string {
+  return `%${value
+    .trim()
+    .toLowerCase()
+    .replace(/[\\%_]/g, "\\$&")}%`;
+}
+
+function isDuplicateEntry(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) return false;
+  return error.code === "ER_DUP_ENTRY" || error.code === 1062;
+}
+
+async function hasConfirmedServerModeration(serverId: number): Promise<boolean> {
+  const moderation = await getDb().query.moderationCases.findFirst({
+    where: and(
+      eq(schema.moderationCases.targetType, "server"),
+      eq(schema.moderationCases.targetId, serverId),
+      eq(schema.moderationCases.status, "confirmed")
+    ),
+  });
+  return Boolean(moderation);
+}
+
+const discoveryInput = z.object({
+  query: z.string().trim().max(80).optional(),
+  categoryId: z.number().int().positive().nullable().optional(),
+  tag: z.string().trim().max(32).optional(),
+  sort: z
+    .enum(["recommended", "popular", "active", "recent"])
+    .default("recommended"),
+  featuredOnly: z.boolean().default(false),
+  cursor: z.number().int().min(0).max(10000).optional(),
+  limit: z.number().int().min(1).max(24).default(12),
+});
 
 export const serverRouter = createRouter({
   list: authedQuery.query(async ({ ctx }): Promise<ServerDTO[]> => {
@@ -133,6 +227,229 @@ export const serverRouter = createRouter({
       }),
     );
   }),
+
+  discoveryCategories: publicQuery.query(async (): Promise<DiscoveryCategoryDTO[]> => {
+    return getDb()
+      .select()
+      .from(schema.discoveryCategories)
+      .where(eq(schema.discoveryCategories.active, true))
+      .orderBy(
+        asc(schema.discoveryCategories.position),
+        asc(schema.discoveryCategories.id)
+      );
+  }),
+
+  discover: authedQuery
+    .input(discoveryInput)
+    .query(async ({ ctx, input }): Promise<ServerDiscoveryPage> => {
+      rateLimit(
+        `serverDiscovery:${ctx.user.id}`,
+        RateLimits.serverDiscovery.limit,
+        RateLimits.serverDiscovery.windowMs
+      );
+      const db = getDb();
+      const offset = input.cursor ?? 0;
+      const search = input.query ? discoveryQueryPattern(input.query) : null;
+      const memberCountExpression = sql<number>`(
+        SELECT COUNT(*) FROM \`server_members\` sm
+        WHERE sm.\`serverId\` = ${schema.servers.id}
+      )`;
+      const messageCountExpression = sql<number>`(
+        SELECT COUNT(*) FROM \`messages\` msg
+        INNER JOIN \`channels\` msg_channel ON msg_channel.id = msg.channelId
+        WHERE msg_channel.serverId = ${schema.servers.id}
+      )`;
+      const activeMemberExpression = sql<number>`(
+        SELECT COUNT(DISTINCT msg.authorId) FROM \`messages\` msg
+        INNER JOIN \`channels\` msg_channel ON msg_channel.id = msg.channelId
+        WHERE msg_channel.serverId = ${schema.servers.id}
+          AND msg.createdAt >= ${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)}
+      )`;
+      const lastActivityExpression = sql<Date | null>`(
+        SELECT MAX(msg.createdAt) FROM \`messages\` msg
+        INNER JOIN \`channels\` msg_channel ON msg_channel.id = msg.channelId
+        WHERE msg_channel.serverId = ${schema.servers.id}
+      )`;
+      const order =
+        input.sort === "recent"
+          ? [desc(schema.servers.createdAt), desc(schema.servers.id)]
+          : input.sort === "popular"
+            ? [desc(memberCountExpression), desc(messageCountExpression), desc(schema.servers.id)]
+            : input.sort === "active"
+              ? [desc(activeMemberExpression), desc(messageCountExpression), desc(lastActivityExpression), desc(schema.servers.id)]
+              : [
+                  desc(schema.servers.isFeatured),
+                  desc(memberCountExpression),
+                  desc(messageCountExpression),
+                  desc(schema.servers.id),
+                ];
+      const rows = await db
+        .select({
+          server: schema.servers,
+          category: schema.discoveryCategories,
+          memberCount: memberCountExpression,
+          messageCount: messageCountExpression,
+          activeMemberCount7d: activeMemberExpression,
+          lastActivityAt: lastActivityExpression,
+        })
+        .from(schema.servers)
+        .leftJoin(
+          schema.discoveryCategories,
+          eq(schema.discoveryCategories.id, schema.servers.discoveryCategoryId)
+        )
+        .where(
+          and(
+            eq(schema.servers.publicDiscovery, true),
+            input.featuredOnly ? eq(schema.servers.isFeatured, true) : undefined,
+            input.categoryId
+              ? eq(schema.servers.discoveryCategoryId, input.categoryId)
+              : undefined,
+            input.tag
+              ? like(
+                  sql`LOWER(CAST(${schema.servers.tags} AS CHAR))`,
+                  discoveryQueryPattern(input.tag)
+                )
+              : undefined,
+            search
+              ? or(
+                  like(sql`LOWER(${schema.servers.name})`, search),
+                  like(sql`LOWER(COALESCE(${schema.servers.description}, ''))`, search),
+                  like(sql`LOWER(CAST(${schema.servers.tags} AS CHAR))`, search),
+                  like(
+                    sql`LOWER(COALESCE(${schema.discoveryCategories.name}, ''))`,
+                    search
+                  )
+                )
+              : undefined,
+            sql`NOT EXISTS (
+              SELECT 1 FROM ${schema.moderationCases}
+              WHERE ${schema.moderationCases.targetType} = 'server'
+                AND ${schema.moderationCases.targetId} = ${schema.servers.id}
+                AND ${schema.moderationCases.status} = 'confirmed'
+            )`
+          )
+        )
+        .orderBy(...order)
+        .offset(offset)
+        .limit(input.limit + 1);
+      const hasMore = rows.length > input.limit;
+      const pageRows = hasMore ? rows.slice(0, input.limit) : rows;
+      const membershipRows =
+        ctx.user && pageRows.length > 0
+          ? await db
+              .select({ serverId: schema.serverMembers.serverId })
+              .from(schema.serverMembers)
+              .where(
+                and(
+                  inArray(
+                    schema.serverMembers.serverId,
+                    pageRows.map(row => row.server.id)
+                  ),
+                  eq(schema.serverMembers.userId, ctx.user.id)
+                )
+              )
+          : [];
+      const memberIds = new Set(membershipRows.map(row => row.serverId));
+      const nextCursor = hasMore ? offset + input.limit : null;
+      return {
+        items: pageRows.map(row => {
+          const server = row.server;
+          const isMember = memberIds.has(server.id);
+          return {
+            id: server.id,
+            name: server.name,
+            iconUrl: server.iconUrl,
+            bannerUrl: server.bannerUrl,
+            description: server.description,
+            tags: Array.isArray(server.tags) ? server.tags : [],
+            category: discoveryCategoryDTO(row.category),
+            memberCount: Number(row.memberCount),
+            messageCount: Number(row.messageCount),
+            activeMemberCount7d: Number(row.activeMemberCount7d),
+            lastActivityAt: row.lastActivityAt,
+            partnered: server.partnered,
+            isFeatured: server.isFeatured,
+            createdAt: server.createdAt,
+            isMember,
+            canJoin: !isMember && !server.invitesPaused,
+            requiresRules:
+              server.rulesEnabled && (server.rules?.length ?? 0) > 0,
+            rulesEnabled: server.rulesEnabled,
+            rules: server.rules ?? [],
+          } satisfies ServerDiscoveryDTO;
+        }),
+        nextCursor:
+          nextCursor !== null && nextCursor <= 10000 ? nextCursor : null,
+      };
+    }),
+
+  joinDiscoverable: authedQuery
+    .input(
+      z.object({
+        serverId: z.number().int().positive(),
+        acceptedRules: z.boolean().default(false),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      rateLimit(
+        `serverJoin:${ctx.user.id}`,
+        RateLimits.serverJoin.limit,
+        RateLimits.serverJoin.windowMs
+      );
+      await assertCanInteract(ctx.user.id);
+      const server = await getServerOr404(input.serverId);
+      if (!server.publicDiscovery) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Esta comunidade não está disponível para descoberta.",
+        });
+      }
+      if (await hasConfirmedServerModeration(server.id)) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Esta comunidade não está disponível para descoberta.",
+        });
+      }
+      if (server.invitesPaused) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "A entrada neste servidor está pausada.",
+        });
+      }
+      const existing = await getDb().query.serverMembers.findFirst({
+        where: and(
+          eq(schema.serverMembers.serverId, server.id),
+          eq(schema.serverMembers.userId, ctx.user.id)
+        ),
+      });
+      if (!existing) {
+        await assertServerJoinAllowed(ctx.user, server, input.acceptedRules);
+        try {
+          await getDb().transaction(async tx => {
+            await tx.insert(schema.serverMembers).values({
+              serverId: server.id,
+              userId: ctx.user.id,
+              rulesAcceptedAt: server.rulesEnabled ? new Date() : null,
+            });
+            await logServerAudit(
+              {
+                serverId: server.id,
+                actorUserId: ctx.user.id,
+                action: "SERVER_JOIN_DISCOVERY",
+                targetType: "server",
+                targetId: server.id,
+              },
+              tx
+            );
+          });
+        } catch (error) {
+          if (!isDuplicateEntry(error)) throw error;
+        }
+        await refreshServer(server.id);
+        broadcastToAll({ t: "discovery:refresh" });
+      }
+      return { serverId: server.id };
+    }),
 
   create: authedQuery
     .input(
@@ -306,8 +623,12 @@ export const serverRouter = createRouter({
         if (eff?.has("VIEW_CHANNEL")) visibleChannels.push(c);
       }
 
+      const serverDTO = {
+        ...server,
+        badges: server.partnered ? ["partner" as const] : [],
+      };
       return {
-        server,
+        server: serverDTO,
         channels: visibleChannels,
         categories: categoryRows.sort((a, b) => a.position - b.position),
         members,
@@ -485,11 +806,27 @@ export const serverRouter = createRouter({
         rulesEnabled: z.boolean().optional(),
         rules: z.array(z.string().trim().min(1).max(240)).max(20).optional(),
         communityEnabled: z.boolean().optional(),
+        publicDiscovery: z.boolean().optional(),
+        discoveryCategoryId: z.number().int().positive().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await requirePermission(ctx.user.id, input.serverId, "MANAGE_SERVER");
       const db = getDb();
+      if (input.discoveryCategoryId !== undefined && input.discoveryCategoryId !== null) {
+        const category = await db.query.discoveryCategories.findFirst({
+          where: and(
+            eq(schema.discoveryCategories.id, input.discoveryCategoryId),
+            eq(schema.discoveryCategories.active, true)
+          ),
+        });
+        if (!category) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Categoria de descoberta inválida.",
+          });
+        }
+      }
       const patch: Partial<typeof schema.servers.$inferInsert> = {};
       if (input.name !== undefined) patch.name = input.name;
       if (input.iconUrl !== undefined) patch.iconUrl = input.iconUrl;
@@ -501,6 +838,10 @@ export const serverRouter = createRouter({
       if (input.rulesEnabled !== undefined) patch.rulesEnabled = input.rulesEnabled;
       if (input.rules !== undefined) patch.rules = input.rules.map(rule => rule.trim());
       if (input.communityEnabled !== undefined) patch.communityEnabled = input.communityEnabled;
+      if (input.publicDiscovery !== undefined) patch.publicDiscovery = input.publicDiscovery;
+      if (input.discoveryCategoryId !== undefined) {
+        patch.discoveryCategoryId = input.discoveryCategoryId;
+      }
       if (input.vanitySlug !== undefined) {
         if (input.vanitySlug === null) {
           patch.vanitySlug = null;
@@ -538,6 +879,7 @@ export const serverRouter = createRouter({
         });
       }
       await refreshServer(input.serverId);
+      broadcastToAll({ t: "discovery:refresh" });
       await logServerAudit({
         serverId: input.serverId,
         actorUserId: ctx.user.id,
@@ -588,9 +930,11 @@ export const serverRouter = createRouter({
         await tx.delete(schema.invites).where(eq(schema.invites.serverId, input.serverId));
         await tx.delete(schema.bans).where(eq(schema.bans.serverId, input.serverId));
         await tx.delete(schema.serverAuditLogs).where(eq(schema.serverAuditLogs.serverId, input.serverId));
-        await tx.delete(schema.servers).where(eq(schema.servers.id, input.serverId));
-      });
-      return { ok: true };
+         await tx.delete(schema.servers).where(eq(schema.servers.id, input.serverId));
+       });
+       broadcastToAll({ t: "discovery:refresh" });
+       return { ok: true };
+
     }),
 
   leave: authedQuery
@@ -621,6 +965,7 @@ export const serverRouter = createRouter({
           ),
         );
       await refreshServer(input.serverId);
+      broadcastToAll({ t: "discovery:refresh" });
       return { ok: true };
     }),
 
@@ -1091,10 +1436,12 @@ export const serverRouter = createRouter({
         targetId: input.serverId,
       });
       await refreshServer(input.serverId);
+      broadcastToAll({ t: "discovery:refresh" });
       return { ok: true };
     }),
 
   getInviteInfo: authedQuery
+
     .input(z.object({ code: z.string() }))
     .query(async ({ ctx, input }) => {
       const db = getDb();
@@ -1130,7 +1477,14 @@ export const serverRouter = createRouter({
           eq(schema.serverMembers.userId, ctx.user.id),
         ),
       }));
-      return { server, memberCount, alreadyMember };
+      return {
+        server: {
+          ...server,
+          badges: server.partnered ? ["partner" as const] : [],
+        },
+        memberCount,
+        alreadyMember,
+      };
     }),
 
   byVanity: authedQuery
@@ -1148,6 +1502,7 @@ export const serverRouter = createRouter({
   joinByCode: authedQuery
     .input(z.object({ code: z.string(), acceptedRules: z.boolean().default(false) }))
     .mutation(async ({ ctx, input }) => {
+      await assertCanInteract(ctx.user.id);
       const db = getDb();
       const invite = await db.query.invites.findFirst({
         where: eq(schema.invites.code, input.code),
@@ -1168,15 +1523,6 @@ export const serverRouter = createRouter({
       if (invite.maxUses !== null && invite.uses >= invite.maxUses) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Este convite atingiu o limite de usos." });
       }
-      const banned = await db.query.bans.findFirst({
-        where: and(
-          eq(schema.bans.serverId, invite.serverId),
-          eq(schema.bans.userId, ctx.user.id),
-        ),
-      });
-      if (banned) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Você está banido deste servidor." });
-      }
       const existing = await db.query.serverMembers.findFirst({
         where: and(
           eq(schema.serverMembers.serverId, invite.serverId),
@@ -1184,29 +1530,38 @@ export const serverRouter = createRouter({
         ),
       });
       if (!existing) {
-        if (inviteServer.rulesEnabled && (inviteServer.rules?.length ?? 0) > 0 && !input.acceptedRules) {
-          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Você precisa aceitar as regras deste servidor." });
+        await assertServerJoinAllowed(ctx.user, inviteServer, input.acceptedRules);
+        try {
+          await db.transaction(async tx => {
+            await tx.insert(schema.serverMembers).values({
+              serverId: invite.serverId,
+              userId: ctx.user.id,
+              rulesAcceptedAt: inviteServer.rulesEnabled ? new Date() : null,
+            });
+            await tx
+              .update(schema.invites)
+              .set({ uses: invite.uses + 1 })
+              .where(eq(schema.invites.id, invite.id));
+            await logServerAudit(
+              {
+                serverId: invite.serverId,
+                actorUserId: ctx.user.id,
+                action: "SERVER_JOIN_INVITE",
+                targetType: "invite",
+                targetId: invite.id,
+              },
+              tx
+            );
+          });
+        } catch (error) {
+          if (!isDuplicateEntry(error)) throw error;
         }
-        if (inviteServer.verificationLevel !== "none" && !ctx.user.email) {
-          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Este servidor exige uma conta com e-mail cadastrado." });
-        }
-        if (["medium", "high", "maximum"].includes(inviteServer.verificationLevel)
-          && ctx.user.createdAt.getTime() > Date.now() - 5 * 60_000) {
-          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Sua conta precisa ter pelo menos 5 minutos para entrar neste servidor." });
-        }
-        await db.insert(schema.serverMembers).values({
-          serverId: invite.serverId,
-          userId: ctx.user.id,
-          rulesAcceptedAt: inviteServer.rulesEnabled ? new Date() : null,
-        });
-        await db
-          .update(schema.invites)
-          .set({ uses: invite.uses + 1 })
-          .where(eq(schema.invites.id, invite.id));
         await refreshServer(invite.serverId);
+        broadcastToAll({ t: "discovery:refresh" });
       }
       return { serverId: invite.serverId };
     }),
+
 
   // ── Moderation ──────────────────────────────────────────────
   kick: authedQuery
@@ -1240,6 +1595,7 @@ export const serverRouter = createRouter({
         );
       sendToUsers([input.userId], { t: "server:refresh", serverId: input.serverId });
       await refreshServer(input.serverId);
+      broadcastToAll({ t: "discovery:refresh" });
       await logServerAudit({
         serverId: input.serverId,
         actorUserId: ctx.user.id,
@@ -1289,6 +1645,7 @@ export const serverRouter = createRouter({
         );
       sendToUsers([input.userId], { t: "server:refresh", serverId: input.serverId });
       await refreshServer(input.serverId);
+      broadcastToAll({ t: "discovery:refresh" });
       await logServerAudit({
         serverId: input.serverId,
         actorUserId: ctx.user.id,

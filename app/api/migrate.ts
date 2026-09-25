@@ -15,6 +15,8 @@ const PRIVATE_INBOX_MIGRATION_TIMESTAMP = 1788399600000;
 const SERVER_SETTINGS_MIGRATION = "0019_server_settings_control_center.sql";
 const SERVER_SETTINGS_MIGRATION_TIMESTAMP = 1788486000000;
 const MESSAGE_IDEMPOTENCY_MIGRATION = "0022_message_delivery_idempotency.sql";
+const DISCOVERY_MIGRATION = "0026_server_discovery.sql";
+const DISCOVERY_MIGRATION_TIMESTAMP = 1790212976705;
 
 async function queryExists(sql: string, params: unknown[]) {
   const [rows] = await pool.query(sql, params);
@@ -268,6 +270,71 @@ async function recoverMessageIdempotencyMigration() {
   }
 }
 
+async function recoverServerDiscoveryMigration(migrationsFolder: string) {
+  if (!await tableExists("__drizzle_migrations")) return;
+  const migrationPath = path.join(migrationsFolder, DISCOVERY_MIGRATION);
+  const migrationHash = createHash("sha256")
+    .update(await readFile(migrationPath))
+    .digest("hex");
+  const [appliedRows] = await pool.query(
+    "SELECT 1 FROM __drizzle_migrations WHERE hash = ? LIMIT 1",
+    [migrationHash],
+  );
+  if (Array.isArray(appliedRows) && appliedRows.length > 0) return;
+
+  const hasPartialSchema =
+    (await tableExists("discovery_categories")) ||
+    (await columnExists("servers", "publicDiscovery")) ||
+    (await columnExists("servers", "isFeatured")) ||
+    (await columnExists("servers", "discoveryCategoryId"));
+  if (!hasPartialSchema) return;
+
+  if (!await tableExists("discovery_categories")) {
+    await pool.query(`CREATE TABLE \`discovery_categories\` (
+      \`id\` serial AUTO_INCREMENT NOT NULL,
+      \`slug\` varchar(32) NOT NULL,
+      \`name\` varchar(64) NOT NULL,
+      \`icon\` varchar(32) NOT NULL DEFAULT 'sparkles',
+      \`position\` int NOT NULL DEFAULT 0,
+      \`active\` boolean NOT NULL DEFAULT true,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`discovery_categories_id\` PRIMARY KEY(\`id\`),
+      UNIQUE KEY \`discovery_category_slug_uniq\` (\`slug\`),
+      KEY \`discovery_category_position_idx\` (\`active\`, \`position\`)
+    )`);
+  }
+  await ensureColumn("servers", "publicDiscovery", "boolean NOT NULL DEFAULT false");
+  await ensureColumn("servers", "isFeatured", "boolean NOT NULL DEFAULT false");
+  await ensureColumn("servers", "discoveryCategoryId", "bigint unsigned NULL");
+  await ensureIndex("servers", "srv_discovery_idx", "`publicDiscovery`, `isFeatured`, `createdAt`, `id`");
+  await ensureIndex("servers", "srv_discovery_category_idx", "`discoveryCategoryId`, `publicDiscovery`");
+  await pool.query(`INSERT INTO \`discovery_categories\` (\`slug\`, \`name\`, \`icon\`, \`position\`)
+    VALUES
+      ('jogos', 'Jogos', 'gamepad-2', 10),
+      ('musica', 'Música', 'music-2', 20),
+      ('entretenimento', 'Entretenimento', 'clapperboard', 30),
+      ('tecnologia', 'Ciência e Tecnologia', 'cpu', 40),
+      ('educacao', 'Educação', 'graduation-cap', 50),
+      ('arte-design', 'Arte e Design', 'palette', 60),
+      ('social', 'Social', 'messages-square', 70),
+      ('esportes', 'Esportes', 'trophy', 80),
+      ('comunidades', 'Comunidades', 'globe-2', 90),
+      ('estudos', 'Estudos', 'book-open', 100),
+      ('criadores', 'Criadores', 'video', 110),
+      ('programacao', 'Programação', 'code-2', 120)
+    ON DUPLICATE KEY UPDATE
+      \`name\` = VALUES(\`name\`),
+      \`icon\` = VALUES(\`icon\`),
+      \`position\` = VALUES(\`position\`),
+      \`active\` = true`);
+  await pool.query(
+    "INSERT IGNORE INTO __drizzle_migrations (`hash`, `created_at`) VALUES (?, ?)",
+    [migrationHash, DISCOVERY_MIGRATION_TIMESTAMP],
+  );
+  console.log("[database] Recovered partial server discovery migration.");
+}
+}
+
 try {
   const db = drizzle(pool);
   const bundledMigrationsFolder = fileURLToPath(
@@ -283,10 +350,12 @@ try {
   await recoverPrivateInboxMigration(migrationsFolder);
   await recoverIncompleteServerSettingsMigration(migrationsFolder);
   await recoverMessageIdempotencyMigration();
+  await recoverServerDiscoveryMigration(migrationsFolder);
   await migrate(db, { migrationsFolder });
   // Also reconcile a brand-new database: before the first Drizzle run the
   // messages table (and the migration journal) do not exist yet.
   await recoverMessageIdempotencyMigration();
+  await recoverServerDiscoveryMigration(migrationsFolder);
   console.log("[database] Migrations are up to date.");
 } finally {
   await pool.end();

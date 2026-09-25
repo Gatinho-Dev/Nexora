@@ -192,6 +192,7 @@ export function AppLayout() {
   const showMobileTopBar = !inServer && !inDmConversation;
 
   function inferTab(pathname: string): MobileTab {
+    if (pathname === "/explore") return "servers";
     if (pathname.startsWith("/channels/@me")) return "home";
     if (pathname.startsWith("/channels/")) return "servers";
     return "home";

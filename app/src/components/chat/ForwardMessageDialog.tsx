@@ -5,6 +5,7 @@ import { trpc } from "@/providers/trpc";
 import { groupDisplayName } from "@/lib/groupDisplayName";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PartnerBadge } from "@/components/server/PartnerBadge";
 
 export function ForwardMessageDialog({
   messageId,
@@ -79,7 +80,11 @@ export function ForwardMessageDialog({
               {serverRows.map(item => (
                 <button key={`server-${item.id}`} type="button" onClick={() => setServerId(item.id)} className="flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-white/[0.06]">
                   <span className="grid size-8 place-items-center rounded-xl bg-[#4654d8]/15 text-[#8290ff]"><Server className="size-4" /></span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">{item.name}</span>
+                   <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                     {item.partnered && <PartnerBadge className="size-4 shrink-0" />}
+                     <span className="truncate text-sm font-semibold">{item.name}</span>
+                   </span>
+
                   <span className="text-xs text-faint">Escolher canal →</span>
                 </button>
               ))}

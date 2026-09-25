@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { ServerDTO } from "@contracts/types";
-import { ServerBadge } from "./ServerBadge";
+import { PartnerBadge } from "./PartnerBadge";
 import { cn } from "@/lib/utils";
 
 export function ServerHeader({ server }: { server: ServerDTO }) {
@@ -42,10 +42,7 @@ export function ServerHeader({ server }: { server: ServerDTO }) {
         )}
       >
         {server.partnered && (
-          <ServerBadge
-            type="partner"
-            className="h-[18px] w-[18px]"
-          />
+          <PartnerBadge className="h-[18px] w-[18px]" />
         )}
         <span className="min-w-0 flex-1 truncate text-sm font-semibold tracking-[-0.01em]">
           {server.name}
