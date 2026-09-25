@@ -14,6 +14,7 @@ const PRIVATE_INBOX_MIGRATION = "0018_private_inbox_preferences.sql";
 const PRIVATE_INBOX_MIGRATION_TIMESTAMP = 1788399600000;
 const SERVER_SETTINGS_MIGRATION = "0019_server_settings_control_center.sql";
 const SERVER_SETTINGS_MIGRATION_TIMESTAMP = 1788486000000;
+const MESSAGE_IDEMPOTENCY_MIGRATION = "0022_message_delivery_idempotency.sql";
 
 async function queryExists(sql: string, params: unknown[]) {
   const [rows] = await pool.query(sql, params);
@@ -242,6 +243,31 @@ async function recoverIncompleteServerSettingsMigration(migrationsFolder: string
   console.log("[database] Recovered incomplete server settings migration.");
 }
 
+/**
+ * 0022 was added to the repository after production had already recorded the
+ * newer email-auth migration, so Drizzle can legitimately skip its ALTER TABLE.
+ * The application now selects clientNonce on every message read; reconcile the
+ * column and its idempotency index on every startup, including fresh databases.
+ */
+async function recoverMessageIdempotencyMigration() {
+  if (!(await tableExists("messages"))) return;
+
+  const hadColumn = await columnExists("messages", "clientNonce");
+  await ensureColumn("messages", "clientNonce", "varchar(64) NULL");
+  const hadIndex = await indexExists("messages", "msg_author_nonce_uniq");
+  await ensureUniqueIndex(
+    "messages",
+    "msg_author_nonce_uniq",
+    "`authorId`,`clientNonce`",
+  );
+
+  if (!hadColumn || !hadIndex) {
+    console.log(
+      `[database] Reconciled ${MESSAGE_IDEMPOTENCY_MIGRATION} (column=${!hadColumn}, index=${!hadIndex}).`,
+    );
+  }
+}
+
 try {
   const db = drizzle(pool);
   const bundledMigrationsFolder = fileURLToPath(
@@ -256,7 +282,11 @@ try {
 
   await recoverPrivateInboxMigration(migrationsFolder);
   await recoverIncompleteServerSettingsMigration(migrationsFolder);
+  await recoverMessageIdempotencyMigration();
   await migrate(db, { migrationsFolder });
+  // Also reconcile a brand-new database: before the first Drizzle run the
+  // messages table (and the migration journal) do not exist yet.
+  await recoverMessageIdempotencyMigration();
   console.log("[database] Migrations are up to date.");
 } finally {
   await pool.end();
