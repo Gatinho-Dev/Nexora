@@ -38,6 +38,7 @@ const user: User = {
   favoriteGameNote: null,
   status: "offline",
   role: "user",
+  platformOwner: false,
   readReceipts: true,
   createdAt: new Date(),
   updatedAt: new Date(),
