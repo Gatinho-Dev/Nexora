@@ -30,6 +30,7 @@ const user: User = {
   favoriteGameNote: null,
   status: "offline",
   role: "user",
+  platformOwner: false,
   readReceipts: true,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -51,6 +52,16 @@ describe("admin router authorization", () => {
       authority: null,
       canAccess: false,
       canManageStaffBadges: false,
+    });
+  });
+
+  it("reports owner authority for the persisted platform owner", async () => {
+    await expect(
+      caller({ ...user, role: "admin", platformOwner: true }).authority(),
+    ).resolves.toEqual({
+      authority: "owner",
+      canAccess: true,
+      canManageStaffBadges: true,
     });
   });
 

@@ -290,7 +290,10 @@ function ServerAvatar({
         <img
           src={server.iconUrl}
           alt=""
-          className="h-full w-full object-cover"
+          className={cn(
+            "h-full w-full object-contain",
+            large ? "p-1" : "p-0.5"
+          )}
         />
       ) : (
         server.name.slice(0, 2).toUpperCase()

@@ -5,13 +5,15 @@ export type PlatformAuthority = "owner" | "admin" | null;
 
 /**
  * Platform authority is decided exclusively on the server. Environment-owned
- * accounts are recognized even when their persisted role has not been updated
- * yet, while the existing database admin role remains backwards compatible.
+ * and persisted platform-owner accounts are recognized even when their role
+ * has not been updated yet, while the existing database admin role remains
+ * backwards compatible.
  */
 export function getPlatformAuthority(user: User): PlatformAuthority {
   if (
     env.ownerUserIds.includes(user.id) ||
-    env.ownerUnionIds.includes(user.unionId)
+    env.ownerUnionIds.includes(user.unionId) ||
+    user.platformOwner
   ) {
     return "owner";
   }
