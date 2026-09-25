@@ -333,7 +333,6 @@ async function recoverServerDiscoveryMigration(migrationsFolder: string) {
   );
   console.log("[database] Recovered partial server discovery migration.");
 }
-}
 
 try {
   const db = drizzle(pool);

@@ -276,38 +276,6 @@ export async function getEffectiveChannelPermissions(
   return perms;
 }
 
-export async function requireAnyPermission(
-  userId: number,
-  serverId: number,
-  permissions: string[],
-): Promise<Set<Permission>> {
-  const perms = await getMemberPermissions(userId, serverId);
-  if (!perms) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Você não é membro deste servidor.",
-    });
-  }
-  if (!permissions.some(permission => perms.has(permission as Permission))) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Você não tem permissão para fazer isso.",
-    });
-  }
-  return perms;
-}
-
-export async function filterVisibleChannels<
-  TChannel extends typeof schema.channels.$inferSelect,
->(userId: number, channels: TChannel[], permission: string): Promise<TChannel[]> {
-  const visible: TChannel[] = [];
-  for (const channel of channels) {
-    const permissions = await getEffectiveChannelPermissions(userId, channel);
-    if (permissions?.has(permission as Permission)) visible.push(channel);
-  }
-  return visible;
-}
-
 export async function requireChannelAccess(userId: number, channelId: number) {
   const db = getDb();
   const channel = await db.query.channels.findFirst({
