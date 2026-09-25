@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import {
   BadgeCheck,
+  BadgeDollarSign,
   BellRing,
   ChevronLeft,
   ClipboardList,
@@ -19,10 +20,11 @@ import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
 import { SafetySection } from "./admin/SafetySection";
 import { UptimeSection } from "./admin/UptimeSection";
+import { AdSenseSection } from "./admin/AdSenseSection";
 import { BroadcastsSection as NewBroadcastsSection } from "@/components/admin/BroadcastsSection";
 import { BadgesSection as NewBadgesSection } from "@/components/admin/BadgesSection";
 
-type AdminSection = "broadcasts" | "badges" | "safety" | "uptime";
+type AdminSection = "broadcasts" | "badges" | "safety" | "uptime" | "monetization";
 
 function AdminNavButton({
   active,
@@ -111,6 +113,7 @@ export function NexoraAdminPanel() {
           <AdminNavButton active={section === "badges"} icon={BadgeCheck} label="Emblemas" description="Identidade e equipe" onClick={() => setSection("badges")} />
           <AdminNavButton active={section === "safety"} icon={Shield} label="Segurança" description="Casos, ocorrências e IA" onClick={() => setSection("safety")} />
           <AdminNavButton active={section === "uptime"} icon={Gauge} label="Monitoramento" description="Uptime e resposta da API" onClick={() => setSection("uptime")} />
+          <AdminNavButton active={section === "monetization"} icon={BadgeDollarSign} label="Monetização" description="Google AdSense" onClick={() => setSection("monetization")} />
           <div className="my-3 h-px bg-white/[0.055]" />
           <div className="rounded-lg border border-white/[0.055] bg-[#191b20] p-3">
             <div className="flex items-center gap-2 text-[10px] font-semibold text-[#bdc2ca]">
@@ -158,6 +161,9 @@ export function NexoraAdminPanel() {
           <Button size="sm" variant="ghost" onClick={() => setSection("uptime")} className={cn("text-xs", section === "uptime" ? "bg-[#5865F2]/15 text-white" : "text-[#9da4ae]")}>
             <Gauge className="h-3.5 w-3.5" />Monitoramento
           </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSection("monetization")} className={cn("text-xs", section === "monetization" ? "bg-[#5865F2]/15 text-white" : "text-[#9da4ae]")}>
+            <BadgeDollarSign className="h-3.5 w-3.5" />Monetização
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => navigate("/channels/@me/official")} className="ml-auto text-xs text-[#9da4ae]">
             <ChevronLeft className="h-3.5 w-3.5" />Sair
           </Button>
@@ -174,6 +180,8 @@ export function NexoraAdminPanel() {
                     <Shield className="h-3 w-3" />
                   ) : section === "uptime" ? (
                     <Gauge className="h-3 w-3" />
+                  ) : section === "monetization" ? (
+                    <BadgeDollarSign className="h-3 w-3" />
                   ) : (
                     <UsersRound className="h-3 w-3" />
                   )}
@@ -186,7 +194,9 @@ export function NexoraAdminPanel() {
                       ? "Emblemas de perfil"
                       : section === "uptime"
                         ? "Monitoramento de uptime"
-                        : "Segurança e moderação"}
+                        : section === "monetization"
+                          ? "Monetização"
+                          : "Segurança e moderação"}
                 </h2>
                 <p className="mt-1 max-w-2xl text-xs leading-5 text-[#858c96]">
                   {section === "broadcasts"
@@ -195,7 +205,9 @@ export function NexoraAdminPanel() {
                       ? "Revise casos de moderação, ocorrências, apelações e monitore a IA de segurança."
                       : section === "uptime"
                         ? "Acompanhe a disponibilidade e o tempo de resposta dos monitores do Nexora."
-                        : "Crie emblemas e atribua identidade oficial às contas autorizadas."}
+                        : section === "monetization"
+                          ? "Acompanhe a instalação técnica do Google AdSense sem alterar a configuração fixa."
+                          : "Crie emblemas e atribua identidade oficial às contas autorizadas."}
                 </p>
               </div>
               <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.065] bg-white/[0.03] px-2.5 py-1.5 text-[10px] text-[#8f96a1]">
@@ -209,6 +221,8 @@ export function NexoraAdminPanel() {
               <NewBadgesSection />
             ) : section === "uptime" ? (
               <UptimeSection />
+            ) : section === "monetization" ? (
+              <AdSenseSection />
             ) : (
               <SafetySection />
             )}
