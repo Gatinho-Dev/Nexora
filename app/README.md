@@ -67,10 +67,10 @@ O `DATABASE_URL` continua apontando para o TiDB Cloud MySQL-compatible; o Nexora
 APP_BASE_URL=https://nexorachat.cloud
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=
-RESEND_FROM_NAME=Nexora
+RESEND_LOGO_URL=
 ```
 
-`RESEND_API_KEY` e `RESEND_FROM_EMAIL` ficam somente no servidor. Sem essas variáveis, a conta continua funcionando, mas confirmações, recuperação de senha e alertas de e-mail ficam indisponíveis; `/api/health` informa `email.configured=false`.
+`RESEND_API_KEY` e `RESEND_FROM_EMAIL` ficam somente no servidor. Sem essas variáveis, a conta continua funcionando, mas confirmações, recuperação de senha e alertas de e-mail ficam indisponíveis; `/api/health` informa `email.configured=false`. O lockup horizontal oficial é servido em `/brand/nexora-logo-light.png`; se usar `RESEND_LOGO_URL`, informe uma imagem horizontal, não o ícone quadrado do app.
 
 Para passkeys, configure `PASSKEY_RP_ID` e `PASSKEY_ORIGIN` com o domínio real do frontend. 2FA, sessões, tokens de e-mail e eventos de segurança são validados no backend e persistidos no TiDB Cloud.
 

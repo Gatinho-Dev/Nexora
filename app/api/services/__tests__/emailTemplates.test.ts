@@ -31,6 +31,9 @@ describe("email templates", () => {
     expect(tpl).not.toBeNull();
     expect(tpl!.subject).toContain("Nexora");
     expect(tpl!.html).toContain("/verify-email?token=tok-123-abc");
+    expect(tpl!.html).toContain("/brand/nexora-logo-light.png");
+    expect(tpl!.html).toContain("NEXORA · MENSAGEM SEGURA");
+    expect(tpl!.html).toContain("Abrir o link no navegador");
     expect(tpl!.text).toContain("/verify-email?token=tok-123-abc");
   });
 

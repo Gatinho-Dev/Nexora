@@ -188,6 +188,5 @@ export const env = {
   // Mantido no servidor; nenhum destes valores é enviado ao cliente.
   resendApiKey: process.env.RESEND_API_KEY ?? "",
   resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "",
-  resendFromName: process.env.RESEND_FROM_NAME ?? "Nexora",
   resendLogoUrl: process.env.RESEND_LOGO_URL ?? "",
 };
