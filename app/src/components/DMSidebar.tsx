@@ -1,7 +1,7 @@
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useMemo, useState } from "react";
 import {
-  BadgeCheck,
+  Compass,
   Inbox,
   Plus,
   Search,
@@ -9,16 +9,23 @@ import {
   Users,
 } from "lucide-react";
 import type {
-  ConversationDTO,
   RichPresenceActivityDTO,
 } from "@contracts/types";
 import { trpc } from "@/providers/trpc";
 import { UserPanel } from "./UserPanel";
 import { cn } from "@/lib/utils";
-import { NexoraAppIcon } from "@/components/NexoraBrand";
 import { NewMessageDialog } from "./private/NewMessageDialog";
 import { DMListItem } from "./private/DMListItem";
-import { organizePrivateInbox } from "@/lib/privateInbox";
+import { OfficialDMListItem } from "./private/OfficialDMListItem";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { organizePrivateInbox, buildPrivateInboxEntries, type PrivateInboxEntry } from "@/lib/privateInbox";
 import { useAppStore } from "@/store/useAppStore";
 
 export function DMSidebar({
@@ -40,10 +47,13 @@ export function DMSidebar({
   const friends = trpc.friend.list.useQuery(undefined, {
     placeholderData: previous => previous,
   });
-  const officialUnread = trpc.official.unreadCount.useQuery(undefined, {
-    refetchInterval: 60_000,
-  });
   const authority = trpc.admin.authority.useQuery();
+  // Só o comunicado mais recente é necessário para montar a prévia e ordenar a
+  // conversa oficial; `unreadCount` vem na mesma resposta.
+  const official = trpc.official.list.useQuery(
+    { limit: 1 },
+    { refetchInterval: 60_000, staleTime: 30_000 }
+  );
   const acceptedFriendIds = useMemo(
     () =>
       new Set(
@@ -53,8 +63,18 @@ export function DMSidebar({
       ),
     [friends.data]
   );
-  const { pinned, recent, requests, spam } = organizePrivateInbox(
-    conversations.data ?? []
+  const { requests, spam } = organizePrivateInbox(conversations.data ?? []);
+  const officialState = useMemo(() => {
+    const latest = official.data?.items[0];
+    return {
+      activityAt: latest ? new Date(latest.publishedAt).getTime() : 0,
+      unread: official.data?.unreadCount ?? 0,
+      preview: latest?.title ?? "Mensagem oficial da Nexora",
+    };
+  }, [official.data]);
+  const { pinned, recent } = buildPrivateInboxEntries(
+    conversations.data ?? [],
+    officialState
   );
   const directUserIds = useMemo(
     () => [
@@ -89,18 +109,55 @@ export function DMSidebar({
       className="flex h-full w-60 shrink-0 flex-col border-r border-black/20 bg-sidebar select-none"
     >
       <div className="flex h-12 items-center border-b border-white/5 px-2.5">
-        <button
-          type="button"
-          onClick={() => setQuickSwitcherOpen(true)}
-          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-input px-3 text-left text-[11px] font-semibold text-muted2 shadow-sm transition-colors hover:bg-hov hover:text-foreground"
-          aria-label="Encontre ou comece uma conversa"
-        >
-          <Search className="h-3.5 w-3.5 shrink-0 text-faint" />
-          <span className="truncate">Encontre ou comece uma conversa</span>
-          <kbd className="ml-auto hidden rounded bg-black/10 px-1.5 py-0.5 text-[9px] text-faint dark:bg-white/5 xl:inline">
-            Ctrl K
-          </kbd>
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-input px-3 text-left text-[11px] font-semibold text-muted2 shadow-sm transition-colors hover:bg-hov hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+              aria-label="Encontre ou comece uma conversa"
+            >
+              <Search className="h-3.5 w-3.5 shrink-0 text-faint" />
+              <span className="truncate">Encontre ou comece uma conversa</span>
+              <kbd className="ml-auto hidden rounded bg-black/10 px-1.5 py-0.5 text-[9px] text-faint dark:bg-white/5 xl:inline">
+                Ctrl K
+              </kbd>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-60">
+            <DropdownMenuItem onSelect={() => navigate("/channels/@me")}>
+              <Users className="h-4 w-4 text-faint" aria-hidden="true" />
+              Amigos
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate("/channels/@me/requests")}>
+              <Inbox className="h-4 w-4 text-faint" aria-hidden="true" />
+              Solicitações de mensagens
+              {requests.length + spam.length > 0 && (
+                <span className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--mention-badge)] px-1 text-[10px] font-bold text-white">
+                  {requests.length + spam.length}
+                </span>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate("/explore")}>
+              <Compass className="h-4 w-4 text-faint" aria-hidden="true" />
+              Explorar comunidades
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => setQuickSwitcherOpen(true)}>
+              <Search className="h-4 w-4 text-faint" aria-hidden="true" />
+              Buscar conversas e pessoas
+              <DropdownMenuShortcut>Ctrl K</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            {authority.data?.canAccess && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => navigate("/nexora-admin")}>
+                  <ShieldCheck className="h-4 w-4 text-faint" aria-hidden="true" />
+                  Painel Nexora
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <nav className="space-y-0.5 px-2 py-2" aria-label="Área privada">
@@ -117,35 +174,6 @@ export function DMSidebar({
           badge={requests.length + spam.length}
           onClick={() => navigate("/channels/@me/requests")}
         />
-        <button
-          type="button"
-          onClick={() => navigate("/channels/@me/official")}
-          aria-current={officialActive ? "page" : undefined}
-          className={cn(
-            "group flex min-h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left transition-colors",
-            officialActive
-              ? "bg-act text-foreground"
-              : "text-muted2 hover:bg-hov hover:text-bodyx"
-          )}
-        >
-          <span className="relative shrink-0">
-            <NexoraAppIcon className="h-7 w-7" />
-            <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[hsl(var(--sidebar-bg))] bg-primary text-white">
-              <BadgeCheck className="h-2.5 w-2.5" strokeWidth={3} />
-            </span>
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold">
-              Nexora Oficial
-            </span>
-            <span className="block truncate text-[10px] text-faint">
-              Comunicados da plataforma
-            </span>
-          </span>
-          {(officialUnread.data?.count ?? 0) > 0 && (
-            <CountBadge count={officialUnread.data?.count ?? 0} />
-          )}
-        </button>
         {authority.data?.canAccess && (
           <PrivateNavItem
             icon={<ShieldCheck />}
@@ -192,21 +220,32 @@ export function DMSidebar({
               </button>
             </div>
           ) : directMessageCount === 0 ? (
-            <div className="mx-2 mt-4 rounded-xl border border-dashed border-border px-3 py-5 text-center">
-              <p className="text-xs font-semibold text-bodyx">
-                Nenhuma conversa ainda
-              </p>
-              <p className="mt-1 text-[11px] leading-4 text-muted2">
-                Inicie uma DM ou crie um grupo com seus amigos.
-              </p>
-              <button
-                type="button"
-                onClick={() => setNewMessageOpen(true)}
-                className="mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90"
-              >
-                Nova mensagem
-              </button>
-            </div>
+            <>
+              {/* Mesmo sem nenhuma conversa, os comunicados oficiais continuam
+                  visíveis — é por eles que o usuário acompanha a plataforma. */}
+              <div className="pt-1">
+                <OfficialDMListItem
+                  active={officialActive}
+                  unread={officialState.unread}
+                  preview={officialState.preview}
+                />
+              </div>
+              <div className="mx-2 mt-2 rounded-xl border border-dashed border-border px-3 py-5 text-center">
+                <p className="text-xs font-semibold text-bodyx">
+                  Nenhuma conversa ainda
+                </p>
+                <p className="mt-1 text-[11px] leading-4 text-muted2">
+                  Inicie uma DM pelo botão acima ou crie um grupo com seus amigos.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setNewMessageOpen(true)}
+                  className="mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90"
+                >
+                  Nova mensagem
+                </button>
+              </div>
+            </>
           ) : (
             <>
               {pinned.length > 0 && (
@@ -214,6 +253,7 @@ export function DMSidebar({
                   label="Fixadas"
                   items={pinned}
                   activeConversationId={activeConversationId}
+                  officialActive={officialActive}
                   acceptedFriendIds={acceptedFriendIds}
                   activitySummaries={activitySummaries.data}
                   onOpenProfile={onOpenProfile}
@@ -223,6 +263,7 @@ export function DMSidebar({
                 label={pinned.length > 0 ? "Recentes" : undefined}
                 items={recent}
                 activeConversationId={activeConversationId}
+                officialActive={officialActive}
                 acceptedFriendIds={acceptedFriendIds}
                 activitySummaries={activitySummaries.data}
                 onOpenProfile={onOpenProfile}
@@ -245,13 +286,15 @@ function ConversationGroup({
   label,
   items,
   activeConversationId,
+  officialActive,
   acceptedFriendIds,
   activitySummaries,
   onOpenProfile,
 }: {
   label?: string;
-  items: ConversationDTO[];
+  items: PrivateInboxEntry[];
   activeConversationId: number | null;
+  officialActive: boolean;
   acceptedFriendIds: Set<number>;
   activitySummaries?: Record<number, RichPresenceActivityDTO | null>;
   onOpenProfile?: (userId: number) => void;
@@ -265,23 +308,38 @@ function ConversationGroup({
         </p>
       )}
       <div className="space-y-0.5">
-        {items.map(conversation => (
-          <DMListItem
-            key={conversation.id}
-            conversation={conversation}
-            active={activeConversationId === conversation.id}
-            isFriend={
-              !!conversation.otherUser &&
-              acceptedFriendIds.has(conversation.otherUser.id)
-            }
-            initialActivity={
-              conversation.otherUser
-                ? activitySummaries?.[conversation.otherUser.id]
-                : null
-            }
-            onOpenProfile={onOpenProfile}
-          />
-        ))}
+        {items.map(entry => {
+          // Comunicados oficiais compartilham a ordenação das DMs, mas não
+          // aceitam pin, silêncio ou descarte.
+          if (entry.kind === "official") {
+            return (
+              <OfficialDMListItem
+                key="official-nexora"
+                active={officialActive}
+                unread={entry.unread}
+                preview={entry.preview}
+              />
+            );
+          }
+          const conversation = entry.conversation;
+          return (
+            <DMListItem
+              key={conversation.id}
+              conversation={conversation}
+              active={activeConversationId === conversation.id}
+              isFriend={
+                !!conversation.otherUser &&
+                acceptedFriendIds.has(conversation.otherUser.id)
+              }
+              initialActivity={
+                conversation.otherUser
+                  ? activitySummaries?.[conversation.otherUser.id]
+                  : null
+              }
+              onOpenProfile={onOpenProfile}
+            />
+          );
+        })}
       </div>
     </section>
   );

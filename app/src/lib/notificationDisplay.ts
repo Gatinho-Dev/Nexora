@@ -1,6 +1,37 @@
-import type { NotificationDTO } from "@contracts/types";
+import type {
+  NotificationDTO,
+  OfficialAnnouncementDTO,
+} from "@contracts/types";
 
 export const NOTIFICATION_POPUP_EVENT = "nexora:notification-popup";
+
+/** Tipo sintético dos comunicados oficiais dentro da Caixa de entrada. */
+export const OFFICIAL_NOTIFICATION_TYPE = "official";
+
+/**
+ * Converte um comunicado oficial em uma notificação da Caixa de entrada.
+ *
+ * Não gravamos uma linha por usuário no banco: a leitura de comunicados já é
+ * rastreada por `official_announcement_reads`, e derivar a partir dessa fonte
+ * faz avisos publicados no passado também aparecerem — o que uma linha criada
+ * só no momento da publicação não faria.
+ */
+export function toOfficialNotification(
+  announcement: OfficialAnnouncementDTO,
+): NotificationDTO {
+  return {
+    id: -announcement.id,
+    type: OFFICIAL_NOTIFICATION_TYPE,
+    actor: null,
+    serverId: null,
+    channelId: null,
+    conversationId: null,
+    messageId: null,
+    content: announcement.title,
+    isRead: announcement.isRead,
+    createdAt: announcement.publishedAt,
+  };
+}
 
 export function notificationCopy(notification: NotificationDTO): {
   title: string;
@@ -48,6 +79,11 @@ export function notificationCopy(notification: NotificationDTO): {
     case "moderation":
       return {
         title: "Aviso da moderação",
+        body: notification.content ?? "",
+      };
+    case OFFICIAL_NOTIFICATION_TYPE:
+      return {
+        title: "Nexora: comunicação oficial",
         body: notification.content ?? "",
       };
     default:
