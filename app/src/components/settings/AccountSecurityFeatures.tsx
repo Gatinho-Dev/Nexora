@@ -30,6 +30,26 @@ function errorMessage(error: unknown) {
     : "Não foi possível concluir a operação.";
 }
 
+const SECURITY_EVENT_LABELS: Record<string, string> = {
+  account_created: "Conta criada",
+  login: "Login realizado",
+  login_failed: "Tentativa de login recusada",
+  logout: "Sessão encerrada",
+  passkey_login: "Login por passkey",
+  passkey_removed: "Passkey removida",
+  totp_enabled: "2FA ativado",
+  totp_disabled: "2FA desativado",
+  backup_codes_regenerated: "Códigos de backup regenerados",
+  qr_login_approved: "Login por QR autorizado",
+  qr_login_rejected: "Login por QR recusado",
+  password_reset: "Senha redefinida por e-mail",
+  password_changed: "Senha alterada",
+  email_verified: "E-mail confirmado",
+  email_changed: "E-mail alterado",
+  email_removed: "E-mail removido",
+  email_change_canceled: "Alteração de e-mail cancelada",
+};
+
 type QrInspection = {
   id: string;
   token: string;
@@ -249,8 +269,15 @@ export function AccountSecurityFeatures() {
   const passkeys = trpc.advanced.security.passkeys.useQuery();
   const totp = trpc.advanced.security.totp.useQuery();
   const events = trpc.advanced.security.events.useQuery();
+  const acknowledge = trpc.advanced.security.acknowledgeEvent.useMutation({
+    onSuccess: () => {
+      void utils.advanced.security.events.invalidate();
+    },
+    onError: error => toast.error(error.message),
+  });
   const [passkeyName, setPasskeyName] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
+  const [passkeyCode, setPasskeyCode] = useState("");
   const [totpSetup, setTotpSetup] = useState<{ secret: string; uri: string } | null>(null);
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
 
@@ -356,7 +383,7 @@ export function AccountSecurityFeatures() {
                 disabled={deletePasskey.isPending}
                 aria-label={`Remover passkey ${key.name}`}
                 title="Remover passkey"
-                onClick={() => deletePasskey.mutate({ id: key.id, verificationCode: verificationCode || undefined })}
+                onClick={() => deletePasskey.mutate({ id: key.id, verificationCode: passkeyCode || undefined })}
               >
                 <Trash2 className="size-4 text-red-400" />
               </Button>
@@ -365,6 +392,20 @@ export function AccountSecurityFeatures() {
             <p className="rounded-xl bg-black/15 px-4 py-5 text-center text-xs text-muted2">Nenhuma passkey cadastrada.</p>
           )}
         </div>
+        {totp.data?.enabled && (
+          <div className="mt-3 space-y-1.5">
+            <Label htmlFor="passkey-verification" className="text-xs text-muted2">
+              Código para remover uma passkey
+            </Label>
+            <Input
+              id="passkey-verification"
+              value={passkeyCode}
+              onChange={event => setPasskeyCode(event.target.value.trim().slice(0, 32))}
+              placeholder="TOTP ou código de backup"
+              autoComplete="one-time-code"
+            />
+          </div>
+        )}
       </Section>
 
       <Section
@@ -401,9 +442,10 @@ export function AccountSecurityFeatures() {
                     <p className="mt-1 text-[11px] leading-5 text-muted2">Se não puder escanear, digite esta chave:</p>
                     <code className="mt-1 block break-all rounded bg-white/[0.06] p-2 text-[11px] text-white">{totpSetup.secret}</code>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Input inputMode="numeric" autoComplete="one-time-code" value={verificationCode} onChange={event => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Código de 6 dígitos" aria-label="Código do autenticador" />
                     <Button disabled={verificationCode.length !== 6 || enableTotp.isPending} onClick={() => enableTotp.mutate({ code: verificationCode })}>Ativar</Button>
+                    <Button variant="ghost" disabled={enableTotp.isPending} onClick={() => { setTotpSetup(null); setVerificationCode(""); }}>Cancelar</Button>
                   </div>
                 </div>
               </div>
@@ -438,10 +480,23 @@ export function AccountSecurityFeatures() {
             {recentEvents.map(event => (
               <div key={event.id} className="flex items-start gap-3 rounded-lg px-2 py-2.5 hover:bg-white/[0.04]">
                 <span className={cn("mt-1 size-2 shrink-0 rounded-full", event.severity === "critical" ? "bg-red-400" : event.severity === "warning" ? "bg-amber-400" : "bg-emerald-400")} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-white">{event.type.replaceAll("_", " ")}</p>
-                  <p className="mt-0.5 text-[10px] text-muted2">{[event.device, event.browser, event.approximateLocation].filter(Boolean).join(" · ") || "Atividade da conta"} · {new Date(event.createdAt).toLocaleString("pt-BR")}</p>
-                </div>
+                 <div className="min-w-0 flex-1">
+                   <p className="text-xs font-semibold text-white">
+                     {SECURITY_EVENT_LABELS[event.type] ?? event.type.replaceAll("_", " ")}
+                   </p>
+                   <p className="mt-0.5 text-[10px] text-muted2">{[event.device, event.browser, event.approximateLocation].filter(Boolean).join(" · ") || "Atividade da conta"} · {new Date(event.createdAt).toLocaleString("pt-BR")}</p>
+                 </div>
+                 {!event.acknowledgedAt && (
+                   <Button
+                     size="sm"
+                     variant="ghost"
+                     disabled={acknowledge.isPending}
+                     onClick={() => acknowledge.mutate({ id: event.id })}
+                     className="h-7 shrink-0 px-2 text-[10px] text-muted2 hover:text-white"
+                   >
+                     Marcar visto
+                   </Button>
+                 )}
               </div>
             ))}
           </div>

@@ -37,7 +37,7 @@ function escapeHtml(value: string): string {
 }
 
 function appBaseUrl(): string | null {
-  const value = env.appOrigin || env.publicApiUrl;
+  const value = env.appBaseUrl || env.appOrigin || env.publicApiUrl;
   if (!value) return null;
   try {
     const url = new URL(value);
@@ -228,8 +228,109 @@ export function emailChangedAlertTemplate(input: { email: string }): EmailTempla
   };
 }
 
+export function passwordChangedTemplate(): EmailTemplate | null {
+  const url = actionUrl("/channels/@me");
+  if (!url) return null;
+  const action = { label: "Abrir minhas configurações", url };
+  return {
+    subject: "Sua senha foi alterada — Nexora",
+    html: EmailLayout({
+      preheader: "A senha da sua conta Nexora foi alterada.",
+      title: "Sua senha foi alterada",
+      content: `<p style="margin:0 0 14px;">A senha da sua conta Nexora foi alterada com sucesso.</p><p style="margin:0;">Se não foi você, encerre as sessões ativas e proteja sua conta imediatamente.</p>${SecurityNotice("A Nexora nunca pede sua senha por e-mail.")}`,
+      action,
+    }),
+    text: plainLayout(
+      "Sua senha foi alterada — Nexora",
+      [
+        "A senha da sua conta Nexora foi alterada com sucesso.",
+        "Se não foi você, encerre as sessões ativas e proteja sua conta imediatamente.",
+      ],
+      action,
+    ),
+  };
+}
+
+export function emailChangePendingTemplate(input: { email: string }): EmailTemplate | null {
+  const url = actionUrl("/channels/@me");
+  if (!url) return null;
+  const action = { label: "Revisar minha conta", url };
+  return {
+    subject: "Alteração de e-mail pendente — Nexora",
+    html: EmailLayout({
+      preheader: "Uma alteração de e-mail foi solicitada na sua conta Nexora.",
+      title: "Alteração de e-mail pendente",
+      content: `<p style="margin:0 0 14px;">Foi solicitada uma alteração do e-mail da sua conta para <strong>${escapeHtml(input.email)}</strong>.</p><p style="margin:0;">A alteração só será concluída depois que o novo endereço for confirmado.</p>${SecurityNotice("Se você não solicitou essa alteração, ignore este e-mail e revise suas sessões.")}`,
+      action,
+    }),
+    text: plainLayout(
+      "Alteração de e-mail pendente — Nexora",
+      [
+        `Foi solicitada uma alteração do e-mail da sua conta para ${input.email}.`,
+        "A alteração só será concluída depois que o novo endereço for confirmado.",
+        "Se você não solicitou essa alteração, ignore este e-mail.",
+      ],
+      action,
+    ),
+  };
+}
+
+export function twoFactorEnabledTemplate(): EmailTemplate | null {
+  const url = actionUrl("/channels/@me");
+  if (!url) return null;
+  const action = { label: "Revisar minha segurança", url };
+  return {
+    subject: "2FA ativado na sua conta — Nexora",
+    html: EmailLayout({
+      preheader: "A autenticação em duas etapas foi ativada.",
+      title: "Autenticação em duas etapas ativada",
+      content: `<p style="margin:0 0 14px;">A autenticação em duas etapas foi ativada na sua conta Nexora.</p><p style="margin:0;">Novos logins agora pedem um código do seu aplicativo autenticador ou um código de recuperação.</p>${SecurityNotice("Se não foi você, encerre as sessões e redefina sua senha imediatamente.")}`,
+      action,
+    }),
+    text: plainLayout(
+      "2FA ativado na sua conta — Nexora",
+      [
+        "A autenticação em duas etapas foi ativada na sua conta Nexora.",
+        "Se não foi você, encerre as sessões e redefina sua senha imediatamente.",
+      ],
+      action,
+    ),
+  };
+}
+
+export function twoFactorDisabledTemplate(): EmailTemplate | null {
+  const url = actionUrl("/channels/@me");
+  if (!url) return null;
+  const action = { label: "Revisar minha segurança", url };
+  return {
+    subject: "2FA desativado na sua conta — Nexora",
+    html: EmailLayout({
+      preheader: "A autenticação em duas etapas foi desativada.",
+      title: "Autenticação em duas etapas desativada",
+      content: `<p style="margin:0 0 14px;">A autenticação em duas etapas foi desativada na sua conta Nexora.</p><p style="margin:0;">Sua senha continua sendo exigida, mas a conta está menos protegida contra acessos não autorizados.</p>${SecurityNotice("Se não foi você, redefina sua senha e ative a 2FA novamente.")}`,
+      action,
+    }),
+    text: plainLayout(
+      "2FA desativado na sua conta — Nexora",
+      [
+        "A autenticação em duas etapas foi desativada na sua conta Nexora.",
+        "Se não foi você, redefina sua senha e ative a 2FA novamente.",
+      ],
+      action,
+    ),
+  };
+}
+
 export function isEmailConfigured(): boolean {
   return Boolean(env.resendApiKey && env.resendFromEmail && appBaseUrl());
+}
+
+let resendClient: Resend | null = null;
+let resendClientKey = "";
+
+function resendFromAddress(): string {
+  const name = env.resendFromName.replace(/[<>\\r\\n]/g, "").trim() || "Nexora";
+  return `${name} <${env.resendFromEmail}>`;
 }
 
 export async function sendTransactionalEmail(input: {
@@ -238,9 +339,12 @@ export async function sendTransactionalEmail(input: {
 }): Promise<boolean> {
   if (!input.template || !env.resendApiKey || !env.resendFromEmail) return false;
   try {
-    const client = new Resend(env.resendApiKey);
-    const result = await client.emails.send({
-      from: env.resendFromEmail,
+    if (!resendClient || resendClientKey !== env.resendApiKey) {
+      resendClient = new Resend(env.resendApiKey);
+      resendClientKey = env.resendApiKey;
+    }
+    const result = await resendClient.emails.send({
+      from: resendFromAddress(),
       to: input.to,
       subject: input.template.subject,
       html: input.template.html,

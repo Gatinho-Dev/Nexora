@@ -6,6 +6,7 @@ import { initTheme } from "@/lib/theme";
 import { ensureAdSenseScript } from "@/lib/adsense";
 import { TRPCProvider } from "@/providers/trpc";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Toaster } from "@/components/ui/sonner";
 import App from "./App.tsx";
 
 // PWA: registra o service worker apenas em build de produção.
@@ -33,6 +34,7 @@ try {
         <TRPCProvider>
           <ErrorBoundary>
             <App />
+            <Toaster position="top-right" closeButton richColors />
           </ErrorBoundary>
         </TRPCProvider>
       </BrowserRouter>

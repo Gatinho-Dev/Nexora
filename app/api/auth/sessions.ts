@@ -82,13 +82,17 @@ export async function createSession(input: {
 }
 
 /** Busca sessão válida (não revogada, não expirada) por sid. */
-export async function resolveActiveSession(sid: string) {
+export async function resolveActiveSession(
+  sid: string,
+  token?: string,
+) {
   const [row] = await getDb()
     .select()
     .from(schema.accountSessions)
     .where(eq(schema.accountSessions.id, sid))
     .limit(1);
   if (!row) return null;
+  if (token && row.tokenHash !== hashToken(token)) return null;
   if (row.revokedAt) return null;
   if (new Date(row.expiresAt).getTime() < Date.now()) return null;
   touchLastSeenThrottled(sid);
@@ -266,6 +270,32 @@ export async function listActiveSessions(userId: number) {
 }
 
 /** Job periódico: remove sessões expiradas/revogadas antigas (>7 dias). */
+/** Remove transient authentication artifacts after their TTL. */
+export function startAuthArtifactCleanupJob(): void {
+  setInterval(
+    () => {
+      const now = new Date();
+      void getDb()
+        .delete(schema.emailActionTokens)
+        .where(lt(schema.emailActionTokens.expiresAt, now))
+        .catch(() => {});
+      void getDb()
+        .delete(schema.webauthnChallenges)
+        .where(lt(schema.webauthnChallenges.expiresAt, now))
+        .catch(() => {});
+      void getDb()
+        .delete(schema.qrLoginSessions)
+        .where(lt(schema.qrLoginSessions.expiresAt, now))
+        .catch(() => {});
+      void getDb()
+        .delete(schema.securityEvents)
+        .where(lt(schema.securityEvents.createdAt, new Date(Date.now() - 180 * 86_400_000)))
+        .catch(() => {});
+    },
+    60 * 60 * 1000,
+  ).unref();
+}
+
 export function startSessionCleanupJob(): void {
   setInterval(
     () => {

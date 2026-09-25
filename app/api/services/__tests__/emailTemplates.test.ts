@@ -1,17 +1,23 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  emailChangePendingTemplate,
   emailChangedAlertTemplate,
   emailVerificationTemplate,
   loginAlertTemplate,
+  passwordChangedTemplate,
   passwordResetTemplate,
+  twoFactorDisabledTemplate,
+  twoFactorEnabledTemplate,
 } from "../email";
 import { env } from "../../lib/env";
 
 const originalAppOrigin = env.appOrigin;
+const originalAppBaseUrl = env.appBaseUrl;
 const originalPublicApiUrl = env.publicApiUrl;
 
 afterEach(() => {
   env.appOrigin = originalAppOrigin;
+  env.appBaseUrl = originalAppBaseUrl;
   env.publicApiUrl = originalPublicApiUrl;
 });
 
@@ -55,8 +61,34 @@ describe("email templates", () => {
     expect(tpl!.html).toContain("old@exemplo.com");
   });
 
+  it("security templates include official actions and warnings", () => {
+    env.appOrigin = "https://nexorachat.cloud";
+    for (const template of [
+      passwordChangedTemplate(),
+      twoFactorEnabledTemplate(),
+      twoFactorDisabledTemplate(),
+      emailChangePendingTemplate({ email: "new@example.com" }),
+    ]) {
+      expect(template).not.toBeNull();
+      expect(template!.html).toContain("Nexora");
+      expect(template!.text).toContain("Nexora");
+    }
+    expect(emailChangePendingTemplate({ email: "new@example.com" })!.html).toContain(
+      "new@example.com",
+    );
+  });
+
+  it("prefere APP_BASE_URL sobre a URL da API para links de e-mail", () => {
+    env.appOrigin = "";
+    env.publicApiUrl = "https://api.example.com";
+    env.appBaseUrl = "https://nexorachat.cloud";
+    const tpl = passwordChangedTemplate();
+    expect(tpl!.html).toContain("https://nexorachat.cloud/channels/@me");
+  });
+
   it("retorna null quando não há origem do app configurada (evita link quebrado)", () => {
     env.appOrigin = "";
+    env.appBaseUrl = "";
     env.publicApiUrl = "";
     const tpl = emailVerificationTemplate({
       email: "user@example.com",

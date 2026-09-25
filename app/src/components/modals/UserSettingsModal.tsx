@@ -7,6 +7,7 @@ import { ReportsList } from "../safety/ReportsList";
 import { AppealsSection } from "../safety/AppealsSection";
 import { DevicesSection } from "../settings/DevicesSection";
 import { EmailSection } from "../settings/EmailSection";
+import { PasswordField } from "../auth/PasswordField";
 import { ConnectionsSection } from "../settings/ConnectionsSection";
 import { toast } from "sonner";
 import { apiUrl } from "@/lib/endpoints";
@@ -340,6 +341,10 @@ function AccountTab() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [disconnectOthers, setDisconnectOthers] = useState(true);
+  const totp = trpc.advanced.security.totp.useQuery();
+  const requiresCode = totp.data?.enabled === true;
 
   const changePassword = trpc.account.changePassword.useMutation({
     onSuccess: () => {
@@ -347,6 +352,7 @@ function AccountTab() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      setCode("");
     },
     onError: e => toast.error(e.message),
   });
@@ -356,7 +362,12 @@ function AccountTab() {
       toast.error("A confirmação não corresponde à nova senha.");
       return;
     }
-    changePassword.mutate({ currentPassword, newPassword });
+    changePassword.mutate({
+      currentPassword,
+      newPassword,
+      disconnectOthers,
+      ...(requiresCode && code.trim() ? { code: code.trim() } : {}),
+    });
   };
 
   return (
@@ -391,50 +402,63 @@ function AccountTab() {
       {user?.username ? (
         <div className="space-y-4 rounded-xl bg-sidebar border border-white/10 p-5">
           <h3 className="text-sm font-bold text-white">Alterar senha</h3>
-          <div className="space-y-2">
-            <Label htmlFor="cur-pass" className="text-xs text-muted2">
-              Senha atual
-            </Label>
-            <Input
-              id="cur-pass"
-              type="password"
-              className="bg-chat border-white/10 text-white"
-              value={currentPassword}
-              onChange={e => setCurrentPassword(e.target.value)}
-              autoComplete="current-password"
+          <PasswordField
+            id="cur-pass"
+            label="Senha atual"
+            value={currentPassword}
+            onChange={setCurrentPassword}
+            autoComplete="current-password"
+            disabled={changePassword.isPending}
+          />
+          <PasswordField
+            id="new-pass"
+            label="Nova senha"
+            value={newPassword}
+            onChange={setNewPassword}
+            autoComplete="new-password"
+            hint="Use pelo menos 6 caracteres."
+            disabled={changePassword.isPending}
+          />
+          <PasswordField
+            id="conf-pass"
+            label="Confirmar nova senha"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            autoComplete="new-password"
+            disabled={changePassword.isPending}
+          />
+          {requiresCode && (
+            <div className="space-y-2">
+              <Label htmlFor="change-password-2fa" className="text-xs text-muted2">
+                Código 2FA ou código de backup
+              </Label>
+              <Input
+                id="change-password-2fa"
+                inputMode="text"
+                autoComplete="one-time-code"
+                maxLength={32}
+                value={code}
+                onChange={e => setCode(e.target.value)}
+                className="bg-chat border-white/10 text-white"
+                disabled={changePassword.isPending}
+              />
+            </div>
+          )}
+          <label className="flex items-center gap-2 text-xs text-muted2">
+            <input
+              type="checkbox"
+              checked={disconnectOthers}
+              onChange={event => setDisconnectOthers(event.target.checked)}
+              className="size-4 accent-[#5865F2]"
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-pass" className="text-xs text-muted2">
-              Nova senha
-            </Label>
-            <Input
-              id="new-pass"
-              type="password"
-              className="bg-chat border-white/10 text-white"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              autoComplete="new-password"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="conf-pass" className="text-xs text-muted2">
-              Confirmar nova senha
-            </Label>
-            <Input
-              id="conf-pass"
-              type="password"
-              className="bg-chat border-white/10 text-white"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-            />
-          </div>
+            Encerrar todas as outras sessões após alterar a senha
+          </label>
           <Button
             className="bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium"
             disabled={
               !currentPassword ||
               newPassword.length < 6 ||
+              (requiresCode && !code.trim()) ||
               changePassword.isPending
             }
             onClick={submit}
