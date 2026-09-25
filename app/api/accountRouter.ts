@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import * as cookie from "cookie";
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
@@ -29,6 +29,7 @@ import { kickSession } from "./realtime";
 import {
   consumeEmailToken,
   hashEmail,
+  invalidateEmailTokens,
   issueEmailToken,
   normalizeEmail,
 } from "./services/emailTokens";
@@ -36,6 +37,7 @@ import {
   emailChangeTemplate,
   emailChangedAlertTemplate,
   emailVerificationTemplate,
+  isEmailConfigured,
   loginAlertTemplate,
   passwordResetTemplate,
   sendTransactionalEmail,
@@ -512,6 +514,7 @@ export const accountRouter = createRouter({
         eq(schema.emailActionTokens.userId, ctx.user.id),
         eq(schema.emailActionTokens.purpose, "email_change"),
         isNull(schema.emailActionTokens.consumedAt),
+        gt(schema.emailActionTokens.expiresAt, new Date()),
       ),
       orderBy: desc(schema.emailActionTokens.createdAt),
     });
@@ -548,6 +551,13 @@ export const accountRouter = createRouter({
         ),
       });
       if (mfa) await assertTotpOrBackup(ctx.user.id, input.code ?? "");
+      if (!isEmailConfigured()) {
+        throw new TRPCError({
+          code: "SERVICE_UNAVAILABLE",
+          message:
+            "O envio de e-mails ainda não está configurado. Tente novamente mais tarde.",
+        });
+      }
       if (ctx.user.emailHash === hashEmail(input.email)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -569,21 +579,29 @@ export const accountRouter = createRouter({
           purpose: "email_change",
           targetEmail: input.email,
         });
-        void sendTransactionalEmail({
+        const template = emailChangeTemplate({ token });
+        if (!template) {
+          throw new Error("Não foi possível gerar o link de confirmação.");
+        }
+        const delivered = await sendTransactionalEmail({
           to: input.email,
-          template: emailChangeTemplate({ token }),
+          template,
         });
+        if (!delivered) {
+          throw new Error("O provedor de e-mail não confirmou o envio.");
+        }
       } catch (error) {
+        await invalidateEmailTokens(ctx.user.id, "email_change");
         console.error(
           "[email] change setup failed",
           error instanceof Error ? error.message : "unknown error",
         );
         throw new TRPCError({
           code: "SERVICE_UNAVAILABLE",
-          message: "Não foi possível solicitar a alteração agora. Tente novamente.",
+          message: "Não foi possível enviar a confirmação agora. Tente novamente.",
         });
       }
-      return { accepted: true };
+      return { accepted: true, pendingEmail: input.email };
     }),
 
   // ── Dispositivos e sessões ───────────────────────────────────
