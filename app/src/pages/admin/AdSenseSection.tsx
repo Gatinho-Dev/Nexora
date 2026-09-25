@@ -48,14 +48,18 @@ function ConfigStatus({
   label,
   value,
   detail,
+  tone = "ok",
 }: {
   label: string;
   value: string;
   detail: string;
+  tone?: CheckTone;
 }) {
   return (
     <div className="flex items-start gap-3 rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
-      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[#43b581]" aria-hidden />
+      <span className={`mt-0.5 shrink-0 ${toneClasses(tone)}`}>
+        <CheckIcon tone={tone} />
+      </span>
       <div className="min-w-0">
         <p className="text-xs font-semibold text-white">{label}</p>
         <p className="mt-0.5 text-[11px] font-medium text-[#b9c0ca]">{value}</p>
@@ -124,6 +128,20 @@ export function AdSenseSection() {
         scripts.length <= 1
           ? "Nenhuma segunda tag do AdSense foi encontrada."
           : `${scripts.length} tags do AdSense foram encontradas.`,
+    });
+    const fundingChoicesApi = (
+      window as Window & {
+        googlefc?: { showRevocationMessage?: unknown };
+      }
+    ).googlefc;
+    const hasRevocationApi =
+      typeof fundingChoicesApi?.showRevocationMessage === "function";
+    next.push({
+      label: "API de gerenciamento oficial",
+      tone: hasRevocationApi ? "ok" : "warning",
+      detail: hasRevocationApi
+        ? "A API do Google está disponível; a mensagem publicada ainda precisa ser validada no painel."
+        : "A API ainda está sendo carregada ou a mensagem oficial não foi disponibilizada para esta página.",
     });
 
     const [adsFile, robotsFile] = await Promise.all([
@@ -269,19 +287,38 @@ export function AdSenseSection() {
           detail="O domínio de produção oficial está definido para a integração."
         />
         <ConfigStatus
-          label="Código instalado"
-          value="Sim"
+          label="AdSense"
+          value="Código instalado"
           detail="A tag oficial do Google AdSense está no head do documento."
         />
         <ConfigStatus
           label="ads.txt"
-          value="Disponível"
-          detail="A linha oficial está disponível publicamente em /ads.txt."
+          value="Arquivo público configurado"
+          detail="A linha oficial está disponível em /ads.txt e deve ser validada no domínio publicado."
         />
         <ConfigStatus
-          label="Integração"
-          value="Ativa"
-          detail="Nenhum anúncio é exibido automaticamente nas telas sensíveis."
+          label="CMP certificada"
+          value="Verifique no Google AdSense"
+          detail="A publicação da mensagem e a certificação precisam ser confirmadas em Privacy & messaging."
+          tone="warning"
+        />
+        <ConfigStatus
+          label="Consentimento EEE · Reino Unido · Suíça"
+          value="Verifique no Google AdSense"
+          detail="As regiões, os sinais TCF e as opções dependem da mensagem oficial publicada."
+          tone="warning"
+        />
+        <ConfigStatus
+          label="Gerenciamento de preferências"
+          value="Gerenciador oficial preparado"
+          detail="Configurações → Conteúdo e Privacidade chama googlefc.showRevocationMessage quando a API está disponível."
+          tone="warning"
+        />
+        <ConfigStatus
+          label="Integração com AdSense"
+          value="Integração técnica preparada"
+          detail="A Nexora não usa um banner próprio; a tag oficial continua carregando a mensagem e os sinais do Google."
+          tone="warning"
         />
         <ConfigStatus
           label="Conteúdo público"
@@ -296,7 +333,11 @@ export function AdSenseSection() {
           <div>
             <p className="text-xs font-bold text-[#f5c452]">Aguardando confirmação do Google AdSense.</p>
             <p className="mt-1 text-[11px] leading-5 text-[#a99b73]">
-              Status da verificação: Aguardando verificação do Google. A instalação do código e do ads.txt não representa aprovação; acompanhe o processo no painel oficial do AdSense.
+              A instalação do código, a preparação do gerenciador e o ads.txt
+              não representam aprovação. No painel oficial, publique a mensagem
+              em Privacy &amp; messaging, confirme a CMP certificada e verifique
+              as regras do EEE, Reino Unido e Suíça antes de solicitar a
+              verificação.
             </p>
           </div>
         </div>

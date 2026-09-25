@@ -148,11 +148,35 @@ export function PrivacyPage() {
         </p>
       </Section>
 
-      <Section n={6} t="Cookies e sessões">
+      <Section n={6} t="Cookies, tecnologias e publicidade">
         <p>
           Utilizamos cookies necessários para login, manutenção de sessão,
           segurança, preferências e funcionamento da plataforma. O cookie de
           sessão é HttpOnly e não é usado para publicidade.
+        </p>
+        <p>
+          A Nexora mantém a integração técnica do Google AdSense preparada para
+          publicidade. Quando houver anúncios disponíveis, o Google AdSense e
+          seus parceiros poderão usar cookies e tecnologias semelhantes para
+          veicular e medir publicidade, conforme a mensagem oficial de
+          consentimento, as escolhas do usuário e a configuração aplicável da
+          conta. A mensagem e as regras regionais são definidas no Google
+          AdSense; a Nexora não cria um sistema de consentimento paralelo.
+        </p>
+        <p>
+          Quando a mensagem oficial for aplicável, o usuário pode revisar suas
+          escolhas em Configurações → Conteúdo e Privacidade → Preferências de
+          anúncios. Esse acesso abre o gerenciador fornecido pelo Google. Você
+          também pode revisar as informações de publicidade do Google em{" "}
+          <a
+            href="https://policies.google.com/technologies/ads"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[#7983F5] hover:underline"
+          >
+            suas políticas de publicidade
+          </a>
+          .
         </p>
       </Section>
 
@@ -200,9 +224,17 @@ export function PrivacyPage() {
       <Section n={12} t="Serviços de terceiros">
         <p>
           Serviços externos possuem políticas próprias — por exemplo, Roblox,
-          Render e outros provedores utilizados pela Nexora. Recomendamos ler
-          as políticas de cada serviço; não fazemos declarações sobre termos
-          que não controlamos.
+          Google AdSense, Render e outros provedores utilizados pela Nexora.
+          Recomendamos ler as políticas de cada serviço; não fazemos declarações
+          sobre termos que não controlamos.
+        </p>
+        <p>
+          O Google AdSense pode ser usado para publicidade quando a Nexora
+          disponibilizar slots aprovados. Nesse caso, o Google e seus parceiros
+          podem processar dados técnicos para veicular e medir anúncios,
+          respeitando a mensagem de consentimento e as escolhas do usuário. A
+          configuração da mensagem, da CMP certificada e das regiões deve ser
+          conferida no painel oficial do Google AdSense.
         </p>
       </Section>
 

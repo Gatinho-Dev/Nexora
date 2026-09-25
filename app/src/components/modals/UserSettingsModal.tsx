@@ -10,6 +10,7 @@ import { EmailSection } from "../settings/EmailSection";
 import { ConnectionsSection } from "../settings/ConnectionsSection";
 import { toast } from "sonner";
 import { apiUrl } from "@/lib/endpoints";
+import { openAdSensePrivacySettings } from "@/lib/adsense";
 import {
   Camera,
   Mic,
@@ -24,6 +25,7 @@ import {
   ArrowLeft,
   ChevronRight,
   ShieldCheck,
+  Settings2,
   Keyboard,
   AlertTriangle,
   EyeOff,
@@ -698,6 +700,21 @@ function PrivacyTab() {
   const blocks = trpc.advanced.security.blocks.useQuery();
   const restrictions = trpc.advanced.security.restrictions.useQuery();
   const [readReceipts, setReadReceipts] = useState<boolean | null>(null);
+  const [adPreferencesOpening, setAdPreferencesOpening] = useState(false);
+
+  const openAdPreferences = async () => {
+    setAdPreferencesOpening(true);
+    try {
+      const opened = await openAdSensePrivacySettings();
+      if (!opened) {
+        toast.error(
+          "O gerenciador oficial do Google ainda não está disponível nesta sessão. Verifique a mensagem em Privacy & messaging.",
+        );
+      }
+    } finally {
+      setAdPreferencesOpening(false);
+    }
+  };
 
   const setPrivacy = trpc.account.setPrivacy.useMutation({
     onSuccess: () => void utils.account.privacy.invalidate(),
@@ -746,6 +763,41 @@ function PrivacyTab() {
         Controle quem pode enviar mensagens diretas e solicitações de amizade na
         Nexora.
       </p>
+
+      <section
+        className="rounded-xl border border-[#5865F2]/25 bg-[#5865F2]/[0.07] p-4"
+        aria-labelledby="ad-preferences-title"
+      >
+        <div className="flex items-start gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#5865F2]/20 text-[#aab1ff]">
+            <Settings2 className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h3 id="ad-preferences-title" className="text-sm font-bold text-white">
+              Preferências de anúncios
+            </h3>
+            <p className="mt-1 text-[11px] leading-5 text-muted2">
+              Abre o gerenciador oficial da mensagem de consentimento do Google.
+              A CMP publicada em Privacy &amp; messaging continua sendo a única
+              fonte das escolhas e dos sinais de publicidade.
+            </p>
+            <Button
+              type="button"
+              onClick={() => void openAdPreferences()}
+              disabled={adPreferencesOpening}
+              className="mt-3 bg-[#5865F2] text-white hover:bg-[#4752C4]"
+            >
+              {adPreferencesOpening
+                ? "Abrindo gerenciador..."
+                : "Gerenciar preferências"}
+            </Button>
+            <p className="mt-2 text-[10px] leading-4 text-muted2">
+              Este botão não cria um banner, uma segunda lista de consentimento
+              nem altera a decisão por conta própria.
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* Recibos de leitura (grupos — item 12) */}
       <div className="rounded-xl bg-sidebar border border-white/10 p-4 space-y-1">
