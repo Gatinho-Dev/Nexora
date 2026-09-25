@@ -1193,7 +1193,7 @@ export function attachRealtime(server: HttpServer) {
         const token = bearerToken ?? cookies[Session.cookieName];
         const claim = token ? await verifySessionToken(token) : null;
         // Sessão deve existir e estar ativa (revogação remota funciona aqui).
-        const session = claim ? await resolveActiveSession(claim.sid) : null;
+        const session = claim ? await resolveActiveSession(claim.sid, token) : null;
         const user =
           claim && session ? await findUserByUnionId(claim.unionId) : null;
         if (!user || !session) {

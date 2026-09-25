@@ -3,11 +3,10 @@ import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { Plus, Compass, Volume2, X } from "lucide-react";
 import { CreateServerModal } from "../modals/CreateServerModal";
-import { JoinServerModal } from "../modals/JoinServerModal";
 import { useState } from "react";
 import { NexoraAppIcon } from "../NexoraBrand";
 import { Avatar } from "../Avatar";
-import { ServerBadge } from "../server/ServerBadge";
+import { PartnerBadge } from "../server/PartnerBadge";
 import {
   ServerContextMenu,
   type ServerMenuAction,
@@ -35,7 +34,6 @@ export function ServersSheet({
   const serverMentions = useAppStore(s => s.serverMentions);
   const voiceSummaries = useAppStore(s => s.serverVoiceSummaries);
   const [createOpen, setCreateOpen] = useState(false);
-  const [joinOpen, setJoinOpen] = useState(false);
   const [activeAction, setActiveAction] =
     useState<ActiveServerMenuAction>(null);
 
@@ -118,10 +116,7 @@ export function ServersSheet({
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-1.5">
                         {sv.partnered && (
-                          <ServerBadge
-                            type="partner"
-                            className="h-4 w-4 shrink-0"
-                          />
+                          <PartnerBadge className="h-4 w-4 shrink-0" />
                         )}
                         <span className="truncate text-sm font-bold">
                           {sv.name}
@@ -177,16 +172,18 @@ export function ServersSheet({
             <Plus className="h-4 w-4" /> Criar
           </button>
           <button
-            onClick={() => setJoinOpen(true)}
+            onClick={() => {
+              onClose();
+              navigate("/explore");
+            }}
             className="flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-panel text-sm font-bold text-bodyx ring-1 ring-white/10 active:scale-[0.98] transition-transform"
           >
-            <Compass className="h-4 w-4" /> Entrar
+            <Compass className="h-4 w-4" /> Explorar
           </button>
         </div>
       </div>
 
       <CreateServerModal open={createOpen} onOpenChange={setCreateOpen} />
-      <JoinServerModal open={joinOpen} onOpenChange={setJoinOpen} />
       <ServerActionModalHost
         activeAction={activeAction}
         onClose={() => setActiveAction(null)}

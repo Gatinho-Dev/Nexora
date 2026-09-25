@@ -68,6 +68,8 @@ export const MODERATOR_PERMISSIONS: Permission[] = [
 export const RateLimits = {
   message: { limit: 5, windowMs: 5_000 },
   serverCreate: { limit: 5, windowMs: 60 * 60_000 },
+  serverDiscovery: { limit: 60, windowMs: 60_000 },
+  serverJoin: { limit: 20, windowMs: 60_000 },
   inviteCreate: { limit: 10, windowMs: 60 * 60_000 },
   friendRequest: { limit: 10, windowMs: 60_000 },
   upload: { limit: 10, windowMs: 60_000 },

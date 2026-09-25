@@ -77,6 +77,7 @@ export const users = mysqlTable("users", {
     .default("offline")
     .notNull(),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  platformOwner: boolean("platformOwner").default(false).notNull(),
   /** Privacidade: quando false, o usuário não aparece em recibos "Visto por". */
   readReceipts: boolean("readReceipts").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -90,6 +91,26 @@ export const users = mysqlTable("users", {
   table => ({
     emailHashUniq: uniqueIndex("users_email_hash_uniq").on(table.emailHash),
   }),
+);
+
+export const discoveryCategories = mysqlTable(
+  "discovery_categories",
+  {
+    id: serial("id").primaryKey(),
+    slug: varchar("slug", { length: 32 }).notNull(),
+    name: varchar("name", { length: 64 }).notNull(),
+    icon: varchar("icon", { length: 32 }).default("sparkles").notNull(),
+    position: int("position").default(0).notNull(),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => ({
+    slugIdx: uniqueIndex("discovery_category_slug_uniq").on(table.slug),
+    positionIdx: index("discovery_category_position_idx").on(
+      table.active,
+      table.position
+    ),
+  })
 );
 
 // ── Servers ───────────────────────────────────────────────────
@@ -126,13 +147,31 @@ export const servers = mysqlTable(
       .$defaultFn(() => [])
       .notNull(),
     communityEnabled: boolean("communityEnabled").default(false).notNull(),
+    publicDiscovery: boolean("publicDiscovery").default(false).notNull(),
+    isFeatured: boolean("isFeatured").default(false).notNull(),
+    discoveryCategoryId: bigint("discoveryCategoryId", {
+      mode: "number",
+      unsigned: true,
+    }),
     ownerId: bigint("ownerId", { mode: "number", unsigned: true }).notNull(),
     /** Parceria oficial com a Nexora (alimenta a badge Partnered Server Owner). */
     partnered: boolean("partnered").default(false).notNull(),
     partneredAt: timestamp("partneredAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
-  table => ({ vanityIdx: uniqueIndex("srv_vanity_uniq").on(table.vanitySlug) })
+  table => ({
+    vanityIdx: uniqueIndex("srv_vanity_uniq").on(table.vanitySlug),
+    discoveryIdx: index("srv_discovery_idx").on(
+      table.publicDiscovery,
+      table.isFeatured,
+      table.createdAt,
+      table.id
+    ),
+    discoveryCategoryIdx: index("srv_discovery_category_idx").on(
+      table.discoveryCategoryId,
+      table.publicDiscovery
+    ),
+  })
 );
 
 export const serverMembers = mysqlTable(
@@ -247,6 +286,10 @@ export const messages = mysqlTable(
       table.conversationId,
       table.authorId,
       table.id
+    ),
+    authorNonceIdx: uniqueIndex("msg_author_nonce_uniq").on(
+      table.authorId,
+      table.clientNonce
     ),
   })
 );
@@ -1762,6 +1805,7 @@ export const liveRooms = mysqlTable(
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Server = typeof servers.$inferSelect;
+export type DiscoveryCategory = typeof discoveryCategories.$inferSelect;
 export type ServerMember = typeof serverMembers.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type Channel = typeof channels.$inferSelect;

@@ -48,6 +48,7 @@ const NexoraAdminPanel = lazy(() =>
     default: module.NexoraAdminPanel,
   }))
 );
+const ExplorePage = lazy(() => import("./pages/ExplorePage"));
 const InvitePage = lazy(() =>
   import("./pages/InvitePage").then(module => ({ default: module.InvitePage }))
 );
@@ -299,6 +300,14 @@ export default function App() {
           element={
             <Deferred>
               <DMConversation />
+            </Deferred>
+          }
+        />
+        <Route
+          path="/explore"
+          element={
+            <Deferred>
+              <ExplorePage />
             </Deferred>
           }
         />

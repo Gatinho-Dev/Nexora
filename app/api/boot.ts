@@ -30,7 +30,10 @@ import { isPlatformAdmin } from "./utils/platformAuth";
 import { assertCanInteract } from "./services/accountSafety";
 import { SafetyService, isSafetyKilled } from "./services/safety/safetyService";
 import { ensureCatalog as ensureBadgeCatalog } from "./services/badgeService";
-import { startSessionCleanupJob } from "./auth/sessions";
+import {
+  startAuthArtifactCleanupJob,
+  startSessionCleanupJob,
+} from "./auth/sessions";
 import { cliAuth, startCliPairingSweeper } from "./cliAuth";
 import { getCliReleases } from "./services/cliReleases";
 import {
@@ -53,6 +56,7 @@ import {
 import { upsertRobloxConnection } from "./integrations/roblox/service";
 import { createOauthState, consumeOauthState } from "./integrations/oauthState";
 import { getExternalProvider } from "./integrations/registry";
+import { isEmailConfigured } from "./services/email";
 import { upsertExternalConnection } from "./integrations/connectionService";
 import { startExternalPresenceWorker } from "./integrations/presenceWorker";
 import type { IntegrationProviderId } from "./integrations/types";
@@ -137,6 +141,36 @@ app.use(
   })
 );
 
+const mutatingMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+app.use("/api/*", async (c, next) => {
+  if (!mutatingMethods.has(c.req.method)) {
+    await next();
+    return;
+  }
+  const origin = c.req.header("origin");
+  if (!origin) {
+    await next();
+    return;
+  }
+  const normalizedOrigin = origin.replace(/\/$/, "");
+  const requestUrl = new URL(c.req.url);
+  const forwardedHost = c.req.header("x-forwarded-host")?.split(",")[0]?.trim();
+  const forwardedProto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  const sameOrigin = new Set([
+    requestUrl.origin,
+    forwardedHost
+      ? `${forwardedProto ?? requestUrl.protocol.replace(":", "")}://${forwardedHost}`
+      : "",
+  ]);
+  if (
+    !env.allowedOrigins.includes(normalizedOrigin) &&
+    !sameOrigin.has(normalizedOrigin)
+  ) {
+    return c.json({ error: "Origem não autorizada." }, 403);
+  }
+  await next();
+});
+
 app.get("/api/health", c =>
   c.json({
     status: "ok",
@@ -154,6 +188,13 @@ app.get("/api/health", c =>
       enabled: env.robloxIntegrationEnabled,
       configured: Boolean(env.robloxClientId && env.robloxClientSecret),
       breakerOpen: robloxWorkerStatus().breakerOpen,
+    },
+    email: {
+      provider: "resend",
+      configured: isEmailConfigured(),
+    },
+    passkeys: {
+      configured: Boolean(env.passkeyRpId && env.passkeyOrigin),
     },
   })
 );
@@ -778,6 +819,7 @@ void ensureBadgeCatalog().catch(e =>
   console.warn("[badges] Falha ao semear catálogo:", e)
 );
 startSessionCleanupJob();
+startAuthArtifactCleanupJob();
 startCliPairingSweeper();
 startRobloxPresenceWorker();
 startExternalPresenceWorker();

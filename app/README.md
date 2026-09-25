@@ -59,6 +59,23 @@ VITE_WS_URL=wss://api.seu-dominio.example
 
 No backend, `APP_ORIGIN` deve apontar para o frontend, `PUBLIC_API_URL` para o backend e `ALLOWED_ORIGINS` deve listar os frontends permitidos, separados por vírgula.
 
+### TiDB Cloud, Resend e segurança
+
+O `DATABASE_URL` continua apontando para o TiDB Cloud MySQL-compatible; o Nexora não usa outro banco para autenticação. As migrations são aplicadas por `npm run start` antes de a API abrir.
+
+```env
+APP_BASE_URL=https://nexorachat.cloud
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
+RESEND_LOGO_URL=
+```
+
+`RESEND_API_KEY` e `RESEND_FROM_EMAIL` ficam somente no servidor. Sem essas variáveis, a conta continua funcionando, mas confirmações, recuperação de senha e alertas de e-mail ficam indisponíveis; `/api/health` informa `email.configured=false`. O lockup horizontal oficial é servido em `/brand/nexora-logo-light.png`; se usar `RESEND_LOGO_URL`, informe uma imagem horizontal, não o ícone quadrado do app.
+
+Para passkeys, configure `PASSKEY_RP_ID` e `PASSKEY_ORIGIN` com o domínio real do frontend. 2FA, sessões, tokens de e-mail e eventos de segurança são validados no backend e persistidos no TiDB Cloud.
+
+A suíte de segurança e os fluxos de API podem ser verificados com `npm test`; `npm run check` e `npm run build` validam os tipos e o bundle de produção.
+
 ### WebRTC, STUN e TURN
 
 O Nexora usa STUN público como fallback, mas chamadas em produção precisam de TURN para redes corporativas, CGNAT e firewalls restritivos. A opção recomendada é configurar `ICE_SERVERS` no backend com o JSON fornecido pelo seu serviço TURN. Também são aceitas no build do frontend `VITE_STUN_URL`, `VITE_TURN_URL`, `VITE_TURN_USERNAME` e `VITE_TURN_CREDENTIAL`; não grave credenciais reais no repositório. Para diagnóstico temporário, use `VITE_VOICE_DEBUG=true`.

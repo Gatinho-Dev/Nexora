@@ -71,6 +71,7 @@ export const env = {
   adminUnionIds: csv("NEXORA_ADMIN_UNION_IDS"),
   adminUserIds: numericCsv("NEXORA_ADMIN_USER_IDS"),
   appOrigin: process.env.APP_ORIGIN?.replace(/\/$/, "") ?? "",
+  appBaseUrl: process.env.APP_BASE_URL?.replace(/\/$/, "") ?? "",
   publicApiUrl: process.env.PUBLIC_API_URL?.replace(/\/$/, "") ?? "",
   // ── OpenRouter (ÚNICO gateway de IA da plataforma) ──────────
   // Nunca use API direta da NVIDIA: todo tráfego passa por aqui.
@@ -114,7 +115,12 @@ export const env = {
     process.env.SEXUAL_MINOR_INITIAL_SUSPENSION_DAYS ?? 3,
   ),
 
-  allowedOrigins: (process.env.ALLOWED_ORIGINS ?? process.env.APP_ORIGIN ?? "")
+  allowedOrigins: (
+    process.env.ALLOWED_ORIGINS ??
+    process.env.APP_ORIGIN ??
+    process.env.APP_BASE_URL ??
+    ""
+  )
     .split(",")
     .map(origin => origin.trim().replace(/\/$/, ""))
     .filter(Boolean),

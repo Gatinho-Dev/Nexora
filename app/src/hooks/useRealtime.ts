@@ -15,6 +15,7 @@ export function useRealtime(myUserId: number | undefined) {
   const utils = trpc.useUtils();
   // Último status de conta conhecido — usado para detectar transições.
   const lastAccountStatus = useRef<string | null>(null);
+  const discoveryInvalidateTimer = useRef<number | null>(null);
 
   useEffect(() => {
     if (!myUserId) return;
@@ -340,6 +341,22 @@ export function useRealtime(myUserId: number | undefined) {
         case "server:refresh":
           utils.server.get.invalidate();
           utils.server.list.invalidate();
+          utils.badge.mine.invalidate();
+          utils.badge.forUser.invalidate();
+          break;
+        case "discovery:refresh":
+          if (discoveryInvalidateTimer.current !== null) {
+            window.clearTimeout(discoveryInvalidateTimer.current);
+          }
+          discoveryInvalidateTimer.current = window.setTimeout(() => {
+            void utils.server.discover.invalidate();
+            void utils.server.discoveryCategories.invalidate();
+            void utils.admin.searchServers.invalidate();
+            void utils.admin.listPartnerServers.invalidate();
+            void utils.badge.mine.invalidate();
+            void utils.badge.forUser.invalidate();
+            discoveryInvalidateTimer.current = null;
+          }, 250);
           break;
         case "dm:refresh":
           utils.dm.list.invalidate();
@@ -406,6 +423,9 @@ export function useRealtime(myUserId: number | undefined) {
     });
 
     return () => {
+      if (discoveryInvalidateTimer.current !== null) {
+        window.clearTimeout(discoveryInvalidateTimer.current);
+      }
       off();
       offConnect();
       voiceManager.cleanupVoiceSession();

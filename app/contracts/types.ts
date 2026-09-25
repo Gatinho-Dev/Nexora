@@ -223,6 +223,9 @@ export type ServerDTO = {
   rulesEnabled?: boolean;
   rules?: string[];
   communityEnabled?: boolean;
+  publicDiscovery?: boolean;
+  isFeatured?: boolean;
+  discoveryCategoryId?: number | null;
   ownerId: number;
   /** Permissões efetivas do usuário atual, presentes nos resumos da rail. */
   myPermissions?: Permission[];
@@ -233,6 +236,55 @@ export type ServerDTO = {
 };
 
 export type ServerBadgeType = "partner";
+
+export type DiscoveryCategoryDTO = {
+  id: number;
+  slug: string;
+  name: string;
+  icon: string;
+  position: number;
+};
+
+export type ServerDiscoveryDTO = {
+  id: number;
+  name: string;
+  iconUrl: string | null;
+  bannerUrl: string | null;
+  description: string | null;
+  tags: string[];
+  category: DiscoveryCategoryDTO | null;
+  memberCount: number;
+  messageCount: number;
+  activeMemberCount7d: number;
+  lastActivityAt: string | Date | null;
+  partnered: boolean;
+  isFeatured: boolean;
+  createdAt: string | Date;
+  isMember: boolean;
+  canJoin: boolean;
+  requiresRules: boolean;
+  rulesEnabled: boolean;
+  rules: string[];
+};
+
+export type ServerDiscoveryPage = {
+  items: ServerDiscoveryDTO[];
+  nextCursor: number | null;
+};
+
+export type AdminPartnerServerDTO = {
+  id: number;
+  name: string;
+  iconUrl: string | null;
+  ownerId: number;
+  ownerName: string | null;
+  ownerUsername: string | null;
+  memberCount: number;
+  partnered: boolean;
+  publicDiscovery: boolean;
+  isFeatured: boolean;
+  createdAt: string | Date;
+};
 
 export type VoicePreviewMember = {
   userId: number;
@@ -732,6 +784,54 @@ export type WSServerEvent =
       poll: PollDTO;
     }
   | { t: "server:refresh"; serverId: number }
+  | { t: "discovery:refresh" }
+  | { t: "pins:refresh"; serverId?: number; channelId?: number }
+  | {
+      t: "preferences:refresh";
+      userId?: number;
+      serverId?: number;
+      scope?: string;
+    }
+  | { t: "forum:refresh"; serverId?: number; channelId?: number }
+  | {
+      t: "stage:refresh";
+      serverId?: number;
+      channelId?: number;
+      sessionId?: number | null;
+    }
+  | {
+      t: "stage:request";
+      serverId?: number;
+      channelId?: number;
+      userId?: number;
+    }
+  | {
+      t: "stage:moderation";
+      serverId?: number;
+      channelId?: number;
+      action?: string;
+    }
+  | { t: "onboarding:refresh"; serverId?: number }
+  | { t: "soundboard:refresh"; serverId?: number; channelId?: number }
+  | {
+      t: "soundboard:play";
+      serverId?: number;
+      channelId?: number;
+      soundId?: number;
+      userId?: number;
+      url?: string;
+      volume?: number;
+    }
+  | {
+      t: "voice:priority";
+      serverId?: number;
+      channelId?: number;
+      userId?: number;
+      priority?: number;
+      enabled?: boolean;
+      attenuation?: number;
+    }
+  | { t: "support:refresh"; userId?: number; ticketId?: number }
   | { t: "events:refresh"; serverId: number }
   | { t: "pins:refresh"; channelId: number }
   | {

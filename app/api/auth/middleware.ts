@@ -27,7 +27,7 @@ export async function authenticateRequest(headers: Headers) {
   if (!claim) {
     throw Errors.forbidden("Invalid authentication token.");
   }
-  const session = await resolveActiveSession(claim.sid);
+  const session = await resolveActiveSession(claim.sid, token);
   if (!session) {
     throw Errors.forbidden("Sessão encerrada. Faça login novamente.");
   }

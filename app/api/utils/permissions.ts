@@ -276,7 +276,6 @@ export async function getEffectiveChannelPermissions(
   return perms;
 }
 
-/** Loads a channel enforcing VIEW_CHANNEL — hidden channels are invisible. */
 export async function requireChannelAccess(userId: number, channelId: number) {
   const db = getDb();
   const channel = await db.query.channels.findFirst({

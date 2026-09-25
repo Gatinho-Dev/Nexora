@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { groupDisplayName } from "@/lib/groupDisplayName";
 import { Avatar } from "@/components/Avatar";
 import { GroupAvatar } from "@/components/groups/GroupAvatar";
+import { PartnerBadge } from "@/components/server/PartnerBadge";
 
 type SearchScope = "all" | "people" | "servers";
 
@@ -173,9 +174,13 @@ export function QuickSwitcherModal({
                       <Compass className="h-4 w-4" />
                     </span>
                   )}
-                  <span className="truncate text-sm font-semibold">
-                    {server.name}
-                  </span>
+                   <span className="flex min-w-0 items-center gap-1.5">
+                     {server.partnered && <PartnerBadge className="size-4 shrink-0" />}
+                     <span className="truncate text-sm font-semibold">
+                       {server.name}
+                     </span>
+                   </span>
+
                 </button>
               ))}
             </section>

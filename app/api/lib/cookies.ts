@@ -1,8 +1,13 @@
 import type { CookieOptions } from "hono/utils/cookie";
+import { env } from "./env";
 
 function isLocalhost(headers: Headers): boolean {
-  const host = headers.get("host") || "";
-  return host.startsWith("localhost:") || host.startsWith("127.0.0.1:");
+  if (env.isProduction) return false;
+  const rawHost = (headers.get("host") ?? "").trim().toLowerCase();
+  const host = rawHost.startsWith("[")
+    ? rawHost.slice(1, rawHost.indexOf("]"))
+    : rawHost.split(":")[0];
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
 }
 
 export function getSessionCookieOptions(headers: Headers): CookieOptions {

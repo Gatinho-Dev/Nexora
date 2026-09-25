@@ -2,7 +2,14 @@ import { z } from "zod";
 import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import * as cookie from "cookie";
-import { randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { getClientIp } from "./lib/ip";
+import { getSessionCookieOptions } from "./lib/cookies";
+import {
+  DUMMY_PASSWORD_HASH,
+  hashPassword,
+  passwordHashNeedsUpgrade,
+  verifyPassword,
+} from "./lib/password";
 import { nanoid } from "nanoid";
 import { createRouter, publicQuery, authedQuery } from "./middleware";
 import { getDb } from "./queries/connection";
@@ -16,8 +23,7 @@ import {
   revokeAllSessions,
   revokeSession,
 } from "./auth/sessions";
-import { getClientIp } from "./lib/ip";
-import { getSessionCookieOptions } from "./lib/cookies";
+import { assertCanInteract } from "./services/accountSafety";
 import { parseUserAgent } from "./auth/userAgent";
 import { Session } from "@contracts/constants";
 import { rateLimit } from "./utils/rateLimit";
@@ -36,28 +42,15 @@ import {
 import {
   emailChangeTemplate,
   emailChangedAlertTemplate,
+  emailChangePendingTemplate,
   emailVerificationTemplate,
   isEmailConfigured,
   loginAlertTemplate,
+  passwordChangedTemplate,
   passwordResetTemplate,
   sendTransactionalEmail,
 } from "./services/email";
-import { assertTotpOrBackup } from "./services/secondFactor";
-
-// ── Password hashing (scrypt, no native deps) ─────────────────
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString("hex");
-  const hash = scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${hash}`;
-}
-
-function verifyPassword(password: string, stored: string): boolean {
-  const [salt, hash] = stored.split(":");
-  if (!salt || !hash) return false;
-  const candidate = scryptSync(password, salt, 64);
-  const expected = Buffer.from(hash, "hex");
-  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
-}
+import { assertTotpOrBackup, maskEmail } from "./services/secondFactor";
 
 const usernameSchema = z
   .string()
@@ -79,7 +72,7 @@ const optionalEmailSchema = z
 const GENERIC_LOGIN_ERROR =
   "Nome de usuário/e-mail ou senha incorretos.";
 const GENERIC_EMAIL_REQUEST_MESSAGE =
-  "Se houver uma conta associada a esse endereço, você receberá um e-mail com as instruções.";
+  "Se houver uma conta associada a esse endereço, processaremos as instruções de recuperação pelo e-mail.";
 const GENERIC_EMAIL_ACTION_ERROR =
   "Este link expirou ou já foi utilizado. Solicite um novo link para continuar.";
 
@@ -191,7 +184,7 @@ export const accountRouter = createRouter({
     )
     .mutation(async ({ ctx, input }) => {
       rateLimit(
-        `register:${ctx.req.headers.get("x-forwarded-for") ?? "unknown"}`,
+        `register:${getClientIp(ctx.req.headers) ?? "unknown"}`,
         10,
         60_000,
       );
@@ -205,7 +198,10 @@ export const accountRouter = createRouter({
       }
       if (input.email) {
         const emailOwner = await getDb().query.users.findFirst({
-          where: eq(schema.users.emailHash, hashEmail(input.email)),
+          where: or(
+            eq(schema.users.emailHash, hashEmail(input.email)),
+            sql`LOWER(TRIM(${schema.users.email})) = ${input.email}`,
+          ),
         });
         if (emailOwner) {
           throw new TRPCError({
@@ -236,14 +232,15 @@ export const accountRouter = createRouter({
       const user = await getDb().query.users.findFirst({
         where: eq(schema.users.id, id),
       });
-      if (input.email) {
+      let verificationEmailSent = false;
+      if (input.email && isEmailConfigured()) {
         try {
           const token = await issueEmailToken({
             userId: id,
             purpose: "verify_email",
             targetEmail: input.email,
           });
-          void sendTransactionalEmail({
+          verificationEmailSent = await sendTransactionalEmail({
             to: input.email,
             template: emailVerificationTemplate({ email: input.email, token }),
           });
@@ -259,9 +256,10 @@ export const accountRouter = createRouter({
       void recordEvent("USER_CREATED", id, { username: input.username }).catch(
         () => {},
       );
+      void securityEvent({ userId: id, type: "account_created" });
       return {
         user: user ? toPublicUser(user) : null,
-        emailVerificationRequired: Boolean(input.email),
+        emailVerificationRequired: verificationEmailSent,
       };
     }),
 
@@ -280,16 +278,35 @@ export const accountRouter = createRouter({
       rateLimit(`login-ip:${ip}`, 20, 60_000);
 
       const user = await findByIdentifier(input.identifier);
-      if (!user || !user.passwordHash || !verifyPassword(input.password, user.passwordHash)) {
+      const passwordValid = verifyPassword(
+        input.password,
+        user?.passwordHash ?? DUMMY_PASSWORD_HASH,
+      );
+      if (!user || !user.passwordHash || !passwordValid) {
         void logSafetyEvent({
           event: "login_failed",
           targetUserId: user?.id ?? null,
           metadata: { ip },
         }).catch(() => {});
+        if (user) {
+          void securityEvent({
+            userId: user.id,
+            type: "login_failed",
+            severity: "warning",
+          });
+        }
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: GENERIC_LOGIN_ERROR,
         });
+      }
+
+      await assertCanInteract(user.id);
+      if (passwordHashNeedsUpgrade(user.passwordHash)) {
+        await getDb()
+          .update(schema.users)
+          .set({ passwordHash: hashPassword(input.password) })
+          .where(eq(schema.users.id, user.id));
       }
 
       const mfa = await getDb().query.totpSettings.findFirst({
@@ -362,7 +379,7 @@ export const accountRouter = createRouter({
       rateLimit(`password-reset-request:${hashEmail(input.email)}`, 5, 15 * 60_000);
       rateLimit(`password-reset-ip:${ip}`, 10, 15 * 60_000);
       const user = await findByIdentifier(input.email);
-      if (user?.email) {
+      if (user?.email && isEmailConfigured()) {
         try {
           const token = await issueEmailToken({
             userId: user.id,
@@ -409,22 +426,36 @@ export const accountRouter = createRouter({
           message: GENERIC_EMAIL_ACTION_ERROR,
         });
       }
-      await getDb()
-        .update(schema.users)
-        .set({ passwordHash: hashPassword(input.password) })
-        .where(eq(schema.users.id, user.id));
-      await revokeAllSessions(user.id);
-      void securityEvent({
-        userId: user.id,
-        type: "password_reset",
-        severity: "warning",
+      await getDb().transaction(async tx => {
+        await tx
+          .update(schema.users)
+          .set({ passwordHash: hashPassword(input.password) })
+          .where(eq(schema.users.id, user.id));
+        await tx.insert(schema.securityEvents).values({
+          userId: user.id,
+          type: "password_reset",
+          severity: "warning",
+        });
       });
+      const revokedSessionIds = await revokeAllSessions(user.id);
+      for (const sid of revokedSessionIds) kickSession(sid);
+      if (user.email && user.emailVerifiedAt) {
+        void sendTransactionalEmail({
+          to: user.email,
+          template: passwordChangedTemplate(),
+        });
+      }
       return { success: true };
     }),
 
   verifyEmail: publicQuery
     .input(z.object({ token: z.string().min(32).max(128) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      rateLimit(
+        `verify-email:${getClientIp(ctx.req.headers) ?? "unknown"}`,
+        20,
+        15 * 60_000,
+      );
       const row =
         (await consumeEmailToken(input.token, "verify_email")) ??
         (await consumeEmailToken(input.token, "email_change"));
@@ -453,7 +484,10 @@ export const accountRouter = createRouter({
       }
       if (row.purpose === "email_change") {
         const owner = await getDb().query.users.findFirst({
-          where: eq(schema.users.emailHash, hashEmail(nextEmail)),
+          where: or(
+            eq(schema.users.emailHash, hashEmail(nextEmail)),
+            sql`LOWER(TRIM(${schema.users.email})) = ${nextEmail}`,
+          ),
         });
         if (owner && owner.id !== user.id) {
           throw new TRPCError({
@@ -464,18 +498,20 @@ export const accountRouter = createRouter({
       }
 
       const oldEmail = user.email;
-      await getDb()
-        .update(schema.users)
-        .set({
-          email: nextEmail,
-          emailHash: hashEmail(nextEmail),
-          emailVerifiedAt: new Date(),
-        })
-        .where(eq(schema.users.id, user.id));
-      void securityEvent({
-        userId: user.id,
-        type: row.purpose === "email_change" ? "email_changed" : "email_verified",
-        severity: row.purpose === "email_change" ? "warning" : "info",
+      await getDb().transaction(async tx => {
+        await tx
+          .update(schema.users)
+          .set({
+            email: nextEmail,
+            emailHash: hashEmail(nextEmail),
+            emailVerifiedAt: new Date(),
+          })
+          .where(eq(schema.users.id, user.id));
+        await tx.insert(schema.securityEvents).values({
+          userId: user.id,
+          type: row.purpose === "email_change" ? "email_changed" : "email_verified",
+          severity: row.purpose === "email_change" ? "warning" : "info",
+        });
       });
       if (row.purpose === "email_change" && oldEmail && oldEmail !== nextEmail) {
         void sendTransactionalEmail({
@@ -487,14 +523,16 @@ export const accountRouter = createRouter({
     }),
 
   resendVerification: authedQuery.mutation(async ({ ctx }) => {
-    if (ctx.user.email && !ctx.user.emailVerifiedAt) {
+    rateLimit(`resend-verification:${ctx.user.id}`, 3, 15 * 60_000);
+    let delivered = false;
+    if (ctx.user.email && !ctx.user.emailVerifiedAt && isEmailConfigured()) {
       try {
         const token = await issueEmailToken({
           userId: ctx.user.id,
           purpose: "verify_email",
           targetEmail: ctx.user.email,
         });
-        void sendTransactionalEmail({
+        delivered = await sendTransactionalEmail({
           to: ctx.user.email,
           template: emailVerificationTemplate({ email: ctx.user.email, token }),
         });
@@ -505,7 +543,7 @@ export const accountRouter = createRouter({
         );
       }
     }
-    return { accepted: true };
+    return { accepted: true, configured: isEmailConfigured(), delivered };
   }),
 
   emailStatus: authedQuery.query(async ({ ctx }) => {
@@ -519,8 +557,9 @@ export const accountRouter = createRouter({
       orderBy: desc(schema.emailActionTokens.createdAt),
     });
     return {
-      email: ctx.user.email,
+      email: maskEmail(ctx.user.email),
       verified: Boolean(ctx.user.emailVerifiedAt),
+      emailServiceConfigured: isEmailConfigured(),
       pendingEmail: pending?.targetEmail ?? null,
     };
   }),
@@ -565,7 +604,10 @@ export const accountRouter = createRouter({
         });
       }
       const owner = await getDb().query.users.findFirst({
-        where: eq(schema.users.emailHash, hashEmail(input.email)),
+        where: or(
+          eq(schema.users.emailHash, hashEmail(input.email)),
+          sql`LOWER(TRIM(${schema.users.email})) = ${input.email}`,
+        ),
       });
       if (owner) {
         throw new TRPCError({
@@ -601,15 +643,84 @@ export const accountRouter = createRouter({
           message: "Não foi possível enviar a confirmação agora. Tente novamente.",
         });
       }
+      if (ctx.user.email && ctx.user.emailVerifiedAt) {
+        void sendTransactionalEmail({
+          to: ctx.user.email,
+          template: emailChangePendingTemplate({ email: input.email }),
+        });
+      }
       return { accepted: true, pendingEmail: input.email };
+    }),
+
+  cancelEmailChange: authedQuery.mutation(async ({ ctx }) => {
+    rateLimit(`email-change-cancel:${ctx.user.id}`, 5, 15 * 60_000);
+    await invalidateEmailTokens(ctx.user.id, "email_change");
+    void securityEvent({
+      userId: ctx.user.id,
+      type: "email_change_canceled",
+      severity: "info",
+    });
+    return { ok: true };
+  }),
+
+  removeEmail: authedQuery
+    .input(
+      z.object({
+        currentPassword: z.string().min(1, "Informe a senha atual.").max(128),
+        code: z.string().trim().max(32).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      rateLimit(`email-remove:${ctx.user.id}`, 5, 15 * 60_000);
+      if (!ctx.user.email) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Esta conta não possui e-mail associado.",
+        });
+      }
+      if (
+        !ctx.user.passwordHash ||
+        !verifyPassword(input.currentPassword, ctx.user.passwordHash)
+      ) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "A senha atual está incorreta.",
+        });
+      }
+      const mfa = await getDb().query.totpSettings.findFirst({
+        where: and(
+          eq(schema.totpSettings.userId, ctx.user.id),
+          eq(schema.totpSettings.enabled, true),
+        ),
+      });
+      if (mfa) await assertTotpOrBackup(ctx.user.id, input.code ?? "");
+      const oldEmail = ctx.user.email;
+      await getDb().transaction(async tx => {
+        await tx
+          .update(schema.users)
+          .set({ email: null, emailHash: null, emailVerifiedAt: null })
+          .where(eq(schema.users.id, ctx.user.id));
+        await tx.insert(schema.securityEvents).values({
+          userId: ctx.user.id,
+          type: "email_removed",
+          severity: "warning",
+        });
+      });
+      await invalidateEmailTokens(ctx.user.id, "verify_email");
+      await invalidateEmailTokens(ctx.user.id, "email_change");
+      void sendTransactionalEmail({
+        to: oldEmail,
+        template: emailChangedAlertTemplate({ email: oldEmail }),
+      });
+      return { ok: true };
     }),
 
   // ── Dispositivos e sessões ───────────────────────────────────
   sessionsList: authedQuery.query(async ({ ctx }) => {
     const rows = await listActiveSessions(ctx.user.id);
-    const current = await currentSessionIdFromCookie(
+    const current = ctx.sessionId ?? (await currentSessionIdFromCookie(
       ctx.req.headers.get("cookie")
-    );
+    ));
     return rows.map(r => ({ ...r, isCurrent: r.id === current }));
   }),
 
@@ -631,7 +742,9 @@ export const accountRouter = createRouter({
 
   sessionRevokeOthers: authedQuery.mutation(async ({ ctx }) => {
     rateLimit(`sessionRevokeAll:${ctx.user.id}`, 5, 60_000);
-    const current = await currentSessionIdFromCookie(ctx.req.headers.get("cookie"));
+    const current = ctx.sessionId ?? (await currentSessionIdFromCookie(
+      ctx.req.headers.get("cookie")
+    ));
     if (!current) {
       throw new TRPCError({
         code: "UNAUTHORIZED",
@@ -724,10 +837,12 @@ export const accountRouter = createRouter({
       z.object({
         currentPassword: z.string().min(1, "Informe a senha atual."),
         newPassword: z.string().min(6, "A nova senha precisa de pelo menos 6 caracteres.").max(128),
-        disconnectOthers: z.boolean().optional(),
+        disconnectOthers: z.boolean().default(true),
+        code: z.string().trim().max(32).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      rateLimit(`change-password:${ctx.user.id}`, 5, 15 * 60_000);
       if (!ctx.user.passwordHash) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -740,21 +855,41 @@ export const accountRouter = createRouter({
           message: "A senha atual está incorreta.",
         });
       }
-      await getDb()
-        .update(schema.users)
-        .set({ passwordHash: hashPassword(input.newPassword) })
-        .where(eq(schema.users.id, ctx.user.id));
+      const mfa = await getDb().query.totpSettings.findFirst({
+        where: and(
+          eq(schema.totpSettings.userId, ctx.user.id),
+          eq(schema.totpSettings.enabled, true),
+        ),
+      });
+      if (mfa) await assertTotpOrBackup(ctx.user.id, input.code ?? "");
+      await getDb().transaction(async tx => {
+        await tx
+          .update(schema.users)
+          .set({ passwordHash: hashPassword(input.newPassword) })
+          .where(eq(schema.users.id, ctx.user.id));
+        await tx.insert(schema.securityEvents).values({
+          userId: ctx.user.id,
+          type: "password_changed",
+          severity: "warning",
+        });
+      });
       void logSafetyEvent({
         event: "password_changed",
         actorUserId: ctx.user.id,
         targetUserId: ctx.user.id,
       }).catch(() => {});
+      if (ctx.user.email && ctx.user.emailVerifiedAt) {
+        void sendTransactionalEmail({
+          to: ctx.user.email,
+          template: passwordChangedTemplate(),
+        });
+      }
 
       let revokedOthers = 0;
       if (input.disconnectOthers) {
-        const current = await currentSessionIdFromCookie(
+        const current = ctx.sessionId ?? (await currentSessionIdFromCookie(
           ctx.req.headers.get("cookie")
-        );
+        ));
         if (current) {
           const revokedIds = await revokeAllOthers(ctx.user.id, current);
           for (const sid of revokedIds) kickSession(sid);
