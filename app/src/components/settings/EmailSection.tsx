@@ -115,26 +115,28 @@ export function EmailSection() {
               </Button>
             </div>
           )}
-          {pendingEmail && (
-            <p className="text-[11px] text-muted2">
-              Alteração pendente para{" "}
-              <span className="text-[#b7beff]">{pendingEmail}</span> — confirme
-              no novo endereço.
-            </p>
-          )}
         </div>
       )}
 
+      {pendingEmail && (
+        <p className="rounded-lg border border-[#7383FF]/20 bg-[#5865F2]/[0.08] px-3 py-2 text-[11px] leading-4 text-[#b7beff]">
+          Alteração pendente para <strong>{pendingEmail}</strong>. Confira o e-mail
+          e confirme para concluir a alteração.
+        </p>
+      )}
+
       {mode === "idle" ? (
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => setMode("change")}
-          className="h-8 text-xs"
-        >
-          <Pencil className="mr-1 h-3 w-3" aria-hidden />
-          {email ? "Alterar e-mail" : "Adicionar e-mail"}
-        </Button>
+        !pendingEmail && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setMode("change")}
+            className="h-8 text-xs"
+          >
+            <Pencil className="mr-1 h-3 w-3" aria-hidden />
+            {email ? "Alterar e-mail" : "Adicionar e-mail"}
+          </Button>
+        )
       ) : (
         <div className="space-y-3 rounded-lg border border-white/[0.06] bg-chat p-4">
           <div className="space-y-1.5">
@@ -212,8 +214,9 @@ export function EmailSection() {
           </div>
           <p className="flex items-start gap-1.5 text-[11px] leading-4 text-muted2">
             <MailCheck className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-            O novo e-mail só substitui o atual depois de confirmado no novo
-            endereço. Um aviso será enviado ao endereço anterior.
+            {email
+              ? "O novo e-mail só substitui o atual depois de confirmado no novo endereço. Um aviso será enviado ao endereço anterior."
+              : "O novo e-mail será associado somente depois de confirmado no endereço informado. Como esta conta ainda não tem um e-mail anterior, nenhum aviso será enviado para outro endereço."}
           </p>
         </div>
       )}
