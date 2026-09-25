@@ -73,7 +73,7 @@ export function CommunityDetailsDialog({
               <img
                 src={server.iconUrl}
                 alt={`Ícone de ${server.name}`}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain p-2"
               />
             ) : (
               server.name.slice(0, 2).toUpperCase()
