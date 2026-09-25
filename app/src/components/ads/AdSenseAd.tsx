@@ -33,6 +33,10 @@ export function AdSenseAd({
 }: AdSenseAdProps) {
   useEffect(() => {
     if (!import.meta.env.PROD || !slot.trim()) return;
+    // A tag e a mensagem Privacy & messaging do Google são a única fonte de
+    // TCF/Consent Mode. Não criar um gate local de consentimento aqui: isso
+    // poderia divergir do estado oficial e bloquear anúncios não personalizados
+    // que o Google possa servir com segurança.
     ensureAdSenseScript();
     const adsWindow = window as AdSenseWindow;
     if (!Array.isArray(adsWindow.adsbygoogle)) {
