@@ -32,8 +32,6 @@ services:
         sync: false
       - key: RESEND_FROM_EMAIL
         sync: false
-      - key: RESEND_FROM_NAME
-        value: Nexora
       - key: RESEND_LOGO_URL
         sync: false
       - key: PASSKEY_RP_ID
