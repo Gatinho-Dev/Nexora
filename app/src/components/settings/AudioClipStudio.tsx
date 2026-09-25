@@ -16,7 +16,14 @@ const CATEGORIES = [
 export function AudioClipStudio() {
   const [clips, setClips] = useState<
     Array<{ id: string; category: string; name: string; url: string; volume: number }>
-  >([]);
+  >(() => {
+    try {
+      const stored = localStorage.getItem("audio-clips");
+      return stored ? (JSON.parse(stored) as Array<{ id: string; category: string; name: string; url: string; volume: number }>) : [];
+    } catch {
+      return [];
+    }
+  });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -27,13 +34,6 @@ export function AudioClipStudio() {
   });
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("audio-clips");
-      if (stored) setClips(JSON.parse(stored));
-    } catch {}
-  }, []);
 
   useEffect(() => {
     localStorage.setItem("audio-clips", JSON.stringify(clips));

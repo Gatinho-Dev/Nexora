@@ -59,6 +59,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Avatar } from "../Avatar";
+import { PartnerBadge } from "../server/PartnerBadge";
 import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/endpoints";
 
@@ -450,7 +451,7 @@ function OverviewTab({ details }: { details: ServerDetailsDTO }) {
           <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Prévia do convite</p>
           <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1c2029] shadow-[0_18px_50px_rgba(0,0,0,.25)]">
             <div className="h-28 bg-[#252a35]">{banner && <img src={banner} alt="" className="h-full w-full object-cover" />}</div>
-            <div className="relative p-5 pt-11"><div className="absolute -top-8 left-5 grid size-16 place-items-center overflow-hidden rounded-[20px] border-4 border-[#1c2029] bg-[#4654d8] font-bold">{icon ? <img src={icon} alt="" className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}</div><p className="text-base font-semibold text-white">{name || "Servidor sem nome"}</p><p className="mt-1 line-clamp-3 text-sm leading-5 text-slate-400">{description || "Adicione uma descrição para apresentar sua comunidade."}</p><div className="mt-4 flex flex-wrap gap-1.5">{tagsText.split(",").map(tag => tag.trim()).filter(Boolean).slice(0, 5).map(tag => <span key={tag} className="rounded-md bg-white/[0.06] px-2 py-1 text-[11px] text-slate-300">{tag}</span>)}</div><div className="mt-5 flex items-center gap-2 text-xs text-slate-500"><span className="size-2 rounded-full bg-emerald-400" />{details.members.length} membros carregados</div></div>
+            <div className="relative p-5 pt-11"><div className="absolute -top-8 left-5 grid size-16 place-items-center overflow-hidden rounded-[20px] border-4 border-[#1c2029] bg-[#4654d8] font-bold">{icon ? <img src={icon} alt="" className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}</div><div className="flex items-center gap-1.5"><p className="text-base font-semibold text-white">{name || "Servidor sem nome"}</p>{details.server.partnered && <PartnerBadge className="size-4" />}</div><p className="mt-1 line-clamp-3 text-sm leading-5 text-slate-400">{description || "Adicione uma descrição para apresentar sua comunidade."}</p><div className="mt-4 flex flex-wrap gap-1.5">{tagsText.split(",").map(tag => tag.trim()).filter(Boolean).slice(0, 5).map(tag => <span key={tag} className="rounded-md bg-white/[0.06] px-2 py-1 text-[11px] text-slate-300">{tag}</span>)}</div><div className="mt-5 flex items-center gap-2 text-xs text-slate-500"><span className="size-2 rounded-full bg-emerald-400" />{details.members.length} membros carregados</div></div>
           </div>
         </aside>
       </div>
@@ -1011,7 +1012,10 @@ function AccessTab({ details }: { details: ServerDetailsDTO }) {
   const [verificationLevel, setVerificationLevel] = useState(details.server.verificationLevel ?? "none");
   const [rulesEnabled, setRulesEnabled] = useState(details.server.rulesEnabled ?? false);
   const [communityEnabled, setCommunityEnabled] = useState(details.server.communityEnabled ?? false);
+  const [publicDiscovery, setPublicDiscovery] = useState(details.server.publicDiscovery ?? false);
+  const [discoveryCategoryId, setDiscoveryCategoryId] = useState(details.server.discoveryCategoryId ?? null);
   const [rulesText, setRulesText] = useState((details.server.rules ?? []).join("\n"));
+  const categories = trpc.server.discoveryCategories.useQuery();
 
   const parsedRules = rulesText
     .split("\n")
@@ -1022,11 +1026,17 @@ function AccessTab({ details }: { details: ServerDetailsDTO }) {
   const dirty = verificationLevel !== (details.server.verificationLevel ?? "none")
     || rulesEnabled !== (details.server.rulesEnabled ?? false)
     || communityEnabled !== (details.server.communityEnabled ?? false)
+    || publicDiscovery !== (details.server.publicDiscovery ?? false)
+    || discoveryCategoryId !== (details.server.discoveryCategoryId ?? null)
     || rulesText !== (details.server.rules ?? []).join("\n");
   const update = trpc.server.update.useMutation({
     onSuccess: async () => {
-      toast.success("Entrada e regras atualizadas.");
-      await utils.server.get.invalidate({ serverId });
+      toast.success("Entrada, regras e descoberta atualizadas.");
+      await Promise.all([
+        utils.server.get.invalidate({ serverId }),
+        utils.server.discover.invalidate(),
+        utils.server.discoveryCategories.invalidate(),
+      ]);
     },
     onError: error => toast.error(error.message),
   });
@@ -1052,10 +1062,34 @@ function AccessTab({ details }: { details: ServerDetailsDTO }) {
         <div className="mt-2 flex justify-between gap-4 text-[11px] text-slate-500"><span>{parsedRules.length}/20 regras</span>{invalidRule && <span className="text-rose-400">Uma regra ultrapassa 240 caracteres.</span>}</div>
       </SettingsPanel>
       <SettingsPanel title="Modo comunidade" description="Sinaliza que este servidor utiliza recursos públicos e políticas de comunidade do Nexora.">
-        <ToggleRow title="Ativar recursos de comunidade" description="Mantém as configurações de acesso prontas para futuros fluxos de descoberta e onboarding, sem publicar o servidor automaticamente." checked={communityEnabled} onCheckedChange={setCommunityEnabled} />
+        <ToggleRow title="Ativar recursos de comunidade" description="Mantém as configurações de acesso prontas para onboarding e descoberta, sem publicar o servidor automaticamente." checked={communityEnabled} onCheckedChange={setCommunityEnabled} />
+      </SettingsPanel>
+      <SettingsPanel title="Descoberta pública" description="Controle separado da parceria e do destaque editorial.">
+        <ToggleRow title="Aparecer no Explorar" description="Permite que visitantes autenticados encontrem este servidor na central de comunidades." checked={publicDiscovery} onCheckedChange={setPublicDiscovery} />
+        <div className="mt-5 space-y-2">
+          <Label htmlFor="discovery-category">Categoria principal</Label>
+          <Select
+            value={discoveryCategoryId ? String(discoveryCategoryId) : "none"}
+            onValueChange={value => setDiscoveryCategoryId(value === "none" ? null : Number(value))}
+            disabled={!publicDiscovery}
+          >
+            <SelectTrigger id="discovery-category">
+              <SelectValue placeholder="Escolha uma categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sem categoria</SelectItem>
+              {categories.data?.map(category => (
+                <SelectItem key={category.id} value={String(category.id)}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] leading-5 text-slate-500">Você também pode usar tags para Interests específicos.</p>
+        </div>
       </SettingsPanel>
       <div className="flex justify-end">
-        <Button disabled={!dirty || invalidRule || update.isPending} onClick={() => update.mutate({ serverId, verificationLevel, rulesEnabled, rules: parsedRules, communityEnabled })}>{update.isPending ? "Salvando" : "Salvar acesso"}</Button>
+        <Button disabled={!dirty || invalidRule || update.isPending} onClick={() => update.mutate({ serverId, verificationLevel, rulesEnabled, rules: parsedRules, communityEnabled, publicDiscovery, discoveryCategoryId })}>{update.isPending ? "Salvando" : "Salvar acesso"}</Button>
       </div>
     </div>
   );

@@ -173,8 +173,22 @@
     {
       "idx": 21,
       "version": "5",
+      "when": 1789000000000,
+      "tag": "0022_message_delivery_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
       "when": 1789650000000,
       "tag": "0025_email_auth_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1790212976705,
+      "tag": "0026_server_discovery",
       "breakpoints": true
     }
   ]

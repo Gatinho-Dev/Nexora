@@ -8,7 +8,6 @@ import { useAppStore } from "@/store/useAppStore";
 import { Avatar } from "./Avatar";
 import { NexoraAppIcon } from "./NexoraBrand";
 import { CreateServerModal } from "./modals/CreateServerModal";
-import { JoinServerModal } from "./modals/JoinServerModal";
 import {
   HoverCard,
   HoverCardContent,
@@ -24,7 +23,7 @@ import {
   ServerContextMenu,
   type ServerMenuAction,
 } from "./server/ServerContextMenu";
-import { ServerBadge } from "./server/ServerBadge";
+import { PartnerBadge } from "./server/PartnerBadge";
 import {
   ServerActionModalHost,
   type ActiveServerMenuAction,
@@ -38,7 +37,6 @@ export function ServerRail() {
     refetchOnWindowFocus: false,
   });
   const [createOpen, setCreateOpen] = useState(false);
-  const [joinOpen, setJoinOpen] = useState(false);
   const [activeAction, setActiveAction] =
     useState<ActiveServerMenuAction>(null);
   const unreadConversations = useAppStore(state => state.unreadConversations);
@@ -95,7 +93,8 @@ export function ServerRail() {
         <RailTooltip label="Explorar comunidades">
           <RailButton
             label="Explorar comunidades"
-            onClick={() => setJoinOpen(true)}
+            active={location.pathname === "/explore"}
+            onClick={() => navigate("/explore")}
             actionType="explore"
           >
             <Compass className="h-5 w-5" />
@@ -104,7 +103,6 @@ export function ServerRail() {
       </TooltipProvider>
 
       <CreateServerModal open={createOpen} onOpenChange={setCreateOpen} />
-      <JoinServerModal open={joinOpen} onOpenChange={setJoinOpen} />
 
       <ServerActionModalHost
         activeAction={activeAction}
@@ -175,7 +173,7 @@ function ServerRailItem({
       >
         <div className="flex min-w-0 items-center gap-2">
           {server.partnered && (
-            <ServerBadge type="partner" className="h-[18px] w-[18px]" />
+            <PartnerBadge className="h-[18px] w-[18px]" />
           )}
           <p className="truncate text-sm font-semibold">{server.name}</p>
         </div>

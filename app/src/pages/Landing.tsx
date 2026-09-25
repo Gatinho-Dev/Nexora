@@ -384,6 +384,7 @@ export default function Landing() {
                 {link.label}
               </a>
             ))}
+            <Link to="/explore">Explorar</Link>
             <Link to="/cli">CLI</Link>
           </nav>
 
@@ -418,6 +419,9 @@ export default function Landing() {
                   {link.label}
                 </a>
               ))}
+              <Link to="/explore" onClick={() => setMenuOpen(false)}>
+                Explorar
+              </Link>
               <Link to="/cli">Nexora CLI</Link>
             </nav>
             <div className="landing-mobile-actions">
