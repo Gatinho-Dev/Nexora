@@ -18,6 +18,11 @@ export function NotificationsBell({
   const unread = trpc.notification.unreadCount.useQuery(undefined, {
     refetchInterval: 60_000,
   });
+  // Comunicados oficiais não passam por `notifications`; o unread vem direto do
+  // backend de avisos para que um aviso de segurança sempre conte no sino.
+  const officialUnread = trpc.official.unreadCount.useQuery(undefined, {
+    refetchInterval: 60_000,
+  });
   const friends = trpc.friend.list.useQuery(undefined, {
     staleTime: 30_000,
   });
@@ -26,7 +31,10 @@ export function NotificationsBell({
       friend =>
         friend.status === "PENDING" && friend.direction === "incoming",
     ).length ?? 0;
-  const count = Math.max(unread.data?.count ?? 0, incomingRequests);
+  const count = Math.max(
+    (unread.data?.count ?? 0) + (officialUnread.data?.count ?? 0),
+    incomingRequests,
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

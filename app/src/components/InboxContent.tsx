@@ -7,6 +7,7 @@ import {
   CheckCheck,
   Inbox,
   MessageSquare,
+  Megaphone,
   Reply,
   UserPlus,
   X,
@@ -17,7 +18,7 @@ import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { Avatar } from "@/components/Avatar";
 import { cn } from "@/lib/utils";
-import { notificationCopy } from "@/lib/notificationDisplay";
+import { notificationCopy, OFFICIAL_NOTIFICATION_TYPE, toOfficialNotification } from "@/lib/notificationDisplay";
 
 type InboxTab = "unread" | "mentions";
 
@@ -27,6 +28,8 @@ function NotificationTypeIcon({ type }: { type: string }) {
   if (type === "reply") return <Reply className={className} />;
   if (type === "friend_request") return <UserPlus className={className} />;
   if (type === "dm") return <MessageSquare className={className} />;
+  if (type === OFFICIAL_NOTIFICATION_TYPE)
+    return <Megaphone className={className} />;
   return <BellRing className={className} />;
 }
 
@@ -52,6 +55,9 @@ export function InboxContent({
   const utils = trpc.useUtils();
   const [tab, setTab] = useState<InboxTab>("unread");
   const list = trpc.notification.list.useQuery();
+  // Os comunicados oficiais entram na Caixa de entrada no topo, sem gravar uma
+  // linha por usuário: a leitura deles já é rastreada pelo backend de avisos.
+  const official = trpc.official.list.useQuery({ limit: 20 });
   const friends = trpc.friend.list.useQuery();
   const clearUnreadConversation = useAppStore(
     state => state.clearUnreadConversation,
@@ -67,19 +73,27 @@ export function InboxContent({
   );
   const items = useMemo(() => {
     const notifications = list.data ?? [];
-    return tab === "mentions"
-      ? notifications.filter(notification => notification.type === "mention")
-      : notifications.filter(
-          notification =>
-            !notification.isRead &&
-            !(
-              notification.type === "friend_request" &&
-              incomingRequests.some(
-                request => request.user.id === notification.actor?.id,
-              )
-            ),
-        );
-  }, [incomingRequests, list.data, tab]);
+    const base =
+      tab === "mentions"
+        ? notifications.filter(notification => notification.type === "mention")
+        : notifications.filter(
+            notification =>
+              !notification.isRead &&
+              !(
+                notification.type === "friend_request" &&
+                incomingRequests.some(
+                  request => request.user.id === notification.actor?.id,
+                )
+              ),
+          );
+    // A aba de menções é só de menções; as demais mostram o aviso oficial novo
+    // antes de tudo, porque é a única entrada que não expira sozinha.
+    if (tab === "mentions") return base;
+    const officialItems = (official.data?.items ?? [])
+      .filter(announcement => !announcement.isRead)
+      .map(toOfficialNotification);
+    return [...officialItems, ...base];
+  }, [incomingRequests, list.data, official.data, tab]);
 
   const markRead = trpc.notification.markRead.useMutation({
     onSuccess: async () => {
@@ -124,6 +138,13 @@ export function InboxContent({
   };
 
   const openNotification = (notification: NotificationDTO) => {
+    // Comunicados oficiais não têm linha em `notifications`: a página da
+    // conversa é quem os marca como lidos.
+    if (notification.type === OFFICIAL_NOTIFICATION_TYPE) {
+      navigate("/channels/@me/official");
+      onClose();
+      return;
+    }
     if (!notification.isRead) markRead.mutate({ id: notification.id });
     if (notification.conversationId) {
       clearUnreadConversation(notification.conversationId);

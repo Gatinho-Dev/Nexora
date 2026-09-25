@@ -8,7 +8,7 @@ import { soundManager } from "@/lib/sound";
 import { toast } from "sonner";
 import { queryClient } from "@/providers/trpc";
 import type { WSServerEvent } from "@contracts/types";
-import { showNotificationPopup } from "@/lib/notificationDisplay";
+import { showNotificationPopup, toOfficialNotification } from "@/lib/notificationDisplay";
 
 /** Connects the realtime socket and routes events to stores/queries. */
 export function useRealtime(myUserId: number | undefined) {
@@ -306,6 +306,11 @@ export function useRealtime(myUserId: number | undefined) {
           utils.official.list.invalidate();
           utils.official.unreadCount.invalidate();
           soundManager.play("notification");
+          // Aviso oficial é a única notificação que entra sempre na frente: o
+          // popup aparece no topo da pilha e a conversa sobe na lista de DMs.
+          showNotificationPopup(
+            toOfficialNotification({ ...event.announcement, isRead: false }),
+          );
           if (
             typeof Notification !== "undefined" &&
             Notification.permission === "granted" &&
