@@ -26,10 +26,16 @@ import { assertTotpOrBackup } from "../services/secondFactor";
 import { decryptSecret, encryptSecret } from "../lib/crypto";
 import { issueSession } from "../accountRouter";
 import { getClientIp } from "../lib/ip";
+import { assertCanInteract } from "../services/accountSafety";
 import { friendlyDeviceName, parseUserAgent } from "../auth/userAgent";
 import { rateLimit } from "../utils/rateLimit";
 import { RateLimits } from "@contracts/constants";
 import { sendToUsers } from "../realtime";
+import {
+  sendTransactionalEmail,
+  twoFactorDisabledTemplate,
+  twoFactorEnabledTemplate,
+} from "../services/email";
 
 const QR_TTL_MS = 2 * 60_000;
 
@@ -81,15 +87,18 @@ export const securityFeaturesRouter = createRouter({
 
   finishPasskeyRegistration: authedQuery
     .input(z.object({ challengeId: z.string().uuid(), name: z.string().min(1).max(80), response: z.unknown() }))
-    .mutation(async ({ ctx, input }) => finishPasskeyRegistration({
-      user: ctx.user,
-      challengeId: input.challengeId,
-      name: input.name,
-      response: input.response as RegistrationResponseJSON,
-    })),
+    .mutation(async ({ ctx, input }) => {
+      rateLimit(`passkey-register-finish:${ctx.user.id}`, RateLimits.securityChallenge.limit, RateLimits.securityChallenge.windowMs);
+      return finishPasskeyRegistration({
+        user: ctx.user,
+        challengeId: input.challengeId,
+        name: input.name,
+        response: input.response as RegistrationResponseJSON,
+      });
+    }),
 
   beginPasskeyLogin: publicQuery
-    .input(z.object({ username: z.string().min(2).max(32) }))
+    .input(z.object({ username: z.string().min(2).max(320) }))
     .mutation(async ({ ctx, input }) => {
       const ip = getClientIp(ctx.req.headers) ?? "unknown";
       rateLimit(`passkey-login:${input.username.toLowerCase()}`, RateLimits.securityChallenge.limit, RateLimits.securityChallenge.windowMs);
@@ -100,10 +109,16 @@ export const securityFeaturesRouter = createRouter({
   finishPasskeyLogin: publicQuery
     .input(z.object({ challengeId: z.string().uuid(), response: z.unknown() }))
     .mutation(async ({ ctx, input }) => {
+      rateLimit(
+        `passkey-login-finish:${getClientIp(ctx.req.headers) ?? "unknown"}`,
+        RateLimits.securityChallenge.limit,
+        RateLimits.securityChallenge.windowMs,
+      );
       const user = await finishPasskeyAuthentication({
         challengeId: input.challengeId,
         response: input.response as AuthenticationResponseJSON,
       });
+      await assertCanInteract(user.id);
       await getDb().update(schema.users).set({ status: "online", lastSignInAt: new Date() }).where(eq(schema.users.id, user.id));
       await issueSession(ctx, user);
       await getDb().insert(schema.securityEvents).values({
@@ -118,6 +133,7 @@ export const securityFeaturesRouter = createRouter({
   deletePasskey: authedQuery
     .input(z.object({ id: z.number(), verificationCode: z.string().min(6).max(32).optional() }))
     .mutation(async ({ ctx, input }) => {
+      rateLimit(`passkey-delete:${ctx.user.id}`, RateLimits.securityChallenge.limit, RateLimits.securityChallenge.windowMs);
       // If 2FA is enabled, the helper rejects a missing code. Accounts without
       // TOTP keep the existing authenticated-session behavior.
       await assertTotpOrBackup(ctx.user.id, input.verificationCode ?? "");
@@ -150,6 +166,7 @@ export const securityFeaturesRouter = createRouter({
   enableTotp: authedQuery
     .input(z.object({ code: z.string().regex(/^\d{6}$/) }))
     .mutation(async ({ ctx, input }) => {
+      rateLimit(`totp-enable:${ctx.user.id}`, RateLimits.securityChallenge.limit, RateLimits.securityChallenge.windowMs);
       const row = await getDb().query.totpSettings.findFirst({ where: eq(schema.totpSettings.userId, ctx.user.id) });
       const secret = row ? decryptSecret(row.encryptedSecret) : null;
       if (!row || !secret || row.enabled) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Inicie a configuração do autenticador novamente." });
@@ -160,12 +177,16 @@ export const securityFeaturesRouter = createRouter({
       await getDb().insert(schema.backupCodes).values(codes.map(code => ({ userId: ctx.user.id, codeHash: hashBackupCode(code) })));
       await getDb().update(schema.totpSettings).set({ enabled: true, verifiedAt: new Date(), lastUsedStep: verified.step }).where(eq(schema.totpSettings.userId, ctx.user.id));
       await getDb().insert(schema.securityEvents).values({ userId: ctx.user.id, type: "totp_enabled", severity: "info" });
+      if (ctx.user.email && ctx.user.emailVerifiedAt) {
+        void sendTransactionalEmail({ to: ctx.user.email, template: twoFactorEnabledTemplate() });
+      }
       return { backupCodes: codes };
     }),
 
   regenerateBackupCodes: authedQuery
     .input(z.object({ code: z.string().min(6).max(32) }))
     .mutation(async ({ ctx, input }) => {
+      rateLimit(`backup-codes:${ctx.user.id}`, RateLimits.securityChallenge.limit, RateLimits.securityChallenge.windowMs);
       await assertTotpOrBackup(ctx.user.id, input.code);
       const codes = generateBackupCodes();
       await getDb().delete(schema.backupCodes).where(eq(schema.backupCodes.userId, ctx.user.id));
@@ -177,10 +198,14 @@ export const securityFeaturesRouter = createRouter({
   disableTotp: authedQuery
     .input(z.object({ code: z.string().min(6).max(32) }))
     .mutation(async ({ ctx, input }) => {
+      rateLimit(`totp-disable:${ctx.user.id}`, RateLimits.securityChallenge.limit, RateLimits.securityChallenge.windowMs);
       await assertTotpOrBackup(ctx.user.id, input.code);
       await getDb().delete(schema.backupCodes).where(eq(schema.backupCodes.userId, ctx.user.id));
       await getDb().delete(schema.totpSettings).where(eq(schema.totpSettings.userId, ctx.user.id));
       await getDb().insert(schema.securityEvents).values({ userId: ctx.user.id, type: "totp_disabled", severity: "warning" });
+      if (ctx.user.email && ctx.user.emailVerifiedAt) {
+        void sendTransactionalEmail({ to: ctx.user.email, template: twoFactorDisabledTemplate() });
+      }
       return { ok: true };
     }),
 
@@ -296,6 +321,7 @@ export const securityFeaturesRouter = createRouter({
       if (((result as unknown as [{ affectedRows?: number }])[0]?.affectedRows ?? 0) !== 1) return { status: "CONSUMED" as const, authenticated: false };
       const user = await getDb().query.users.findFirst({ where: eq(schema.users.id, row.approvedByUserId) });
       if (!user) throw new TRPCError({ code: "UNAUTHORIZED" });
+      await assertCanInteract(user.id);
       await issueSession(ctx, user);
       return { status: "CONSUMED" as const, authenticated: true };
     }),

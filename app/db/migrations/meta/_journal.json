@@ -197,6 +197,13 @@
       "when": 1790299200000,
       "tag": "0027_platform_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1790385600000,
+      "tag": "0028_auth_security_reconciliation",
+      "breakpoints": true
     }
   ]
 }

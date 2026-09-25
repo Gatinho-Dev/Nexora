@@ -1,18 +1,25 @@
 import * as cookie from "cookie";
 import { Session } from "@contracts/constants";
 import { getSessionCookieOptions } from "./lib/cookies";
-import { createRouter, authedQuery } from "./middleware";
+import { createRouter, publicQuery, authedQuery } from "./middleware";
+import { revokeSession } from "./auth/sessions";
+import { getDb } from "./queries/connection";
+import * as schema from "@db/schema";
+import { kickSession } from "./realtime";
+import { toPublicUser } from "./utils/permissions";
 
 export const authRouter = createRouter({
-  me: authedQuery.query((opts) => {
-    // Never expose the password hash to the client
-    const { passwordHash, emailHash, ...safeUser } = opts.ctx.user;
-    void passwordHash; // intentionally unused
-    void emailHash; // never expose the lookup hash
-    return safeUser;
-  }),
-  logout: authedQuery.mutation(async ({ ctx }) => {
+  me: authedQuery.query((opts) => toPublicUser(opts.ctx.user)),
+  logout: publicQuery.mutation(async ({ ctx }) => {
     const opts = getSessionCookieOptions(ctx.req.headers);
+    if (ctx.user && ctx.sessionId) {
+      await revokeSession(ctx.sessionId, ctx.user.id);
+      kickSession(ctx.sessionId);
+      void getDb()
+        .insert(schema.securityEvents)
+        .values({ userId: ctx.user.id, type: "logout", severity: "info" })
+        .catch(() => {});
+    }
     ctx.resHeaders.append(
       "set-cookie",
       cookie.serialize(Session.cookieName, "", {

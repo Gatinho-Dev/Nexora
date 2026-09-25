@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { trpc } from "@/providers/trpc";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/PasswordField";
+import { LoginAlternatives } from "@/components/auth/LoginAlternatives";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
 import { MigrationBanner } from "@/components/MigrationBanner";
 import { Seo } from "@/lib/seo";
@@ -58,6 +59,11 @@ export default function Login() {
       setServerError(friendlyError(error.message, error.data?.code));
     },
   });
+
+  const handleAuthenticated = useCallback(async () => {
+    await utils.auth.me.invalidate();
+    navigate("/channels/@me", { replace: true });
+  }, [navigate, utils]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -131,7 +137,7 @@ export default function Login() {
                       name="identifier"
                       ref={identifierRef}
                       autoComplete="username"
-                      inputMode="email"
+                       inputMode="text"
                       value={identifier}
                       onChange={event => {
                         setIdentifier(event.target.value);
@@ -221,11 +227,22 @@ export default function Login() {
                       {fieldErrors.code}
                     </p>
                   )}
-                  <p className="text-[11px] leading-4 text-muted2">
-                    Use o código de 6 dígitos do seu app autenticador ou um código
-                    de recuperação.
-                  </p>
-                </div>
+                   <p className="text-[11px] leading-4 text-muted2">
+                     Use o código de 6 dígitos do seu app autenticador ou um código
+                     de recuperação.
+                   </p>
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setNeedsTwoFactor(false);
+                       setCode("");
+                       setServerError(null);
+                     }}
+                     className="text-xs font-medium text-[#00A8FC] hover:text-[#4dbaff] hover:underline"
+                   >
+                     Usar outra conta
+                   </button>
+                 </div>
               )}
 
               {serverError && (
@@ -252,9 +269,16 @@ export default function Login() {
                     ? "Verificar e entrar"
                     : "Entrar"}
               </Button>
-            </form>
+             </form>
 
-            <p className="mt-6 text-sm text-muted2">
+             {!needsTwoFactor && (
+               <LoginAlternatives
+                 username={identifier}
+                 onAuthenticated={handleAuthenticated}
+               />
+             )}
+
+             <p className="mt-6 text-sm text-muted2">
               Não tem uma conta?{" "}
               <Link
                 to="/register"

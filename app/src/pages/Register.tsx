@@ -53,10 +53,10 @@ export default function Register() {
   const [verificationPending, setVerificationPending] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !verificationPending) {
       navigate("/channels/@me", { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, verificationPending]);
 
   // Debounce de 400ms antes de consultar a disponibilidade do username.
   useEffect(() => {

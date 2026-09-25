@@ -49,11 +49,11 @@ export default function ForgotPassword() {
                 <h1 className="mt-4 text-xl font-bold text-white">
                   Verifique seu e-mail
                 </h1>
-                <p className="mt-2 text-sm leading-6 text-muted2">
-                  Se houver uma conta Nexora associada a{" "}
-                  <strong className="text-white">{email.trim()}</strong>, você
-                  receberá um e-mail com as instruções para redefinir a senha.
-                </p>
+                 <p className="mt-2 text-sm leading-6 text-muted2">
+                   Se houver uma conta Nexora associada a{" "}
+                   <strong className="text-white">{email.trim()}</strong>, processaremos
+                   as instruções de recuperação pelo e-mail.
+                 </p>
                 <p className="mt-3 text-xs text-muted2">
                   Não recebeu? Verifique a caixa de spam ou{" "}
                   <button
@@ -80,9 +80,12 @@ export default function ForgotPassword() {
                   <h1 className="text-2xl font-bold tracking-[-0.02em] text-white">
                     Esqueci minha senha
                   </h1>
-                  <p className="mt-1.5 text-sm text-muted2">
-                    Informe o e-mail da sua conta e enviaremos as instruções.
-                  </p>
+                   <p className="mt-1.5 text-sm text-muted2">
+                     Informe o e-mail da sua conta e enviaremos as instruções.
+                   </p>
+                   <p className="mt-2 text-[11px] leading-4 text-muted2">
+                     Contas sem e-mail cadastrado não podem usar a recuperação por e-mail; adicione um e-mail nas configurações da conta.
+                   </p>
                 </div>
 
                 <form onSubmit={handleSubmit} noValidate className="space-y-4">
