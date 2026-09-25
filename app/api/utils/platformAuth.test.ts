@@ -35,6 +35,7 @@ const baseUser: User = {
   favoriteGameNote: null,
   status: "offline",
   role: "user",
+  platformOwner: false,
   readReceipts: true,
   createdAt: new Date(),
   updatedAt: new Date(),
@@ -77,6 +78,16 @@ describe("platform authority", () => {
     const persistedAdmin = { ...baseUser, role: "admin" as const };
     expect(getPlatformAuthority(persistedAdmin)).toBe("owner");
     expect(isPlatformOwner(persistedAdmin)).toBe(true);
+  });
+
+  it("recognizes the persisted platform owner before the admin role", () => {
+    const persistedOwner = {
+      ...baseUser,
+      role: "admin" as const,
+      platformOwner: true,
+    };
+    expect(getPlatformAuthority(persistedOwner)).toBe("owner");
+    expect(isPlatformOwner(persistedOwner)).toBe(true);
   });
 
   it("recognizes an environment admin and the persisted admin role", () => {

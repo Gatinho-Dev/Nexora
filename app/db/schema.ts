@@ -77,6 +77,7 @@ export const users = mysqlTable("users", {
     .default("offline")
     .notNull(),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  platformOwner: boolean("platformOwner").default(false).notNull(),
   /** Privacidade: quando false, o usuário não aparece em recibos "Visto por". */
   readReceipts: boolean("readReceipts").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

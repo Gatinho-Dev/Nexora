@@ -877,7 +877,7 @@ export const adminRouter = createRouter({
       return { ok: true as const };
     }),
 
-  setServerPartnership: adminQuery
+  setServerPartnership: ownerQuery
     .input(
       z.object({
         serverId: z.number().int().positive(),
