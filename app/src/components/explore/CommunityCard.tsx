@@ -36,24 +36,26 @@ export function CommunityCard({
         className
       )}
     >
-      <div className="relative h-32 overflow-hidden bg-gradient-to-br from-primary/35 via-card to-sidebar">
-        {hasBanner ? (
-          <img
-            src={server.bannerUrl!}
-            alt={`Banner de ${server.name}`}
-            loading="lazy"
-            decoding="async"
-            onError={() => setBannerFailed(true)}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-          />
-        ) : (
-          <div className="absolute inset-0 opacity-60" aria-hidden>
-            <div className="absolute -right-10 -top-16 size-40 rounded-full bg-primary/25 blur-3xl" />
-            <div className="absolute -bottom-20 -left-8 size-36 rounded-full bg-primary/15 blur-3xl" />
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-card via-card/10 to-transparent" />
-        <div className="absolute bottom-[-28px] left-4 flex size-14 items-center justify-center overflow-hidden rounded-2xl border-4 border-card bg-sidebar text-sm font-bold text-foreground shadow-lg">
+      <div className="relative h-32 bg-gradient-to-br from-primary/35 via-card to-sidebar">
+        <div className="absolute inset-0 overflow-hidden">
+          {hasBanner ? (
+            <img
+              src={server.bannerUrl!}
+              alt={`Banner de ${server.name}`}
+              loading="lazy"
+              decoding="async"
+              onError={() => setBannerFailed(true)}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            />
+          ) : (
+            <div className="absolute inset-0 opacity-60" aria-hidden>
+              <div className="absolute -right-10 -top-16 size-40 rounded-full bg-primary/25 blur-3xl" />
+              <div className="absolute -bottom-20 -left-8 size-36 rounded-full bg-primary/15 blur-3xl" />
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/10 to-transparent" />
+        </div>
+        <div className="absolute bottom-[-28px] left-4 z-10 flex size-14 items-center justify-center overflow-hidden rounded-2xl border-4 border-card bg-sidebar text-sm font-bold text-foreground shadow-lg">
           {server.iconUrl && !iconFailed ? (
             <img
               src={server.iconUrl}
@@ -61,7 +63,7 @@ export function CommunityCard({
               loading="lazy"
               decoding="async"
               onError={() => setIconFailed(true)}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain p-1"
             />
           ) : (
             server.name.slice(0, 2).toUpperCase()
