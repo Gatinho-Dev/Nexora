@@ -766,11 +766,55 @@ export const accountRouter = createRouter({
         customStatus: z.string().max(128).optional(),
         profileTheme: z.enum(["cobalt", "rose", "mint", "sunset", "midnight"]).optional(),
         profileAccent: colorSchema.optional(),
-        nameFont: z.enum(["sans", "serif", "rounded", "mono", "display", "handwritten"]).optional(),
-        nameEffect: z.enum(["solid", "gradient", "neon", "outline", "pop", "prism"]).optional(),
+        // Espelha `NAME_FONTS` / `NAME_EFFECTS` de `src/lib/nameStyle.ts`, que é
+        // quem monta a interface. Mantido literal para o bundle da API não
+        // depender do código do frontend; os dois precisam crescer juntos.
+        nameFont: z
+          .enum([
+            "sans",
+            "rounded",
+            "serif",
+            "slab",
+            "display",
+            "mono",
+            "pixel",
+            "wide",
+            "condensed",
+            "stencil",
+            "handwritten",
+            "script",
+          ])
+          .optional(),
+        nameEffect: z
+          .enum([
+            "solid",
+            "gradient",
+            "neon",
+            "sketch",
+            "outline",
+            "pop",
+            "gummy",
+            "prism",
+          ])
+          .optional(),
         nameColorA: colorSchema.optional(),
         nameColorB: colorSchema.optional(),
-        avatarDecoration: z.enum(["none", "sparkles", "crown", "orbit"]).optional(),
+        // Espelha o catálogo de src/lib/avatarDecorations.ts (a API não importa
+        // src/, então a lista é replicada aqui como literais).
+        avatarDecoration: z
+          .enum([
+            "none",
+            "sparkles",
+            "crown",
+            "orbit",
+            "rainbow",
+            "catEars",
+            "headphones",
+            "bloom",
+            "pixels",
+            "leaves",
+          ])
+          .optional(),
         profileEffect: z.enum(["none", "aurora", "stardust", "bubbles"]).optional(),
         profileGames: z.array(profileGameSchema).max(20).optional(),
         profileWishlist: z.array(profileGameSchema).max(20).optional(),
