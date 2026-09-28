@@ -6,6 +6,12 @@ import path from "path";
 
 type App = Hono<{ Bindings: HttpBindings }>;
 
+// Linha canônica do AdSense. O mesmo conteúdo fica em public/ads.txt e em
+// src/lib/adsense.ts; aqui o servidor nunca depende do arquivo em disco.
+const ADSENSE_ADS_TXT_LINES = [
+  "google.com, pub-9433688755768515, DIRECT, f08c47fec0942fa0",
+];
+
 export function serveStaticFiles(app: App) {
   const moduleDirectory = import.meta.dirname;
   const isSourceModule = moduleDirectory.endsWith(
@@ -36,6 +42,14 @@ export function serveStaticFiles(app: App) {
     ) {
       c.res.headers.set("Cache-Control", "no-cache");
     }
+  });
+
+  // ads.txt precisa responder 200 com text/plain na raiz do domínio, em
+  // qualquer esquema/subdomínio, e não pode virar o fallback do SPA.
+  app.get("/ads.txt", (c) => {
+    c.header("Content-Type", "text/plain; charset=utf-8");
+    c.header("Cache-Control", "public, max-age=3600");
+    return c.body(`${ADSENSE_ADS_TXT_LINES.join("\n")}\n`);
   });
 
   app.use("*", serveStatic({ root: "./dist/public" }));
