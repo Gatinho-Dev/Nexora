@@ -633,10 +633,32 @@ export type SafetyAiStatusDTO = {
 
 // ── WebSocket protocol ────────────────────────────────────────
 // Client → Server
+/**
+ * Atividade publicada pelo player em `/cider`.
+ *
+ * O Cider é a única origem de atividade que **não** vem de OAuth: a página já
+ * está autenticada pela sessão e empurra a faixa quando ela muda. `activity`
+ * com `title: null` significa "parei de ouvir" e limpa o registro.
+ */
+export type CiderActivityPayload = {
+  title: string | null;
+  details?: string | null;
+  state?: string | null;
+  largeImageUrl?: string | null;
+  largeImageText?: string | null;
+  smallImageUrl?: string | null;
+  smallImageText?: string | null;
+  /** Epoch ms. `startedAt`/`endsAt` desenham a barra de progresso. */
+  startedAt?: number | null;
+  endsAt?: number | null;
+  externalUrl?: string | null;
+};
+
 export type WSClientEvent =
   | { t: "ping" }
   | { t: "typing"; channelId?: number; conversationId?: number }
   | { t: "presence"; status: UserStatus }
+  | { t: "cider:now-playing"; activity: CiderActivityPayload }
   | { t: "group:update"; conversationId: number }
   | { t: "stage:hand"; channelId?: number; raised: boolean }
   | {

@@ -168,6 +168,17 @@ export const env = {
     Number(process.env.EXTERNAL_PRESENCE_INTERVAL_MS ?? 60_000),
   ),
 
+  // ── Cider (player web em /cider) ─────────────────────────────────
+  // O Cider roda no navegador do próprio usuário e publica "tocando agora"
+  // pelo WebSocket. Não há OAuth, chave nem chamada de terceiros: o servidor
+  // só valida o que chega. Desligado por padrão para não expor nada em
+  // instalações que não queiram o player.
+  ciderPlayerEnabled: process.env.CIDER_PLAYER_ENABLED !== "false",
+  ciderActivityIntervalMs: Math.max(
+    5_000,
+    Number(process.env.CIDER_ACTIVITY_INTERVAL_MS ?? 20_000)
+  ),
+
   // ── Monitoramento de uptime (UptimeRobot) ──────────────────────
   // Somente servidor: a chave nunca é exposta ao cliente.
   uptimeRobotApiKey: process.env.UPTIMEROBOT_API_KEY ?? "",

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { RichPresenceActivityDTO } from "@contracts/types";
 import {
+  Disc3,
   ExternalLink,
   Gamepad2,
   Github,
@@ -16,6 +17,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   twitch: "Twitch",
   github: "GitHub",
   roblox: "Roblox",
+  cider: "Cider",
   nexora: "Nexora",
 };
 
@@ -30,6 +32,7 @@ function ProviderIcon({
   if (provider === "twitch") return <Radio className={className} />;
   if (provider === "github") return <Github className={className} />;
   if (provider === "youtube") return <Youtube className={className} />;
+  if (provider === "cider") return <Disc3 className={className} />;
   return <Gamepad2 className={className} />;
 }
 

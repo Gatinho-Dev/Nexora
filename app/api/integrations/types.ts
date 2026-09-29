@@ -1,8 +1,9 @@
 export type IntegrationProviderId =
-  "spotify" | "youtube" | "twitch" | "github" | "roblox";
+  "spotify" | "youtube" | "twitch" | "github" | "roblox" | "cider";
 
 export type ProviderCapabilities = {
-  accountConnection: true;
+  /** `false` em providers sem OAuth: não há botão "Conectar" para mostrar. */
+  accountConnection: boolean;
   livePresence: boolean;
   profileLink: boolean;
   artwork: boolean;
