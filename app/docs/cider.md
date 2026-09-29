@@ -95,6 +95,36 @@ CIDER_ACTIVITY_INTERVAL_MS=20000   # piso: 5000
 
 Desligado com `false`, o player some e a atividade é recusada.
 
+## Interface
+
+A tela do `/cider` replica o **Cider 2 desktop**: mesma paleta e tokens
+(`src/cider/styles/tokens.css`, copiado do desktop), mesma casca — sidebar,
+topbar com busca, coluna principal, playbar fixa e painel de letras.
+
+O motor de reprodução vive **fora do roteador**, em `CiderProvider`, montado
+no `App.tsx`. É o que faz o áudio continuar quando o usuário sai do player para
+o Nexora: trocar de rota desmontaria o `<iframe>` junto. O `CiderMiniBar` é só
+uma janela para o mesmo motor — aparece fora de `/cider`, não cria um segundo
+player e não tem fila própria.
+
+## Letras em tempo real
+
+O mesmo motor do desktop, portado sem alteração de comportamento:
+
+- **tempo real é a posição do player**, nunca um cronômetro próprio. Pausa
+  congela, seek recalcula, mudança de velocidade não afeta;
+- **destaque por palavra** com cor interpolada, `text-shadow` em halo duplo,
+  escala e blur — a palavra "acende" conforme é cantada em vez de piscar;
+- **tempo por palavra estimado** quando a fonte só manda o tempo da linha (o
+  caso do LRCLIB), pesando palavras curtas, longas e pontuação. A interface
+  avisa que a estimativa é do Cider 2, e não da fonte;
+- **preset `karaoke`**, o mais próximo do efeito do Apple Music: brilho 0.8 e
+  decaimento de 1.2 s, para a palavra cantada continuar acesa depois de passar.
+
+A interpolação de posição vive em `LyricsTimeline`, uma fonte externa lida com
+`useSyncExternalStore`. Não é detalhe de estilo: o player reporta a posição 4×
+por segundo, e sem interpolar o destaque daria saltos visíveis de 250 ms.
+
 ## Limitações conhecidas
 
 - **O áudio não passa pelo equalizador.** O navegador não dá acesso ao buffer do

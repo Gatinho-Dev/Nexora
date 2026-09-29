@@ -35,7 +35,6 @@ export interface PublishOptions {
   /** Posição atual, em ms, para derivar `startedAt`. */
   positionMs: number;
   durationMs: number;
-  volume: number;
 }
 
 /**
@@ -92,8 +91,21 @@ function send(activity: NonNullable<
   }
 }
 
-/** Zera o estado local — usado ao desmontar a página. */
+/** Zera o estado local — usado ao desmontar o provider inteiro. */
 export function resetNowPlaying(): void {
+  lastVideoId = null;
+  lastPublishAt = 0;
+}
+
+/**
+ * Limpa a presença e zera o throttle.
+ *
+ * Separate de `resetNowPlaying` porque a página chama isto ao desmontar: sair
+ * de `/cider` **não** deve interromper o áudio (o mini-player continua), mas a
+ * faixa para de ser anunciada a cada 20 s para quem não está mais aqui.
+ */
+export function releaseNowPlaying(): void {
+  if (lastVideoId !== null) send({ title: null });
   lastVideoId = null;
   lastPublishAt = 0;
 }
