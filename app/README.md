@@ -2,6 +2,11 @@
 
 Nexora é uma plataforma de comunicação em tempo real com comunidades, canais de texto, mensagens diretas, presença, chamadas de voz e vídeo, compartilhamento de tela e uploads.
 
+## Recursos
+
+- **Cider** — player de música em `/cider`, que roda no navegador e publica a
+  faixa atual como presença na conta. Ver [`docs/cider.md`](docs/cider.md).
+
 ## Arquitetura
 
 - Frontend: React 19, TypeScript, Vite e Tailwind CSS.

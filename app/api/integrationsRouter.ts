@@ -30,6 +30,9 @@ const providerSchema = z.enum([
   "twitch",
   "github",
   "roblox",
+  // O Cider não tem OAuth: aparece na UI e no estado, mas o player em /cider
+  // é que publica a atividade, pelo WebSocket.
+  "cider",
 ]);
 
 async function blockedBetweenUsers(a: number, b: number) {

@@ -65,6 +65,7 @@ export function serveStaticFiles(app: App) {
     "/explore",
     "/cli",
     "/cli/login",
+    "/cider",
     "/invite",
     "/privacy",
     "/terms",

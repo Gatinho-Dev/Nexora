@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import {
+  Disc3,
   ExternalLink,
   Gamepad2,
   Github,
@@ -22,7 +23,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-type ProviderId = "spotify" | "youtube" | "twitch" | "github" | "roblox";
+type ProviderId =
+  "spotify" | "youtube" | "twitch" | "github" | "roblox" | "cider";
+
+/**
+ * O Cider não tem OAuth: a atividade vem do player em `/cider`, que já está
+ * logado na sessão. O botão "Conectar" dele abre o player, não um consentimento.
+ */
+const PUSH_PROVIDERS: ReadonlySet<string> = new Set(["cider"]);
 
 const DESCRIPTIONS: Record<ProviderId, string> = {
   spotify:
@@ -34,6 +42,8 @@ const DESCRIPTIONS: Record<ProviderId, string> = {
     "Exiba seu perfil público sem solicitar acesso a repositórios privados.",
   roblox:
     "Mostre sua conta e a experiência em que você está jogando quando a API permitir.",
+  cider:
+    "O player em /cider publica a faixa que está tocando direto nesta sessão, sem chave e sem OAuth.",
 };
 
 function ProviderIcon({ provider }: { provider: ProviderId }) {
@@ -41,6 +51,7 @@ function ProviderIcon({ provider }: { provider: ProviderId }) {
   if (provider === "youtube") return <Youtube className="h-5 w-5" />;
   if (provider === "twitch") return <Radio className="h-5 w-5" />;
   if (provider === "github") return <Github className="h-5 w-5" />;
+  if (provider === "cider") return <Disc3 className="h-5 w-5" />;
   return <Gamepad2 className="h-5 w-5" />;
 }
 
@@ -184,16 +195,29 @@ export function ConnectionsSection() {
               </div>
 
               {!provider.connected ? (
-                <Button
-                  size="sm"
-                  disabled={!provider.configured || !provider.enabled}
-                  onClick={() => {
-                    window.location.href = connectionUrl(id);
-                  }}
-                  className="mt-4 h-9 w-full bg-[#5865F2] text-xs hover:bg-[#4752C4]"
-                >
-                  Conectar {provider.label}
-                </Button>
+                PUSH_PROVIDERS.has(id) ? (
+                  <Button
+                    size="sm"
+                    disabled={!provider.configured || !provider.enabled}
+                    onClick={() => {
+                      window.location.href = "/cider";
+                    }}
+                    className="mt-4 h-9 w-full bg-[#5865F2] text-xs hover:bg-[#4752C4]"
+                  >
+                    Abrir o Cider
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={!provider.configured || !provider.enabled}
+                    onClick={() => {
+                      window.location.href = connectionUrl(id);
+                    }}
+                    className="mt-4 h-9 w-full bg-[#5865F2] text-xs hover:bg-[#4752C4]"
+                  >
+                    Conectar {provider.label}
+                  </Button>
+                )
               ) : (
                 <div className="mt-4 space-y-3 border-t border-white/[0.08] pt-4">
                   {provider.account?.needsReauth && (

@@ -38,6 +38,14 @@ import {
   toPublic,
 } from "./voice/companion";
 import { insertSystemMessage, userName } from "./services/groupService";
+import {
+  CiderActivitySchema,
+  normalizeCiderActivity,
+} from "./integrations/providers/cider";
+import {
+  clearActivity,
+  persistActivity,
+} from "./integrations/presenceService";
 import { activeServerTimeout } from "./services/serverModeration";
 
 // ── Connection registry ───────────────────────────────────────
@@ -906,6 +914,48 @@ async function voiceStateUpdate(
   await broadcastVoiceParticipants(roomKey);
 }
 
+// ── Cider (player em /cider) ──────────────────────────────────
+/**
+ * Atividade publicada pelo player web em `/cider`.
+ *
+ * Três defesas, porque aqui um cliente autenticado manda dados que viram
+ * presença visível para os contatos dele:
+ *
+ * 1. **rate limit** por usuário — a página só reenvia quando a faixa muda ou a
+ *    cada `CIDER_ACTIVITY_INTERVAL_MS`, mas um loop apertado não pode virar
+ *    enxurrada de escrita no banco nem de broadcast para todos os amigos;
+ * 2. **zod estrito** — o objeto é revalidado aqui; o tipo do TS é só sugestão
+ *    e não protege nada em runtime;
+ * 3. **allowlist de host da capa** — `normalizeCiderActivity` recusa URL que
+ *    não seja `https` de um host de imagem do YouTube, para que o card não vire
+ *    um rastreador apontando o cartão para lugar nenhum.
+ */
+const lastCiderPush = new Map<number, number>();
+
+async function ciderNowPlaying(
+  client: Client,
+  raw: unknown
+): Promise<void> {
+  if (!env.ciderPlayerEnabled) return;
+
+  const now = Date.now();
+  const previous = lastCiderPush.get(client.userId) ?? 0;
+  if (now - previous < env.ciderActivityIntervalMs) return;
+  lastCiderPush.set(client.userId, now);
+
+  const parsed = CiderActivitySchema.safeParse(raw);
+  if (!parsed.success) return;
+
+  const { clear, activity } = normalizeCiderActivity(parsed.data);
+  if (clear) {
+    // Limpar apaga o registro, então vale a pena exigir o mesmo intervalo.
+    await clearActivity(client.userId, "cider");
+    return;
+  }
+  if (!activity) return;
+  await persistActivity(client.userId, activity);
+}
+
 // ── Message handling ──────────────────────────────────────────
 async function handleEvent(client: Client, event: WSClientEvent) {
   switch (event.t) {
@@ -952,6 +1002,9 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       await broadcastPresence(client.userId);
       break;
     }
+    case "cider:now-playing":
+      await ciderNowPlaying(client, event.activity);
+      break;
     case "voice:join":
       await voiceJoin(client, event);
       break;
@@ -1233,7 +1286,7 @@ export function attachRealtime(server: HttpServer) {
       const client: Client = { ws, userId, sid: sid ?? null, alive: true };
       addClient(client);
       send(client, { t: "ready", userId });
-      await broadcastPresence(userId);
+          await broadcastPresence(userId);
       await sendInitialVoiceSummaries(userId);
 
       ws.on("pong", () => {
