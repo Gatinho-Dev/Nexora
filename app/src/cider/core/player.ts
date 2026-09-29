@@ -136,6 +136,8 @@ export type PlayerPhase = "idle" | "loading" | "playing" | "paused" | "error";
 
 export interface PlayerHooks {
   onPhaseChange?(phase: PlayerPhase, error: string | null): void;
+  /** Alias enxuto usado pelo motor, que só quer fase e erro. */
+  onPhase?(phase: PlayerPhase, error: string | null): void;
   /** Fim de faixa: a fila deve avançar. */
   onEnded?(): void;
   onAutoplayBlocked?(): void;
@@ -174,12 +176,24 @@ export class YouTubePlayer {
 
   private ticker: number | null = null;
 
-  private readonly hooks: PlayerHooks;
+  private hooks: PlayerHooks;
 
   /** `true` depois do primeiro gesto: a partir daí o autoplay é permitido. */
   private unlocked = false;
 
   constructor(hooks: PlayerHooks = {}) {
+    this.hooks = hooks;
+  }
+
+  /**
+   * Troca (ou define) os callbacks depois da construção.
+   *
+   * Existe porque o motor é criado antes do componente: ele precisa montar o
+   * player num elemento que só existe depois do primeiro render. Sem isto, os
+   * eventos de estado — fim de faixa, posição, autoplay — não chegariam a
+   * ninguém.
+   */
+  onCallbacks(hooks: PlayerHooks): void {
     this.hooks = hooks;
   }
 
@@ -316,6 +330,7 @@ export class YouTubePlayer {
   private setPhase(phase: PlayerPhase, error: string | null): void {
     this.error = error;
     this.hooks.onPhaseChange?.(phase, error);
+    this.hooks.onPhase?.(phase, error);
   }
 
   pause(): void {

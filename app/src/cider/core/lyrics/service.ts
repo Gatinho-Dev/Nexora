@@ -12,6 +12,7 @@
  */
 
 import { parseLrc, parsePlain } from "./parser";
+import { estimateWords } from "./words";
 import type { LyricsLine } from "./types";
 
 const LRCLIB = "https://lrclib.net/api";
@@ -33,8 +34,15 @@ export interface LyricsResult {
   lines: LyricsLine[];
   /** `true` quando a fonte tinha marcação de tempo, e não só texto. */
   synced: boolean;
+  /**
+   * `true` quando **toda** linha ganhou tempos estimados por palavra. O LRCLIB
+   * só marca o tempo da linha, então isso é o normal — e a interface avisa,
+   * em vez de fingir que a fonte mandou karaokê.
+   */
+  estimated: boolean;
   source: "lrclib";
   provider: string;
+  attribution: string;
 }
 
 export async function fetchLyrics(query: LyricsQuery): Promise<LyricsResult | null> {
@@ -120,10 +128,24 @@ function toResult(track: LrclibTrack | null): LyricsResult | null {
     ? parseLrc(track.syncedLyrics)
     : { lines: parsePlain(track.plainLyrics ?? ""), synced: false };
   if (parsed.lines.length === 0) return null;
+
+  // A fonte quase sempre manda tempo só por linha; o destaque por palavra vem
+  // de estimativa, e a interface precisa poder dizer isso com honestidade.
+  const lines = estimateWords(parsed.lines);
+  const estimated =
+    lines.length > 0 &&
+    lines.every(line => {
+      const words = line.words;
+      if (!words || words.length === 0) return true;
+      return words.every(word => word.estimated);
+    });
+
   return {
-    lines: parsed.lines,
+    lines,
     synced: parsed.synced,
+    estimated,
     source: "lrclib",
     provider: track.artistName,
+    attribution: `Letra por ${track.artistName} · LRCLIB`,
   };
 }

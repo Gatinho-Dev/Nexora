@@ -2,6 +2,7 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { useMemo, useState } from "react";
 import {
   Compass,
+  Disc3,
   Inbox,
   Plus,
   Search,
@@ -173,6 +174,12 @@ export function DMSidebar({
           active={requestsActive}
           badge={requests.length + spam.length}
           onClick={() => navigate("/channels/@me/requests")}
+        />
+        <PrivateNavItem
+          icon={<Disc3 />}
+          label="Cider"
+          active={location.pathname.startsWith("/cider")}
+          onClick={() => navigate("/cider")}
         />
         {authority.data?.canAccess && (
           <PrivateNavItem

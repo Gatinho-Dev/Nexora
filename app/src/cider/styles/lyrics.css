@@ -1,0 +1,281 @@
+/*
+ * Cider 2 — letras.
+ *
+ * A maior parte das cores, tamanhos e intensidades vem das variáveis definidas
+ * por `lyricsCssVariables()` (`--lyrics-*`), então os presets (Elegant, Karaoke,
+ * Glow, Cinema…) e o editor de estilo mandam aqui sem que este arquivo precise
+ * conhecer cada opção.
+ *
+ * Regra de animação: nada de trocar classe CSS no meio da música — o estado
+ * visual de cada palavra é interpolado por estilo inline (`AnimatedWord`). Aqui
+ * só definimos a estrutura, a hierarquia entre linhas e as transições de linha.
+ */
+
+.lyrics-scope {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+}
+
+.lyrics-scope[data-variant="fullscreen"],
+.lyrics-scope[data-variant="immersive"] {
+  gap: 18px;
+}
+
+.lyrics-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: var(--cider-text-xs);
+  color: var(--cider-text-muted);
+}
+
+.lyrics-lines {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--cider-space-3) * 1.4);
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  max-height: 100%;
+  padding: 24px 4px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 14%,
+    #000 82%,
+    transparent 100%
+  );
+}
+
+.lyrics-lines[data-align="center"] {
+  text-align: center;
+}
+
+.lyrics-lines[data-align="right"] {
+  text-align: right;
+}
+
+.lyrics-spacer {
+  flex: none;
+  height: 28%;
+}
+
+.lyrics-line {
+  margin: 0;
+  font-family: var(--lyrics-family, var(--cider-font));
+  font-size: var(--lyrics-size, 34px);
+  font-weight: var(--lyrics-weight, 600);
+  line-height: var(--lyrics-line-height, 1.35);
+  letter-spacing: var(--lyrics-letter-spacing, 0em);
+  color: var(--cider-text);
+  opacity: var(--lyrics-inactive-opacity, 0.4);
+  filter: blur(calc(var(--lyrics-blur, 1px) * 0.5));
+  transform: translate3d(0, 0, 0);
+  transform-origin: left center;
+  transition:
+    opacity calc(var(--lyrics-decay, 400ms) * 0.6) var(--cider-ease-out),
+    filter calc(var(--lyrics-decay, 400ms) * 0.6) var(--cider-ease-out),
+    transform var(--cider-duration-slow) var(--cider-ease-out);
+  cursor: default;
+}
+
+.lyrics-line[title] {
+  cursor: pointer;
+}
+
+.lyrics-line[data-state="upcoming"] {
+  opacity: calc(var(--lyrics-inactive-opacity, 0.4) * 0.75);
+}
+
+.lyrics-line[data-state="approaching"] {
+  opacity: calc(var(--lyrics-inactive-opacity, 0.4) + 0.18);
+  filter: blur(calc(var(--lyrics-blur, 1px) * 0.4));
+  transform: translate3d(0, calc(var(--lyrics-slide, 6px) * 0.4), 0);
+}
+
+.lyrics-line[data-state="active"] {
+  opacity: 1;
+  filter: none;
+  transform: translate3d(0, 0, 0) scale(1.005);
+  text-shadow: 0 2px calc(var(--lyrics-shadow, 0.35) * 14px) rgba(0, 0, 0, 0.42);
+}
+
+.lyrics-line[data-state="past"] {
+  opacity: calc(var(--lyrics-inactive-opacity, 0.4) + 0.22);
+  filter: blur(calc(var(--lyrics-blur, 1px) * 0.2));
+}
+
+.lyrics-line[data-instrumental="true"] {
+  font-style: italic;
+  color: var(--cider-text-faint);
+}
+
+.lyrics-word {
+  display: inline-block;
+  white-space: pre;
+}
+
+/* Quando o tempo é estimado (a fonte só manda o tempo da linha), deixamos isso
+   visível — de forma discreta, sem poluir a leitura. */
+.lyrics-word[data-estimated="true"] {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--cider-text-faint) 35%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
+
+.lyrics-punctuation {
+  opacity: 0.85;
+}
+
+.lyrics-plainline {
+  position: relative;
+  display: inline-block;
+}
+
+/* Máscara de progresso para letras sem tempo por palavra: o texto “acende” da
+   esquerda para a direita conforme a linha é cantada. */
+.progress-mask {
+  position: absolute;
+  inset: 0 auto 0 0;
+  overflow: hidden;
+  white-space: pre;
+  color: var(--cider-accent);
+  pointer-events: none;
+  transition: width 120ms linear;
+}
+
+.lyrics-plain {
+  margin: 0;
+  padding: 4px 2px;
+  font-family: var(--lyrics-family, var(--cider-font));
+  font-size: calc(var(--lyrics-size, 34px) * 0.5);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--cider-text-muted);
+  overflow-y: auto;
+}
+
+.lyrics-footer {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ *
+ * Estados de carregamento e indisponibilidade                          *
+ * ------------------------------------------------------------------ */
+
+.lyrics-skeleton {
+  display: grid;
+  gap: 10px;
+}
+
+.lyrics-unavailable {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 18px;
+  align-items: start;
+  padding: 18px;
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-lg);
+  background:
+    radial-gradient(
+      100% 120% at 0% 0%,
+      color-mix(in srgb, var(--cider-accent) calc(var(--lyrics-bg-intensity, 0.4) * 22%), transparent) 0%,
+      transparent 62%
+    ),
+    color-mix(in srgb, var(--cider-bg-elevated) 88%, transparent);
+}
+
+.lyrics-unavailable-art {
+  width: 120px;
+  height: 120px;
+  border-radius: var(--cider-radius-md);
+  background-size: cover;
+  background-position: center;
+  box-shadow: var(--cider-shadow-lg);
+}
+
+/* ------------------------------------------------------------------ *
+ * Tela cheia                                                          *
+ * ------------------------------------------------------------------ */
+
+.lyrics-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--cider-bg);
+}
+
+.lyrics-fullscreen-scrim {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(calc(28px + var(--lyrics-bg-intensity, 0.4) * 40px)) saturate(1.2);
+  transform: scale(1.15);
+  opacity: calc(0.18 + var(--lyrics-bg-intensity, 0.4) * 0.5);
+  pointer-events: none;
+}
+
+.lyrics-fullscreen-head,
+.lyrics-fullscreen-foot {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 22px;
+}
+
+.lyrics-fullscreen-body {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 24px;
+  padding: 0 22px 12px;
+  min-height: 0;
+}
+
+.lyrics-fullscreen-body .lyrics-scope {
+  min-height: 0;
+}
+
+@media (max-width: 1024px) {
+  .lyrics-fullscreen-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lyrics-unavailable {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Redução de movimento: nada de slide, blur ou escala. */
+@media (prefers-reduced-motion: reduce) {
+  .lyrics-line,
+  .lyrics-word {
+    transition: none !important;
+    filter: none !important;
+    transform: none !important;
+  }
+
+  .lyrics-lines {
+    scroll-behavior: auto;
+  }
+}
+
+:root[data-reduce-motion="true"] .lyrics-line,
+:root[data-reduce-motion="true"] .lyrics-word {
+  transition: none !important;
+  filter: none !important;
+  transform: none !important;
+}

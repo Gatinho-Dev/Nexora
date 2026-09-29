@@ -1,0 +1,214 @@
+/*
+ * Cider 2 — tokens de design.
+ *
+ * Referência de estilo: interfaces desktop premium contemporâneas (minimalismo,
+ * bastante respiro, vidro fosco discreto, hierarquia tipográfica clara).
+ * A identidade visual é própria do projeto: paleta "cidra" (âmbar → magenta →
+ * violeta), sem qualquer elemento de marcas de terceiros.
+ *
+ * Todas as variáveis têm prefixo `--cider-` para que o editor de temas possa
+ * sobrescrevê-las em tempo de execução (ver src/customization/themes.ts).
+ */
+
+:root {
+  /* --- Paleta base (tema escuro: padrão do aplicativo) ------------------- */
+  --cider-bg: #0b0a12;
+  --cider-bg-elevated: #15131f;
+  --cider-bg-sunken: #06050b;
+  --cider-surface: rgba(255, 255, 255, 0.06);
+  --cider-surface-strong: rgba(255, 255, 255, 0.1);
+  --cider-surface-hover: rgba(255, 255, 255, 0.08);
+  --cider-border: rgba(255, 255, 255, 0.12);
+  --cider-border-strong: rgba(255, 255, 255, 0.2);
+  --cider-text: #f4f4f7;
+  --cider-text-muted: #9a9aa8;
+  --cider-text-faint: #6b6b78;
+  --cider-accent: #ff5f6d;
+  --cider-accent-secondary: #7b5cff;
+  --cider-success: #22d3a6;
+  --cider-warning: #ffb547;
+  --cider-danger: #ff6b6b;
+  --cider-on-accent: #ffffff;
+
+  /* Gradientes da identidade */
+  --cider-gradient-brand: linear-gradient(135deg, #ffb547 0%, #ff5f6d 45%, #7b5cff 100%);
+  --cider-gradient-soft: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--cider-accent) 18%, transparent) 0%,
+    transparent 60%
+  );
+
+  /* --- Tipografia ------------------------------------------------------- */
+  --cider-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+    Roboto, "Helvetica Neue", "Noto Sans", "Ubuntu", sans-serif;
+  --cider-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Ubuntu Mono", monospace;
+  --cider-font-scale: 1;
+
+  --cider-text-xs: calc(11px * var(--cider-font-scale));
+  --cider-text-sm: calc(12.5px * var(--cider-font-scale));
+  --cider-text-base: calc(14px * var(--cider-font-scale));
+  --cider-text-md: calc(16px * var(--cider-font-scale));
+  --cider-text-lg: calc(20px * var(--cider-font-scale));
+  --cider-text-xl: calc(26px * var(--cider-font-scale));
+  --cider-text-2xl: calc(34px * var(--cider-font-scale));
+  --cider-text-3xl: clamp(38px, 4.4vw + 1rem, 64px);
+
+  --cider-weight-regular: 400;
+  --cider-weight-medium: 500;
+  --cider-weight-semibold: 600;
+  --cider-weight-bold: 700;
+
+  --cider-leading-tight: 1.15;
+  --cider-leading-normal: 1.5;
+  --cider-tracking-tight: -0.02em;
+  --cider-tracking-wide: 0.08em;
+
+  /* --- Espaçamento (grade de 8px) --------------------------------------- */
+  --cider-space-1: 4px;
+  --cider-space-2: 8px;
+  --cider-space-3: 12px;
+  --cider-space-4: 16px;
+  --cider-space-5: 20px;
+  --cider-space-6: 24px;
+  --cider-space-8: 32px;
+  --cider-space-10: 40px;
+  --cider-space-12: 48px;
+  --cider-space-16: 64px;
+  --cider-space-scale: 1;
+
+  /* --- Raios, sombras e efeitos ----------------------------------------- */
+  --cider-radius-sm: calc(8px * var(--cider-radius-scale, 1));
+  --cider-radius-md: calc(12px * var(--cider-radius-scale, 1));
+  --cider-radius-lg: calc(16px * var(--cider-radius-scale, 1));
+  --cider-radius-xl: calc(20px * var(--cider-radius-scale, 1));
+  --cider-radius-2xl: calc(24px * var(--cider-radius-scale, 1));
+  --cider-radius-full: 9999px;
+
+  --cider-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28), 0 1px 4px rgba(0, 0, 0, 0.2);
+  --cider-shadow-md: 0 6px 18px rgba(0, 0, 0, 0.32);
+  --cider-shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.42);
+  --cider-shadow-xl: 0 32px 72px rgba(0, 0, 0, 0.5);
+  --cider-shadow-glow: 0 0 0 1px color-mix(in srgb, var(--cider-accent) 40%, transparent),
+    0 12px 40px color-mix(in srgb, var(--cider-accent) 24%, transparent);
+
+  --cider-blur: 28px;
+  --cider-glass-opacity: 0.72;
+  --cider-border-opacity: 0.12;
+
+  /* --- Movimento -------------------------------------------------------- */
+  --cider-duration-fast: 140ms;
+  --cider-duration-base: 280ms;
+  --cider-duration-slow: 480ms;
+  --cider-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --cider-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --cider-ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* --- Métricas de layout (personalizáveis) ----------------------------- */
+  --cider-sidebar-width: 248px;
+  --cider-topbar-height: 56px;
+  --cider-playbar-height: 84px;
+  --cider-cover-size: 56px;
+  --cider-density: 1;
+
+  color-scheme: dark;
+}
+
+/* --- Tema claro --------------------------------------------------------- */
+:root[data-theme-mode="light"] {
+  --cider-bg: #f7f7fa;
+  --cider-bg-elevated: #ffffff;
+  --cider-bg-sunken: #ececf1;
+  --cider-surface: rgba(0, 0, 0, 0.035);
+  --cider-surface-strong: rgba(0, 0, 0, 0.06);
+  --cider-surface-hover: rgba(0, 0, 0, 0.05);
+  --cider-border: rgba(0, 0, 0, 0.1);
+  --cider-border-strong: rgba(0, 0, 0, 0.18);
+  --cider-text: #17161d;
+  --cider-text-muted: #5f5e6c;
+  --cider-text-faint: #8b8a96;
+  --cider-accent: #e0414f;
+  --cider-accent-secondary: #5a3fd6;
+  --cider-on-accent: #ffffff;
+
+  --cider-shadow-sm: 0 1px 2px rgba(15, 15, 25, 0.06), 0 1px 4px rgba(15, 15, 25, 0.05);
+  --cider-shadow-md: 0 6px 18px rgba(15, 15, 25, 0.08);
+  --cider-shadow-lg: 0 18px 44px rgba(15, 15, 25, 0.1);
+  --cider-shadow-xl: 0 32px 64px rgba(15, 15, 25, 0.14);
+
+  color-scheme: light;
+}
+
+/* --- Modos de densidade ------------------------------------------------- */
+:root[data-density="compact"] {
+  --cider-density: 0.86;
+  --cider-playbar-height: 72px;
+  --cider-topbar-height: 48px;
+}
+
+:root[data-density="spacious"] {
+  --cider-density: 1.14;
+  --cider-playbar-height: 96px;
+  --cider-topbar-height: 64px;
+}
+
+/* --- Acessibilidade e desempenho --------------------------------------- */
+:root[data-animations="reduced"] {
+  --cider-duration-fast: 60ms;
+  --cider-duration-base: 90ms;
+  --cider-duration-slow: 120ms;
+}
+
+:root[data-animations="off"] {
+  --cider-duration-fast: 0ms;
+  --cider-duration-base: 0ms;
+  --cider-duration-slow: 0ms;
+}
+
+:root[data-reduce-motion="true"] {
+  --cider-duration-fast: 0ms;
+  --cider-duration-base: 0ms;
+  --cider-duration-slow: 0ms;
+}
+
+/* Modo econômico: desliga efeitos caros globalmente. */
+:root[data-performance="economy"] {
+  --cider-blur: 0px;
+  --cider-glass-opacity: 1;
+  --cider-shadow-lg: var(--cider-shadow-sm);
+  --cider-shadow-xl: var(--cider-shadow-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --cider-duration-fast: 0ms;
+    --cider-duration-base: 0ms;
+    --cider-duration-slow: 0ms;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --cider-border: color-mix(in srgb, currentColor 45%, transparent);
+    --cider-text-muted: var(--cider-text);
+  }
+}
+
+
+/* ------------------------------------------------------------------ *
+ * Ajustes para o Cider dentro da Nexora                              *
+ * ------------------------------------------------------------------ *
+ * O player vive dentro do app da Nexora (Tailwind + shadcn), então escopa
+ * o fundo e as superficies do desktop para nao vazar no shell: sem isso o
+ * `.cider-app` herdaria o fundo e as bordas do layout onde ele monta.
+ */
+.cider-app {
+  /* Zera as cores que o Tailwind da Nexora define globalmente para que os
+     tokens do Cider mandem de verdade. */
+  --background: var(--cider-bg);
+  --foreground: var(--cider-text);
+  --border: var(--cider-border);
+  color: var(--cider-text);
+  background: var(--cider-bg);
+  font-family: var(--cider-font);
+  isolation: isolate;
+}
