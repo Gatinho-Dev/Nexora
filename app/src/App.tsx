@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route, useParams } from "react-router";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { CiderProvider } from "@/cider/provider";
 
 const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
@@ -15,6 +16,9 @@ const CliPage = lazy(() => import("./pages/CliPage"));
 const CliReleasesPage = lazy(() => import("./pages/CliReleasesPage"));
 // Player do Cider: rota de tela cheia, fora do AppLayout, como o /cli.
 const CiderPage = lazy(() => import("./pages/CiderPage"));
+const CiderMiniBar = lazy(() =>
+  import("@/cider/CiderMiniBar").then(module => ({ default: module.CiderMiniBar }))
+);
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AppLayout = lazy(() =>
   import("./pages/AppLayout").then(module => ({ default: module.AppLayout }))
@@ -103,9 +107,20 @@ function Deferred({ children }: { children: ReactNode }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
+/**
+ * Raiz das rotas.
+ *
+ * O `CiderProvider` fica **aqui**, acima do `<Routes>`, e não dentro de
+ * `/cider`: o `<iframe>` do YouTube precisa continuar tocando quando o usuário
+ * sai do player para o Nexora, e trocar de rota desmontaria o player junto.
+ * O `CiderMiniBar` é a janela para o mesmo motor — ele só aparece fora de
+ * `/cider` e não cria um segundo player.
+ */
 export default function App() {
   return (
-    <Routes>
+    <CiderProvider>
+      <CiderMiniBar />
+      <Routes>
       <Route
         path="/"
         element={
@@ -354,14 +369,15 @@ export default function App() {
           }
         />
       </Route>
-      <Route
-        path="*"
-        element={
-          <Deferred>
-            <NotFound />
-          </Deferred>
-        }
-      />
-    </Routes>
+        <Route
+          path="*"
+          element={
+            <Deferred>
+              <NotFound />
+            </Deferred>
+          }
+        />
+      </Routes>
+    </CiderProvider>
   );
 }
