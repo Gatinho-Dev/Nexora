@@ -13,6 +13,8 @@ const MobileCameraPage = lazy(() => import("./pages/MobileCameraPage"));
 const CliLoginPage = lazy(() => import("./pages/CliLoginPage"));
 const CliPage = lazy(() => import("./pages/CliPage"));
 const CliReleasesPage = lazy(() => import("./pages/CliReleasesPage"));
+// Player do Cider: rota de tela cheia, fora do AppLayout, como o /cli.
+const CiderPage = lazy(() => import("./pages/CiderPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AppLayout = lazy(() =>
   import("./pages/AppLayout").then(module => ({ default: module.AppLayout }))
@@ -173,6 +175,14 @@ export default function App() {
         element={
           <Deferred>
             <CliPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/cider"
+        element={
+          <Deferred>
+            <CiderPage />
           </Deferred>
         }
       />
