@@ -1,16 +1,20 @@
 /**
  * Mini-player do Cider, para fora de `/cider`.
  *
- * Existe por um motivo concreto: o `<iframe>` do YouTube continua tocando
- * quando o usuário sai do player para o Nexora, mas sem nenhum controle na tela
- * ele não teria como pausar. Esta barra é só uma janela para o mesmo motor —
- * ela não cria player novo, não duplica estado e não tem fila própria.
+ * Existe por um motivo concreto: o `<iframe>` continua tocando quando o usuário
+ * sai do player para o Nexora (ele mora no dock, acima do roteador), mas sem
+ * nenhum controle na tela não haveria como pausar.
+ *
+ * Ele divide o canto inferior direito com o dock do player (que é invisível, veja
+ * `AudioDock.tsx`) e é a única superfície de controle fora de `/cider`. Sem
+ * faixa carregada não aparece: um player vazio não tem o que controlar.
  */
 
-import { useCider } from "./useCider";
 import {
   Disc3,
   ExternalLink,
+  Heart,
+  ListMusic,
   Pause,
   Play,
   SkipBack,
@@ -19,6 +23,11 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
+
+import { useCider } from "./useCider";
+import { useCiderLibrary } from "./library";
+import { useCiderUi } from "./ui";
+import { toggleFavoriteWithToast } from "./play";
 
 function formatTime(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -29,141 +38,112 @@ export function CiderMiniBar() {
   const { state, engine } = useCider();
   const navigate = useNavigate();
   const location = useLocation();
+  const favorites = useCiderLibrary((store) => store.favorites);
+  const togglePanel = useCiderUi((store) => store.togglePanel);
 
   // Dentro do próprio Cider a playbar já faz esse papel.
   if (location.pathname.startsWith("/cider")) return null;
   if (!state.track) return null;
 
-  const progress =
-    state.durationMs > 0 ? (state.positionMs / state.durationMs) * 100 : 0;
+  const track = state.track;
+  const playing = state.phase === "playing";
+  const progress = state.durationMs > 0 ? (state.positionMs / state.durationMs) * 100 : 0;
+  const muted = state.muted || state.volume === 0;
+  const isFavorite = favorites.some((item) => item.videoId === track.videoId);
 
   return (
     <div className="cider-minibar" role="region" aria-label="Cider tocando">
-      <button
-        type="button"
-        onClick={() => navigate("/cider")}
-        style={{
-          border: 0,
-          background: "transparent",
-          padding: 0,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          minWidth: 0,
-          flex: 1,
-          textAlign: "left",
-        }}
-        title="Abrir o Cider"
-      >
-        {state.track.artworkUrl ? (
-          <img
-            className="cider-minibar-art"
-            src={state.track.artworkUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-          />
+      <div className="cider-minibar-art">
+        {track.artworkUrl ? (
+          <img src={track.artworkUrl} alt="" referrerPolicy="no-referrer" />
         ) : (
-          <div className="cider-minibar-art">
-            <Disc3 size={18} />
-          </div>
+          <Disc3 size={20} />
         )}
-        <div className="cider-minibar-meta">
-          <div
-            style={{
-              fontSize: "var(--cider-text-base)",
-              fontWeight: "var(--cider-weight-semibold)",
-              color: "var(--cider-text)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {state.track.title}
-          </div>
-          <div
-            style={{
-              fontSize: "var(--cider-text-xs)",
-              color: "var(--cider-text-muted)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {state.track.artist || state.track.channelName}
-          </div>
-          <div className="cider-minibar-progress">
-            <span style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 10,
-              color: "var(--cider-text-faint)",
-              fontVariantNumeric: "tabular-nums",
-              marginTop: 2,
-            }}
-          >
-            <span>{formatTime(state.positionMs)}</span>
-            <span>{formatTime(state.durationMs)}</span>
-          </div>
-        </div>
-      </button>
+      </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 4, flex: "none" }}>
+      <div className="cider-minibar-meta">
         <button
-          className="cider-btn"
-          data-size="icon"
-          data-variant="ghost"
+          type="button"
+          className="cider-minibar-title"
+          onClick={() => navigate("/cider/tocando-agora")}
+          title="Abrir o Cider"
+        >
+          {track.title}
+        </button>
+        <span className="cider-minibar-artist">
+          {track.artist || track.channelName}
+          {state.error ? ` · ${state.error}` : ""}
+        </span>
+        <div className="cider-minibar-progress">
+          <span style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
+        </div>
+        <div className="cider-minibar-times">
+          <span>{formatTime(state.positionMs)}</span>
+          <span>{formatTime(state.durationMs || track.durationMs)}</span>
+        </div>
+      </div>
+
+      <div className="cider-minibar-actions">
+        <button
+          type="button"
+          className="btn icon"
           aria-label="Anterior"
+          title="Anterior"
           onClick={engine.previous}
         >
           <SkipBack size={16} />
         </button>
         <button
-          className="cider-btn"
-          data-size="icon"
-          data-variant="primary"
-          aria-label={state.phase === "playing" ? "Pausar" : "Reproduzir"}
+          type="button"
+          className="btn icon play"
+          aria-label={playing ? "Pausar" : "Reproduzir"}
+          title={playing ? "Pausar" : "Reproduzir"}
           onClick={engine.toggle}
         >
-          {state.phase === "playing" ? (
-            <Pause size={16} />
-          ) : (
-            <Play size={16} />
-          )}
+          {playing ? <Pause size={16} /> : <Play size={16} />}
         </button>
-        <button
-          className="cider-btn"
-          data-size="icon"
-          data-variant="ghost"
-          aria-label="Próxima"
-          onClick={engine.next}
-        >
+        <button type="button" className="btn icon" aria-label="Próxima" title="Próxima" onClick={engine.next}>
           <SkipForward size={16} />
         </button>
         <button
-          className="cider-btn"
-          data-size="icon"
-          data-variant="ghost"
-          aria-label={state.muted ? "Ativar som" : "Silenciar"}
+          type="button"
+          className="btn icon"
+          aria-label={isFavorite ? "Remover dos favoritos" : "Favoritar"}
+          title={isFavorite ? "Remover dos favoritos" : "Favoritar"}
+          aria-pressed={isFavorite}
+          onClick={() => toggleFavoriteWithToast(track)}
+          data-on={isFavorite ? "true" : "false"}
+        >
+          <Heart size={15} />
+        </button>
+        <button
+          type="button"
+          className="btn icon"
+          aria-label="Abrir a fila"
+          title="Abrir a fila"
+          onClick={() => {
+            togglePanel("queue");
+            navigate("/cider");
+          }}
+        >
+          <ListMusic size={15} />
+        </button>
+        <button
+          type="button"
+          className="btn icon"
+          aria-label={muted ? "Ativar som" : "Silenciar"}
+          title={muted ? "Ativar som" : "Silenciar"}
           onClick={engine.toggleMute}
         >
-          {state.muted || state.volume === 0 ? (
-            <VolumeX size={16} />
-          ) : (
-            <Volume2 size={16} />
-          )}
+          {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
         </button>
         <a
-          href={state.track.url}
+          className="btn icon"
+          href={track.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="cider-btn"
-          data-size="icon"
-          data-variant="ghost"
           aria-label="Abrir no YouTube"
+          title="Abrir no YouTube"
         >
           <ExternalLink size={15} />
         </a>

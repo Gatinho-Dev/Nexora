@@ -62,7 +62,11 @@ const BASE: LyricsStyle = {
   fontSize: 34,
   fontWeight: 600,
   lineHeight: 1.35,
-  letterSpacing: -0.2,
+  // `-0.02em` (e não `-0.2em`): a décima parte disso, a 34 px, encolhe 0,7 px
+  // por caractere e a letra fica inteiriça, sem espaço entre as palavras — era
+  // o defeito visível das letras "toda junto". É o mesmo valor de
+  // `--cider-tracking-tight`, usado nos títulos do aplicativo.
+  letterSpacing: -0.02,
   visibleLines: 7,
   alignment: "left",
   wordGlow: 0.6,

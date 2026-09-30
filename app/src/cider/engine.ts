@@ -43,6 +43,24 @@ export interface CiderEngine {
   playTrack(track: CiderTrack, list: CiderTrack[]): void;
   playIndex(index: number): void;
   playQueue(queue: CiderTrack[], startIndex?: number): void;
+  /**
+   * Acrescenta faixas ao fim da fila atual.
+   *
+   * Não há "mover para a fila" no player do YouTube: o engine é quem entrega a
+   * lista completa ao player a cada troca de índice, então crescer a fila aqui
+   * é suficiente e **não interrompe** a faixa que está tocando.
+   */
+  appendQueue(tracks: CiderTrack[]): void;
+  /**
+   * Tira uma faixa da fila pela posição.
+   *
+   * A faixa que está tocando não pode ser removida: o player do YouTube já
+   * está carregando aquele id, e "remover o que toca" sem trocar de faixa
+   * deixaria a interface dizendo que nada toca enquanto o áudio continua.
+   */
+  removeFromQueue(index: number): void;
+  /** Limpa a fila e para a reprodução. */
+  clearQueue(): void;
   toggle(): void;
   next(): void;
   previous(): void;
@@ -159,6 +177,18 @@ export function createCiderEngine(): CiderEngine {
     playIndex(startIndex);
   }
 
+  function appendQueue(tracks: CiderTrack[]) {
+    if (tracks.length === 0) return;
+    // Um embaralhamento antigo não pode esconder as faixas novas: a ordem é
+    // recalculada na próxima troca de índice.
+    const known = new Set(queue.map((item) => item.videoId));
+    const fresh = tracks.filter((item) => item.videoId && !known.has(item.videoId));
+    if (fresh.length === 0) return;
+    queue = [...queue, ...fresh];
+    order = null;
+    publish();
+  }
+
   function next() {
     if (queue.length === 0) return;
     if (repeat === "one") {
@@ -187,6 +217,26 @@ export function createCiderEngine(): CiderEngine {
     const positions = currentOrder();
     const at = positions.indexOf(index);
     playIndex(positions[(at - 1 + positions.length) % positions.length]);
+  }
+
+  function removeFromQueue(position: number) {
+    if (position < 0 || position >= queue.length) return;
+    if (position === index) return;
+    queue = queue.filter((_item, at) => at !== position);
+    if (position < index) index -= 1;
+    order = null;
+    publish();
+  }
+
+  function clearQueue() {
+    player.pause();
+    queue = [];
+    index = -1;
+    order = null;
+    durationMs = 0;
+    positionMs = 0;
+    announce();
+    publish();
   }
 
   function toggle() {
@@ -239,6 +289,11 @@ export function createCiderEngine(): CiderEngine {
     },
     onEnded: () => next(),
     onTime: (position, duration) => {
+      // O iframe do YouTube continua carregado depois de limpar a fila e segue
+      // reportando o tempo do último vídeo. Sem esta guarda a barra de
+      // reprodução ficava com o relógio congelado (ex.: 0:33 / 4:55) por cima
+      // de "Nada tocando". O desktop tem a mesma guarda no seu ticker.
+      if (index < 0) return;
       positionMs = position;
       durationMs = duration;
       publish();
@@ -259,6 +314,9 @@ export function createCiderEngine(): CiderEngine {
     playTrack,
     playIndex,
     playQueue,
+    appendQueue,
+    removeFromQueue,
+    clearQueue,
     toggle,
     next,
     previous,

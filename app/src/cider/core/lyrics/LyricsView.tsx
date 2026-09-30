@@ -96,7 +96,10 @@ function AnimatedWord({
       }
       case "past":
       default: {
-        const decay = style.glowDecayMs;
+        // A duração da transição desta palavra vem do `transition` definido uma
+        // única vez no `<span>` abaixo. Um `transitionDuration` aqui seria
+        // sobrescrito pelo atalho (e faria o React avisar sobre misturar
+        // atalho com longhand no mesmo objeto de estilo).
         return {
           ...base,
           opacity: Math.max(style.inactiveOpacity + 0.12, 0.5),
@@ -109,7 +112,6 @@ function AnimatedWord({
             style.blurInactivePx > 0
               ? `blur(${(style.blurInactivePx * 0.2).toFixed(1)}px)`
               : "none",
-          transitionDuration: `${Math.max(180, decay).toFixed(0)}ms`,
         };
       }
     }

@@ -193,8 +193,13 @@ export default function App() {
           </Deferred>
         }
       />
+      {/*
+        O asterisco é necessário: as telas do Cider (Explorar, Biblioteca,
+        Configurações…) são rotas aninhadas roteadas pelo próprio `CiderApp`,
+        então a rota da Nexora precisa casar `/cider/...` inteiro.
+      */}
       <Route
-        path="/cider"
+        path="/cider/*"
         element={
           <Deferred>
             <CiderPage />
