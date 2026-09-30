@@ -1,0 +1,509 @@
+/*
+ * Cider 2 — interface do YouTube e caminho do áudio.
+ *
+ * Estilo: o player oficial é um objeto discreto e bem acabado dentro do
+ * aplicativo, nunca uma “janela do YouTube” colada na tela. A camada de capa
+ * (`youtube-cover`) é opaca de propósito — é ela que esconde o vídeo e deixa a
+ * capa, a fila e os controles musicais em primeiro plano.
+ */
+
+/* ------------------------------------------------------------------ *
+ * Dock do player                                                      *
+ * ------------------------------------------------------------------ */
+
+.youtube-dock {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-lg);
+  background: color-mix(in srgb, var(--cider-bg-elevated) 88%, transparent);
+  backdrop-filter: blur(calc(var(--cider-blur) * 0.6));
+  box-shadow: var(--cider-shadow-md);
+  transition: width var(--cider-duration-base) var(--cider-ease-out);
+}
+
+.youtube-dock[data-mode="audio"] {
+  width: 320px;
+}
+
+.youtube-dock[data-mode="compact"] {
+  width: 360px;
+}
+
+.youtube-dock[data-mode="cinema"] {
+  width: min(720px, 70vw);
+}
+
+.youtube-dock[data-collapsed="true"] .youtube-dock-surface,
+.youtube-dock[data-collapsed="true"] .youtube-dock-foot,
+.youtube-dock[data-collapsed="true"] .youtube-dock-path,
+.youtube-dock[data-collapsed="true"] .youtube-dock-attribution {
+  display: none;
+}
+
+.youtube-dock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.youtube-dock-title {
+  font-size: var(--cider-text-sm);
+  font-weight: var(--cider-weight-semibold);
+  letter-spacing: var(--cider-tracking-tight);
+}
+
+.youtube-dock-surface {
+  position: relative;
+  border-radius: var(--cider-radius-md);
+  overflow: hidden;
+  background: var(--cider-bg-sunken);
+}
+
+/* O player oficial permanece montado, visível e clicável quando não há capa. */
+.youtube-frame-host {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 180px;
+}
+
+.youtube-frame-host iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* Camada de capa: cobre o vídeo, mas nunca desmonta o iframe. */
+.youtube-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 10px 12px;
+  padding: 12px;
+  color: var(--cider-text);
+  background:
+    radial-gradient(
+      120% 120% at 15% 0%,
+      color-mix(in srgb, var(--cider-accent) 26%, transparent) 0%,
+      transparent 60%
+    ),
+    linear-gradient(160deg, rgba(10, 9, 18, 0.97), rgba(6, 5, 11, 0.99));
+}
+
+.youtube-cover[data-empty="true"] {
+  opacity: 0.85;
+}
+
+.youtube-cover-art {
+  width: auto;
+  height: 100%;
+  max-height: 180px;
+  aspect-ratio: 1;
+  border-radius: var(--cider-radius-md);
+  box-shadow: var(--cider-shadow-lg);
+  object-fit: cover;
+}
+
+.youtube-cover-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  align-self: center;
+}
+
+.youtube-cover-title {
+  font-size: var(--cider-text-md);
+  font-weight: var(--cider-weight-semibold);
+  letter-spacing: var(--cider-tracking-tight);
+}
+
+.youtube-cover-artist {
+  font-size: var(--cider-text-sm);
+  color: var(--cider-text-muted);
+}
+
+.youtube-cover-controls {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.youtube-cover-progress {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.youtube-cover-progress .progress {
+  flex: 1;
+}
+
+.youtube-cover-peek {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  padding: 3px 10px;
+  font-size: var(--cider-text-xs);
+  color: var(--cider-text-muted);
+  background: color-mix(in srgb, var(--cider-bg-sunken) 70%, transparent);
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-full);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.youtube-cover-peek:hover,
+.youtube-cover-peek:focus-visible {
+  opacity: 1;
+  color: var(--cider-text);
+}
+
+.youtube-frame-empty,
+.youtube-frame-blocked {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  background: color-mix(in srgb, var(--cider-bg-sunken) 92%, transparent);
+}
+
+.youtube-frame-blocked {
+  color: var(--cider-text);
+}
+
+.youtube-dock-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.youtube-dock-path {
+  padding: 10px;
+  border: 1px dashed var(--cider-border);
+  border-radius: var(--cider-radius-md);
+  background: color-mix(in srgb, var(--cider-bg-sunken) 60%, transparent);
+}
+
+.youtube-dock-path ul {
+  margin: 6px 0 8px;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+}
+
+.youtube-dock-attribution {
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------------------ *
+ * Selo do caminho do áudio                                            *
+ * ------------------------------------------------------------------ */
+
+.route-chip {
+  display: inline-flex;
+  align-items: center;
+}
+
+.route-chip .badge {
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Caminho do áudio (Configurações → Áudio, Diagnóstico)               *
+ * ------------------------------------------------------------------ */
+
+.audio-path {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-md);
+  background: color-mix(in srgb, var(--cider-bg-elevated) 80%, transparent);
+}
+
+.audio-path[data-source="youtube"] {
+  border-left: 3px solid var(--cider-warning);
+}
+
+.audio-path[data-source="local"] {
+  border-left: 3px solid var(--cider-success);
+}
+
+.audio-path-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.audio-path-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.audio-path-steps li {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--cider-radius-sm);
+  background: color-mix(in srgb, var(--cider-surface) 60%, transparent);
+  font-size: var(--cider-text-sm);
+}
+
+.audio-path-steps li[data-processed="true"] {
+  background: color-mix(in srgb, var(--cider-accent) 14%, transparent);
+}
+
+.audio-path-steps .step-label {
+  color: var(--cider-text-muted);
+  font-size: var(--cider-text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--cider-tracking-wide);
+}
+
+.audio-path-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.audio-path-facts div {
+  display: grid;
+  gap: 2px;
+}
+
+.audio-path-facts dt {
+  font-size: var(--cider-text-xs);
+  color: var(--cider-text-faint);
+  text-transform: uppercase;
+  letter-spacing: var(--cider-tracking-wide);
+}
+
+.audio-path-facts dd {
+  margin: 0;
+  font-size: var(--cider-text-sm);
+}
+
+.audio-path-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.audio-path-notes li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  font-size: var(--cider-text-xs);
+  color: var(--cider-text-muted);
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ *
+ * Linha de resultado do YouTube                                       *
+ * ------------------------------------------------------------------ */
+
+.track-row.yt-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--cider-radius-md);
+  transition: background var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.track-row.yt-row:hover {
+  background: var(--cider-surface-hover);
+}
+
+.track-row.yt-row[aria-current="true"] {
+  background: color-mix(in srgb, var(--cider-accent) 14%, transparent);
+}
+
+.track-row.yt-row[data-unavailable="true"] .yt-row-main {
+  opacity: 0.6;
+}
+
+.yt-row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.yt-row-main:disabled {
+  cursor: default;
+}
+
+.yt-row .cover {
+  flex: none;
+  border-radius: var(--cider-radius-sm);
+}
+
+.yt-row-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.yt-row-text .title {
+  font-size: var(--cider-text-sm);
+  font-weight: var(--cider-weight-medium);
+}
+
+.yt-row-text .subtitle {
+  font-size: var(--cider-text-xs);
+  color: var(--cider-text-muted);
+}
+
+.yt-row-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.yt-row-duration {
+  flex: none;
+  font-size: var(--cider-text-xs);
+  color: var(--cider-text-muted);
+}
+
+.yt-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.yt-row-open {
+  flex: none;
+}
+
+.track-menu {
+  position: absolute;
+  right: 12px;
+  margin-top: 6px;
+  z-index: 20;
+  display: grid;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-md);
+  background: var(--cider-bg-elevated);
+  box-shadow: var(--cider-shadow-lg);
+}
+
+.track-row.yt-row {
+  position: relative;
+}
+
+.track-menu button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--cider-radius-sm);
+  background: none;
+  color: var(--cider-text);
+  font-size: var(--cider-text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.track-menu button:hover,
+.track-menu button:focus-visible {
+  background: var(--cider-surface-hover);
+}
+
+.track-menu-note {
+  padding: 6px 10px;
+  border-top: 1px solid var(--cider-border);
+}
+
+/* ------------------------------------------------------------------ *
+ * Utilitários usados pelas telas do YouTube                           *
+ * ------------------------------------------------------------------ */
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cider-accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.link:hover,
+.link:focus-visible {
+  text-decoration: underline;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px 20px;
+  align-items: center;
+}
+
+.filter-grid select,
+.filter-grid input[type="number"] {
+  margin-left: 8px;
+}
+
+.filter-grid label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .youtube-dock[data-mode="cinema"],
+  .youtube-dock[data-mode="compact"],
+  .youtube-dock[data-mode="audio"] {
+    width: 100%;
+  }
+
+  .yt-row-badges {
+    display: none;
+  }
+}

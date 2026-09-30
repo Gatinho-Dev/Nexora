@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { LyricsTimeline } from "./lyricsTimeline";
 import { parseLrc } from "./core/lyrics/parser";
@@ -175,5 +177,37 @@ describe("fonte externa da sincronia", () => {
     timeline.setPosition(1_000);
     expect(timeline.getFrame()).toEqual([]);
     timeline.dispose();
+  });
+});
+
+describe("rolagem das letras", () => {
+  // O sintoma reportado era a letra "toda junto". Duas causas independentes, e
+  // ambas precisam estar cobertas: o container sem altura (tudo empilhado no
+  // topo) e a ausência de rolagem automática.
+  it("o estilo entrega altura ao container e máscara em gradiente", () => {
+    // O que o CSS precisa garantir, sem depender do navegador.
+    const css = readFileSync(
+      fileURLToPath(new URL("./styles/bridge.css", import.meta.url)),
+      "utf-8"
+    );
+    expect(css).toMatch(/\.cider-root \.lyrics-scope\s*\{[^}]*max-height/s);
+    expect(css).toMatch(/\.cider-root \.lyrics-lines\s*\{[^}]*flex:\s*1/s);
+    // Sem a máscara em gradiente, a coluna parece uma lista, não um rolo.
+    const lyrics = readFileSync(
+      fileURLToPath(new URL("./styles/lyrics.css", import.meta.url)),
+      "utf-8"
+    );
+    expect(lyrics).toContain("mask-image");
+    expect(lyrics).toContain("lyrics-spacer");
+  });
+
+  it("o spacer empurra a coluna para o centro da rolagem", () => {
+    // É o que dá espaço acima da primeira linha: sem ele, a linha ativa fica
+    // colada no topo e o autoscroll não tem por onde centralizar.
+    const lyrics = readFileSync(
+      fileURLToPath(new URL("./styles/lyrics.css", import.meta.url)),
+      "utf-8"
+    );
+    expect(lyrics).toMatch(/\.lyrics-spacer\s*\{[^}]*height/s);
   });
 });
