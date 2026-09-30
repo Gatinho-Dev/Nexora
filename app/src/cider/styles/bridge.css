@@ -1,0 +1,166 @@
+/* ------------------------------------------------------------------ *
+ * Ponte entre o Cider e o shell da Nexora                              *
+ * ------------------------------------------------------------------ *
+ * Só o que é **impossível** decidir pelo CSS. Todo o visual — casca,
+ * playbar, capa, letras — vem dos arquivos copiados do desktop, com os
+ * mesmos nomes de classe, para que a aparência não possa divergir.
+ *
+ * O `#root` recebe zoom pelo Tailwind da Nexora; como o Cider é uma página
+ * dentro dele, o zoom interfere nas medidas em px do desktop.
+ */
+/* Os tokens do Cider precisam vencer os do Tailwind, que usam os mesmos
+   nomes de conceito com outros valores. */
+.cider-root {
+  --background: var(--cider-bg);
+  --foreground: var(--cider-text);
+  --muted2: var(--cider-text-muted);
+  --faint: var(--cider-text-faint);
+  --input: var(--cider-surface);
+  --hov: var(--cider-surface-hover);
+
+  /* Anula o zoom global que a Nexora aplica em #root. */
+  zoom: 1;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--cider-text);
+  background: var(--cider-bg);
+  font-family: var(--cider-font);
+  isolation: isolate;
+}
+
+/* A busca do desktop usa `.search-field` dentro da topbar; dentro do Cider
+   ela ocupa a largura disponível e não pode herdar o tamanho fixo. */
+.cider-root .search-field { max-width: none; flex: 1; }
+
+/* O painel de letra do desktop é uma coluna com rolagem própria. Dentro do
+   Cider ele precisa de altura de verdade, senão as linhas colapsam — foi
+   exatamente o que aconteceu na primeira versão, com a letra "toda junto". */
+.cider-root .lyrics-scope {
+  max-height: min(58vh, 520px);
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cider-root .lyrics-lines {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+/* O autoscroll centraliza a linha ativa; sem isso, todas as linhas ficam
+   empilhadas no topo e a letra parece um bloco só. */
+.cider-root .lyrics-spacer { height: 40%; }
+
+/* ------------------------------------------------------------------ *
+ * Página "Tocando agora"                                             *
+ * ------------------------------------------------------------------ *
+ * Estas classes são usadas pelo `NowPlaying.tsx` do desktop e **não estão
+ * definidas em nenhum dos CSS dele** — a página se apoiou em `.page` e nos
+ * utilitários. Como aqui a página é a tela principal do Cider, elas ganharam
+ * as regras que faltavam, escritas com os mesmos tokens e a mesma escala do
+ * resto do aplicativo.
+ */
+.cider-root .now-playing-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-8);
+}
+
+.cider-root .now-playing-head {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  gap: var(--cider-space-8);
+  align-items: start;
+}
+
+.cider-root .now-playing-art {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--cider-radius-2xl);
+  overflow: hidden;
+  box-shadow: var(--cider-shadow-xl);
+}
+
+.cider-root .now-playing-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-3);
+  min-width: 0;
+}
+
+.cider-root .now-playing-title {
+  font-size: var(--cider-text-2xl);
+  font-weight: var(--cider-weight-bold);
+  line-height: var(--cider-leading-tight);
+  letter-spacing: var(--cider-tracking-tight);
+  margin: 0;
+}
+
+.cider-root .now-playing-artist {
+  font-size: var(--cider-text-md);
+  color: var(--cider-text-muted);
+  margin: 0;
+}
+
+.cider-root .now-playing-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-2);
+  margin-top: var(--cider-space-2);
+}
+
+.cider-root .now-playing-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cider-space-3);
+  margin-top: var(--cider-space-3);
+}
+
+.cider-root .now-playing-volume {
+  display: flex;
+  align-items: center;
+  gap: var(--cider-space-3);
+  max-width: 320px;
+}
+
+.cider-root .now-playing-volume input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+/* O dock do player dentro da página: largura total, não os 320px do painel. */
+.cider-root .youtube-dock {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  margin-top: var(--cider-space-3);
+}
+
+.cider-root .youtube-dock-surface {
+  min-height: 0;
+}
+
+/* A capa do vídeo fica no lugar, mas sem o texto que o desktop colocava por
+   cima: aqui a capa é só o botão de tocar. */
+.cider-root .youtube-cover {
+  background: var(--cider-bg-sunken);
+}
+
+.cider-root .youtube-cover[data-empty="true"] {
+  background: var(--cider-bg-sunken);
+}
+
+@media (max-width: 900px) {
+  .cider-root .now-playing-head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cider-root .now-playing-art {
+    max-width: 320px;
+  }
+}
