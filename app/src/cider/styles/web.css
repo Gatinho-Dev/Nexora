@@ -1,0 +1,320 @@
+/* ------------------------------------------------------------------ *
+ * Classes que só existem na versão web                                *
+ * ------------------------------------------------------------------ *
+ * Os demais arquivos deste diretório são **cópias** do Cider 2 desktop, com os
+ * nomes de classe originais — é o que garante que a aparência não divirja.
+ * Este arquivo é o contrário: reúne o que o site precisa e o aplicativo de
+ * janela única não tinha.
+ *
+ * As duas coisas que só fazem sentido aqui:
+ *
+ * 1. o **dock do player** e o **mini-player**, que existem porque o áudio
+ *    precisa sobreviver à navegação entre as rotas da Nexora;
+ * 2. classes de tela que a portagem web introduziu (Início, Explorar) e que
+ *    ainda não tinham regra nenhuma.
+ */
+
+/* ------------------------------------------------------------------ *
+ * Dock do player                                                      *
+ * ------------------------------------------------------------------ *
+ * A IFrame Player API substitui o elemento host pelo próprio `<iframe>`, então
+ * o host mora fora do roteador (veja `AudioDock.tsx`). O iframe precisa de
+ * **área real** — `display: none` e 0×0 impedem a inicialização — mas o vídeo
+ * nunca pode aparecer.
+ *
+ * A solução é `opacity: 0` no dock: uma área de verdade, invisível, que não
+ * interfere no empilhamento da página da Nexora (nada de `z-index` alto
+ * competindo com a interface do site). O véu fica como segunda barreira: se
+ * alguém um dia devolver a opacidade, o vídeo continua escondido.
+ */
+.cider-audio-dock {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 344px;
+  height: 56px;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: var(--cider-radius-md);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Sem faixa carregada o dock já está invisível; o atributo existe para que o
+   estado seja legível no inspetor e para futuras transições. */
+.cider-audio-dock[data-active="false"] {
+  opacity: 0;
+}
+
+/* O host nasce com cara de painel (16:9, altura mínima). Aqui ele é uma faixa
+   fixa: a mesma área em toda a vida do player, para o YouTube não reclamar de
+   mudança de tamanho no meio da faixa. */
+.cider-audio-dock .youtube-frame-host {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  min-height: 0;
+}
+
+.cider-audio-dock .youtube-frame-host iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.cider-audio-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--cider-bg);
+}
+
+/* ------------------------------------------------------------------ *
+ * Mini-player (fora de /cider)                                        *
+ * ------------------------------------------------------------------ *
+ * Existe para haver como pausar o que continua tocando depois que o usuário
+ * saiu do player. Fica no mesmo canto do dock, opaco e por cima.
+ */
+.cider-minibar {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--cider-space-3);
+  /* Largo o bastante para o título respirar: são sete ações à direita, e uma
+     faixa estreita deixaria o nome da faixa em duas letras. */
+  width: min(540px, calc(100vw - 32px));
+  min-height: 72px;
+  padding: var(--cider-space-3) var(--cider-space-4);
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-xl);
+  background: color-mix(in srgb, var(--cider-bg-elevated) 94%, transparent);
+  backdrop-filter: blur(var(--cider-blur)) saturate(170%);
+  box-shadow: var(--cider-shadow-lg);
+  color: var(--cider-text);
+  font-family: var(--cider-font);
+  font-size: var(--cider-text-base);
+  animation: minibar-in var(--cider-duration-base) var(--cider-ease-out) both;
+}
+
+@keyframes minibar-in {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+.cider-minibar-art {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--cider-radius-sm);
+  background: var(--cider-surface);
+  color: var(--cider-text-muted);
+}
+
+.cider-minibar-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cider-minibar-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* O título é um botão porque leva de volta ao player. */
+.cider-minibar-title {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cider-text);
+  font: inherit;
+  font-weight: var(--cider-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cider-minibar-title:hover {
+  text-decoration: underline;
+}
+
+.cider-minibar-artist {
+  font-size: var(--cider-text-xs);
+  color: var(--cider-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cider-minibar-progress {
+  height: 3px;
+  margin-top: 4px;
+  border-radius: var(--cider-radius-full);
+  background: var(--cider-surface-strong);
+  overflow: hidden;
+}
+
+.cider-minibar-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--cider-accent);
+  transition: width var(--cider-duration-fast) linear;
+}
+
+.cider-minibar-times {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cider-space-3);
+  font-size: var(--cider-text-xs);
+  color: var(--cider-text-faint);
+  font-variant-numeric: tabular-nums;
+  /* Sem isto os dois tempos se encostam ("3:474:01") quando a coluna encolhe. */
+  white-space: nowrap;
+}
+
+.cider-minibar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+/* A pílula de origem da playbar tem rótulo longo na web ("navegador · iframe do
+   YouTube") e, ao contrário do desktop, não cabia em uma linha. */
+.cider-root .connection-pill {
+  white-space: nowrap;
+}
+
+/* Em telas estreitas o mini-player ocupa a largura toda e esconde os tempos:
+   os controles continuam alcançáveis com o polegar. */
+@media (max-width: 720px) {
+  .cider-minibar {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    gap: var(--cider-space-2);
+  }
+  .cider-minibar-times {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Portão de entrada (sem conta)                                       *
+ * ------------------------------------------------------------------ */
+.cider-gate {
+  display: grid;
+  place-items: center;
+  padding: var(--cider-space-6);
+}
+
+/* Giro do indicador de carregamento, escrito aqui em vez de depender do
+   utilitário `animate-spin` do Tailwind: a interface do Cider não deve depender
+   da configuração de CSS do site hospedeiro para aparecer corretamente. */
+.cider-spin {
+  animation: cider-spin 900ms linear infinite;
+}
+
+/* Botão que abre a capa de um cartão. Já recebe o essencial em estilo inline no
+   componente (o alvo é o botão inteiro); aqui ficam só o foco visível e o
+   cursor, que estilo inline não expressa bem. */
+.cider-root .cover-open {
+  cursor: pointer;
+  color: inherit;
+}
+
+.cider-root .cover-open:focus-visible {
+  outline: 2px solid var(--cider-accent);
+  outline-offset: 2px;
+  border-radius: var(--cider-radius-sm);
+}
+
+@keyframes cider-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ------------------------------------------------------------------ *
+ * Classes de tela introduzidas pela portagem web                      *
+ * ------------------------------------------------------------------ */
+
+/* Botão que se comporta como texto: usado nos títulos dos cartões, onde um
+   botão é necessário para o teclado e um link seria navegação falsa. */
+.link-like {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-like:hover,
+.link-like:focus-visible {
+  color: var(--cider-accent);
+  text-decoration: underline;
+}
+
+/* Cabeçalho do Início: texto à esquerda, "tocando agora" à direita. */
+.home-hero {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.home-now {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-2);
+  flex: 0 0 auto;
+  width: min(220px, 100%);
+}
+
+.home-now-art {
+  border-radius: var(--cider-radius-xl);
+  box-shadow: var(--cider-shadow-lg);
+}
+
+@media (max-width: 900px) {
+  .home-hero {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .home-now {
+    width: 100%;
+    max-width: 220px;
+  }
+}
+
+/* Uma linha por tema na tela Explorar: título acima, consultas abaixo. */
+.browse-theme {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-2);
+  padding: var(--cider-space-3) 0;
+  border-top: 1px solid var(--cider-border);
+}
+
+.browse-theme:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.browse-theme-title {
+  color: var(--cider-text);
+}

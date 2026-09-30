@@ -110,4 +110,19 @@ export function releaseNowPlaying(): void {
   lastPublishAt = 0;
 }
 
+/**
+ * Estado da presença, para o Diagnóstico.
+ *
+ * É o que o módulo realmente sabe: qual vídeo foi anunciado por último e quando.
+ * Não há "status do servidor" aqui — quem valida a atividade é a Nexora, e
+ * inventar um estado local de sucesso seria mentira.
+ */
+export function presenceSnapshot(): {
+  lastVideoId: string | null;
+  lastPublishAt: number;
+  minIntervalMs: number;
+} {
+  return { lastVideoId, lastPublishAt, minIntervalMs: MIN_PUBLISH_MS };
+}
+
 export const __testing = { MIN_PUBLISH_MS };

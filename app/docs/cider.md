@@ -101,11 +101,63 @@ A tela do `/cider` replica o **Cider 2 desktop**: mesma paleta e tokens
 (`src/cider/styles/tokens.css`, copiado do desktop), mesma casca — sidebar,
 topbar com busca, coluna principal, playbar fixa e painel de letras.
 
+As telas são as do desktop, endereçáveis uma a uma:
+
+| Rota | Tela |
+| --- | --- |
+| `/cider` | Início |
+| `/cider/explorar` | Explorar por tema |
+| `/cider/pesquisa?q=` | Pesquisa (a consulta vive na URL, então o resultado é compartilhável) |
+| `/cider/radio` | Rádio (estações por semente) |
+| `/cider/biblioteca`, `/albuns`, `/artistas`, `/musicas`, `/playlists`, `/historico`, `/favoritos` | Biblioteca |
+| `/cider/tocando-agora` | Tocando agora |
+| `/cider/configuracoes/:secao` | Configurações |
+| `/cider/diagnostico`, `/estatisticas` | Sistema |
+
 O motor de reprodução vive **fora do roteador**, em `CiderProvider`, montado
 no `App.tsx`. É o que faz o áudio continuar quando o usuário sai do player para
 o Nexora: trocar de rota desmontaria o `<iframe>` junto. O `CiderMiniBar` é só
 uma janela para o mesmo motor — aparece fora de `/cider`, não cria um segundo
-player e não tem fila própria.
+player e não tem fila própria. Por isso `CiderPage` **não** monta o provider de
+novo: um segundo provider criaria um segundo motor tocando a mesma faixa.
+
+O `<iframe>` mora no `CiderAudioDock`, também acima do roteador. Ele precisa de
+área real (`display: none` e 0×0 impedem a inicialização) mas o vídeo nunca pode
+aparecer, então o dock é uma faixa de 344×56 px com `opacity: 0` — invisível e
+fora do empilhamento da página da Nexora. O mini-player divide o canto com ele e
+é onde os controles aparecem fora de `/cider`.
+
+Os arquivos de CSS são **cópias** do desktop (mesmos nomes de classe, para a
+aparência não divergir). O que só existe no site — dock, mini-player, portão de
+entrada e as classes das telas novas — fica em `src/cider/styles/web.css`.
+
+## Temas
+
+Os seis temas embutidos são **os mesmos do desktop**, portados de
+`src-tauri/src/commands/theme_cmds.rs` com os mesmos tokens: Cidra Escura, Cidra
+Clara, Meia-noite, Vidro, Noir e Pôr do sol — mais Automático, Escuro e Claro.
+Escolher "Meia-noite" aqui dá a mesma paleta que escolher "Meia-noite" no
+aplicativo.
+
+Onde escolher:
+
+- **primeira visita** — o guia oferece o tema antes de qualquer ajuste;
+- `/cider/configuracoes/aparencia` — grade de temas, importação de
+  `.cider-theme.json`, exportação e **editor visual** de cada token (cores,
+  vidro, sombras, formas, tipografia, movimento) com pré-visualização ao vivo;
+- **Ctrl+K** — cada tema é um comando, com o nome exato.
+
+Duas travas merecem registro, porque um tema é **dado que vira CSS**:
+
+1. um tema só escreve variáveis `--cider-*` (o filtro está em
+   `settings/apply.ts`). Sem ele, um tema salvo reescreveria a Nexora inteira;
+2. o CSS personalizado de um tema é injetado dentro de
+   `@scope (.cider-root, .cider-minibar, .cider-audio-dock)`. Um seletor solto
+   como `button { … }` não escapa para o site hospedeiro, e navegador sem
+   `@scope` simplesmente ignora o bloco em vez de aplicar demais.
+
+As preferências ficam no `localStorage` do navegador — a Nexora não guarda nada
+do Cider no servidor.
 
 ## Letras em tempo real
 
@@ -120,6 +172,12 @@ O mesmo motor do desktop, portado sem alteração de comportamento:
   avisa que a estimativa é do Cider 2, e não da fonte;
 - **preset `karaoke`**, o mais próximo do efeito do Apple Music: brilho 0.8 e
   decaimento de 1.2 s, para a palavra cantada continuar acesa depois de passar.
+
+O `letterSpacing` dos presets é `-0.02em`. O valor herdado do desktop era
+`-0.2em` — dez vezes maior — e a 34 px encolhia ~7 px por caractere: as palavras
+ficavam sem espaço nenhum entre si e a letra aparecia **inteiriça**, o defeito
+descrito como "letra toda junto". O problema nunca foi de layout, e o mesmo
+valor continua no desktop (`src/lyrics/presets.ts`).
 
 A interpolação de posição vive em `LyricsTimeline`, uma fonte externa lida com
 `useSyncExternalStore`. Não é detalhe de estilo: o player reporta a posição 4×
@@ -139,7 +197,8 @@ por segundo, e sem interpolar o destaque daria saltos visíveis de 250 ms.
 ## Testes
 
 ```bash
-npm run test      # inclui src/cider/core/core.test.ts e providers/cider.test.ts
+npm run test      # inclui src/cider/core/core.test.ts, src/cider/settings/settings.test.ts
+                  # e src/cider/{library,radio,lyrics}.test.ts
 npm run check
 npm run lint
 ```

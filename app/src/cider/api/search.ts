@@ -221,4 +221,12 @@ function hostOf(instance: string): string {
   }
 }
 
+/** Instâncias em uso, para o Diagnóstico mostrar o que está sendo consultado. */
+export function searchInstances(): Array<{ url: string; protocol: "piped" | "invidious" }> {
+  return [
+    ...PIPED_INSTANCES.map((url) => ({ url, protocol: "piped" as const })),
+    ...INVIDIOUS_INSTANCES.map((url) => ({ url, protocol: "invidious" as const })),
+  ];
+}
+
 export const __testing = { normalizePiped, normalizeInvidious, pipedVideoId, PIPED_INSTANCES };

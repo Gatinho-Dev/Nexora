@@ -125,6 +125,17 @@ describe("preset de exibição", () => {
     expect(Number(vars["--lyrics-inactive-opacity"])).toBeLessThanOrEqual(1);
     expect(vars["--lyrics-decay"]).toMatch(/ms$/);
   });
+
+  it("nenhum preset aperta a letra a ponto de colar as palavras", () => {
+    // `-0.2em` a 34 px encolhe ~7 px por caractere: as palavras ficam sem
+    // espaço nenhum entre si (a letra "toda junto"). O valor é de tracking
+    // discreto, no máximo o dobro do `-0.02em` dos títulos.
+    for (const [id, style] of Object.entries(LYRICS_PRESETS)) {
+      expect(style.letterSpacing, `preset ${id}`).toBeGreaterThan(-0.05);
+      expect(style.letterSpacing, `preset ${id}`).toBeLessThanOrEqual(0);
+    }
+    expect(lyricsCssVariables(LYRICS_PRESETS.karaoke)["--lyrics-letter-spacing"]).toBe("-0.02em");
+  });
 });
 
 describe("fonte externa da sincronia", () => {
