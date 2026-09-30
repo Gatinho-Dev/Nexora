@@ -4,9 +4,13 @@
  * Reproduz pelo player oficial do YouTube no navegador, sem baixar nem
  * converter nada. O `<iframe>` fica atrás de uma capa opaca, com 16:9 de área
  * real — o YouTube não inicializa um player sem área renderizada.
+ *
+ * A casca usa **as mesmas classes do Cider 2 desktop** (`.app`, `.sidebar`,
+ * `.topbar`, `.playbar`, `.now-playing-page`) e os CSS copiados do projeto, de
+ * modo que a aparência é a do aplicativo e não uma aproximação.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   Disc3,
@@ -22,7 +26,6 @@ import {
   SkipForward,
   Volume2,
   VolumeX,
-  X,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CiderProvider } from "@/cider/provider";
@@ -31,13 +34,25 @@ import { searchTracks } from "@/cider/search";
 import { useLyrics } from "@/cider/useLyrics";
 import { releaseNowPlaying } from "@/cider/activity";
 import type { CiderTrack } from "@/cider/api/query";
-import "@/cider/styles/tokens.css";
-import "@/cider/styles/app.css";
-import "@/cider/styles/lyrics.css";
 
-function formatTime(ms: number): string {
+import "@/cider/styles/tokens.css";
+import "@/cider/styles/base.css";
+import "@/cider/styles/layout.css";
+import "@/cider/styles/components.css";
+import "@/cider/styles/pages.css";
+import "@/cider/styles/youtube.css";
+import "@/cider/styles/lyrics.css";
+import "@/cider/styles/bridge.css";
+
+function timecode(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return hours > 0
+    ? `${hours}:${pad(minutes)}:${pad(seconds)}`
+    : `${minutes}:${pad(seconds)}`;
 }
 
 export default function CiderPage() {
@@ -46,7 +61,7 @@ export default function CiderPage() {
 
   if (authLoading) {
     return (
-      <div className="cider-gate">
+      <div className="cider-root grid place-items-center">
         <Loader2 className="h-6 w-6 animate-spin" />
       </div>
     );
@@ -54,20 +69,20 @@ export default function CiderPage() {
 
   if (!user) {
     return (
-      <div className="cider-gate">
-        <div className="cider-gate-card">
-          <div className="cider-brand-mark">
-            <Disc3 size={18} />
+      <div className="cider-root grid place-items-center" style={{ padding: 24 }}>
+        <div className="stack" style={{ maxWidth: 420, textAlign: "center" }}>
+          <div className="inline justify-center gap-2">
+            <Disc3 size={26} style={{ color: "var(--cider-accent)" }} />
+            <h1 className="now-playing-title" style={{ fontSize: "var(--cider-text-xl)" }}>
+              Cider
+            </h1>
           </div>
-          <h1 className="cider-nowplaying-title">Cider</h1>
-          <p style={{ color: "var(--cider-text-muted)", fontSize: "var(--cider-text-base)" }}>
+          <p className="muted">
             Entre na sua conta da Nexora para ouvir. O que você estiver ouvindo
             aparece no perfil, na lista de amigos e no chat.
           </p>
           <button
-            className="cider-btn"
-            data-variant="primary"
-            data-size="lg"
+            className="btn primary lg"
             onClick={() => navigate("/login?redirect=%2Fcider")}
           >
             Entrar para ouvir
@@ -89,7 +104,8 @@ function CiderShell() {
   const { state, engine } = useCider();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CiderTrack[]>([]);
-  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<string | null>(null);
   const lyrics = useLyrics(state.track, state.positionMs, state.phase === "playing");
 
@@ -98,124 +114,92 @@ function CiderShell() {
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    void engine.mount(host).catch(() => {
-      /* o erro chega pelo próprio estado do player */
-    });
+    void engine.mount(host);
   }, [engine]);
 
-  // Saiu do player: a presença é limpa, senão continuaria mostrando faixa para
-  // quem não está mais ouvindo.
   useEffect(() => releaseNowPlaying, []);
 
-  const runSearch = useCallback(
-    async (raw: string) => {
-      const outcome = await searchTracks(raw);
-      setResults(outcome.tracks);
-      setSource(outcome.source);
-      setSearchError(outcome.error);
-    },
-    []
-  );
+  const runSearch = async (raw: string) => {
+    setSearching(true);
+    const outcome = await searchTracks(raw);
+    setResults(outcome.tracks);
+    setSource(outcome.source);
+    setError(outcome.error);
+    setSearching(false);
+  };
 
-  const coverBackground = state.track?.artworkUrl
-    ? `radial-gradient(120% 100% at 50% 0%, rgba(0,0,0,0.35), rgba(0,0,0,0.82)), url(${state.track.artworkUrl}) center/cover`
-    : undefined;
+  const playing = state.phase === "playing";
 
   return (
-    <div className="cider-app">
-      <div className="cider-body">
-        <aside className="cider-sidebar">
-          <div className="cider-brand">
-            <div className="cider-brand-mark">
-              <Disc3 size={17} />
-            </div>
-            <strong style={{ fontSize: "var(--cider-text-md)" }}>Cider</strong>
-            <span
-              className="grow"
-              style={{ color: "var(--cider-text-faint)", fontSize: "var(--cider-text-xs)" }}
-            >
-              em /cider
+    <div className="cider-root app">
+      <div className="app-body" data-sidebar="normal">
+        <aside className="sidebar" aria-label="Navegação do Cider">
+          <div className="sidebar-brand">
+            <Disc3 size={22} style={{ color: "var(--cider-accent)" }} />
+            <span className="name">
+              Cider <span className="faint">web</span>
             </span>
           </div>
 
-          <nav className="cider-nav">
-            <div className="cider-nav-label">Ouvir</div>
+          <nav className="sidebar-nav">
+            <div className="sidebar-group-label">Ouvir</div>
             <button
               type="button"
-              className="cider-nav-item"
+              className="nav-item"
               aria-current="page"
-              onClick={() => setQuery("")}
+              onClick={() => setResults([])}
             >
-              <Play size={16} /> Início
+              <Play size={16} />
+              <span className="label">Descobrir</span>
             </button>
             <button
               type="button"
-              className="cider-nav-item"
-              onClick={() => navigate("/channels/@me/friends")}
+              className="nav-item"
+              onClick={() => navigate("/cider")}
             >
-              <Disc3 size={16} /> Minha biblioteca
+              <Shuffle size={16} />
+              <span className="label">Fila atual</span>
             </button>
 
-            <div className="cider-nav-label">Fila</div>
+            <div className="sidebar-group-label">
+              Na fila {state.queue.length > 0 && `· ${state.queue.length}`}
+            </div>
             {state.queue.length === 0 ? (
-              <p
-                style={{
-                  padding: "0 var(--cider-space-3)",
-                  color: "var(--cider-text-faint)",
-                  fontSize: "var(--cider-text-sm)",
-                }}
-              >
-                Nada na fila ainda.
+              <p className="xsmall faint" style={{ padding: "4px 10px" }}>
+                Pesquise para adicionar faixas.
               </p>
             ) : (
               state.queue.map((track, position) => (
                 <button
                   key={track.videoId}
                   type="button"
-                  className="cider-nav-item"
+                  className="nav-item"
                   aria-current={position === state.index ? "page" : undefined}
                   onClick={() => engine.playIndex(position)}
+                  title={track.title}
                 >
-                  <Play size={14} />
-                  <span
-                    style={{
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {track.title}
-                  </span>
+                  <Play size={13} />
+                  <span className="label truncate">{track.title}</span>
                 </button>
               ))
             )}
           </nav>
 
-          <div
-            style={{
-              marginTop: "auto",
-              paddingTop: "var(--cider-space-3)",
-              borderTop: "1px solid var(--cider-border)",
-              fontSize: "var(--cider-text-xs)",
-              color: "var(--cider-text-faint)",
-            }}
-          >
+          <div className="sidebar-footer">
             <button
               type="button"
-              className="cider-btn"
-              data-variant="ghost"
-              data-size="sm"
+              className="btn ghost sm"
               onClick={() => navigate("/channels/@me")}
             >
-              <X size={14} /> Voltar ao Nexora
+              Voltar ao Nexora
             </button>
           </div>
         </aside>
 
-        <div className="cider-main">
-          <header className="cider-topbar">
+        <div className="main-column">
+          <header className="topbar">
             <form
-              className="cider-search"
+              className="search-field"
               onSubmit={event => {
                 event.preventDefault();
                 void runSearch(query);
@@ -230,379 +214,351 @@ function CiderShell() {
                 aria-label="Buscar"
               />
             </form>
-            <span className="grow" />
-            <span
-              style={{ fontSize: "var(--cider-text-xs)", color: "var(--cider-text-faint)" }}
-            >
-              {results.length > 0 && source
-                ? `${results.length} resultados · ${new URL(source).host}`
-                : ""}
-            </span>
+            <div className="grow" />
+            {searching ? <Loader2 size={15} className="animate-spin" /> : null}
+            {results.length > 0 && source ? (
+              <span className="xsmall faint">
+                {results.length} resultados · {new URL(source).host}
+              </span>
+            ) : null}
             <button
               type="button"
-              className="cider-btn"
-              data-variant="ghost"
-              data-size="sm"
+              className="connection-pill"
+              data-state="on"
               onClick={() => navigate("/channels/@me")}
             >
-              Sair do Cider
+              <span className="dot" />
+              Nexora
             </button>
           </header>
 
-          <div className="cider-content">
-            {searchError && (
-              <div className="cider-notice" data-tone="warning" style={{ marginBottom: 16 }}>
-                {searchError}
+          <main className="content" id="cider-content">
+            {error ? (
+              <div className="notice" data-tone="warning" style={{ marginBottom: 16 }}>
+                <div>{error}</div>
               </div>
-            )}
+            ) : null}
 
-            <section className="cider-nowplaying">
-              <div>
-                <div className="cider-art-frame">
+            <div className="page now-playing-page">
+              <header className="now-playing-head">
+                <div
+                  className="now-playing-art"
+                  style={{ background: "var(--cider-bg-sunken)" }}
+                >
                   {state.track?.artworkUrl ? (
                     <img
-                      className="cider-art"
                       src={state.track.artworkUrl}
                       alt=""
                       referrerPolicy="no-referrer"
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
                     />
                   ) : (
-                    <div className="cider-art-empty">
-                      <Disc3 size={56} />
+                    <div className="grid place-items-center" style={{ height: "100%" }}>
+                      <Disc3 size={72} style={{ color: "var(--cider-text-faint)" }} />
                     </div>
                   )}
                 </div>
-              </div>
 
-              <div style={{ minWidth: 0 }}>
-                <p
-                  style={{
-                    fontSize: "var(--cider-text-xs)",
-                    color: "var(--cider-text-faint)",
-                    textTransform: "uppercase",
-                    letterSpacing: "var(--cider-tracking-wide)",
-                    margin: 0,
-                  }}
-                >
-                  Tocando agora
-                </p>
-                <h1 className="cider-nowplaying-title">
-                  {state.track?.title ?? "Nada tocando"}
-                </h1>
-                <p className="cider-nowplaying-artist">
-                  {state.track
-                    ? state.track.artist || state.track.channelName
-                    : "Escolha uma música para começar"}
-                </p>
-                {state.track?.youtubeTitle &&
-                  state.track.youtubeTitle !== state.track.title && (
-                    <p className="cider-source-line">
-                      no YouTube: {state.track.youtubeTitle}
+                <div className="now-playing-info stack">
+                  <span className="xsmall faint uppercase">YouTube · player oficial</span>
+                  <h1 className="now-playing-title">
+                    {state.track?.title ?? "Nada tocando"}
+                  </h1>
+                  <p className="now-playing-artist">
+                    {state.track
+                      ? state.track.artist || state.track.channelName
+                      : "Escolha uma música"}
+                  </p>
+                  {state.track?.youtubeTitle &&
+                  state.track.youtubeTitle !== state.track.title ? (
+                    <p className="xsmall faint">
+                      Título original do vídeo:{" "}
+                      <span title={state.track.youtubeTitle}>
+                        {state.track.youtubeTitle}
+                      </span>
                     </p>
-                  )}
+                  ) : null}
 
-                {/* Player real do YouTube, atrás da capa. */}
-                <div
-                  className="cider-stage"
-                  style={{ marginTop: "var(--cider-space-5)" }}
-                >
-                  <div ref={hostRef} className="cider-frame-host" />
-                  <button
-                    type="button"
-                    className="cider-cover"
-                    style={{ "--cider-cover-bg": coverBackground } as React.CSSProperties}
-                    onClick={() => engine.toggle()}
-                    aria-label={
-                      state.phase === "playing" ? "Pausar" : "Reproduzir"
-                    }
-                  >
-                    {state.track ? (
-                      <>
-                        {state.phase === "playing" ? (
-                          <Pause size={40} />
+                  {/* Player real do YouTube, atrás da capa opaca. */}
+                  <div className="youtube-dock" data-mode="audio" data-cover="true">
+                    <div className="youtube-dock-surface">
+                      <div ref={hostRef} className="youtube-frame-host" data-covered="true" />
+                      <div className="youtube-cover" data-empty={state.track ? undefined : "true"}>
+                        {state.track ? (
+                          <button
+                            type="button"
+                            className="btn play lg"
+                            onClick={() => engine.toggle()}
+                            aria-label={playing ? "Pausar" : "Reproduzir"}
+                          >
+                            {playing ? <Pause size={22} /> : <Play size={22} />}
+                          </button>
                         ) : (
-                          <Play size={40} />
+                          <span className="small muted">
+                            Pesquise uma música para o player carregar o vídeo.
+                          </span>
                         )}
-                        <span className="cider-cover-peek">
-                          {state.phase === "playing"
-                            ? "somente áudio · vídeo coberto"
-                            : "tocar"}
-                        </span>
-                      </>
-                    ) : (
-                      <span
-                        style={{
-                          color: "var(--cider-text-faint)",
-                          fontSize: "var(--cider-text-base)",
-                        }}
-                      >
-                        Pesquise uma música para o player carregar o vídeo.
-                      </span>
-                    )}
-                  </button>
-                </div>
-
-                <div className="cider-transport">
-                  <button
-                    className="cider-btn"
-                    data-size="icon"
-                    data-variant="ghost"
-                    aria-pressed={state.shuffle}
-                    aria-label="Aleatório"
-                    onClick={engine.toggleShuffle}
-                  >
-                    <Shuffle size={17} />
-                  </button>
-                  <button
-                    className="cider-btn"
-                    data-size="icon"
-                    data-variant="ghost"
-                    aria-label="Anterior"
-                    disabled={!state.track}
-                    onClick={engine.previous}
-                  >
-                    <SkipBack size={19} />
-                  </button>
-                  <button
-                    className="cider-btn"
-                    data-size="icon"
-                    data-variant="primary"
-                    aria-label={state.phase === "playing" ? "Pausar" : "Reproduzir"}
-                    disabled={!state.track}
-                    onClick={engine.toggle}
-                  >
-                    {state.phase === "playing" ? (
-                      <Pause size={19} />
-                    ) : (
-                      <Play size={19} />
-                    )}
-                  </button>
-                  <button
-                    className="cider-btn"
-                    data-size="icon"
-                    data-variant="ghost"
-                    aria-label="Próxima"
-                    disabled={!state.track}
-                    onClick={engine.next}
-                  >
-                    <SkipForward size={19} />
-                  </button>
-                  <button
-                    className="cider-btn"
-                    data-size="icon"
-                    data-variant="ghost"
-                    aria-label="Repetir"
-                    onClick={engine.cycleRepeat}
-                  >
-                    {state.repeat === "one" ? (
-                      <Repeat1 size={17} />
-                    ) : (
-                      <Repeat size={17} />
-                    )}
-                  </button>
-                </div>
-
-                <div className="cider-progress">
-                  <span className="cider-timecode">
-                    {formatTime(state.positionMs)}
-                  </span>
-                  <input
-                    className="cider-range"
-                    type="range"
-                    min={0}
-                    max={Math.max(1, state.durationMs)}
-                    value={Math.min(state.positionMs, state.durationMs || 0)}
-                    aria-label="Progresso"
-                    onChange={event => engine.seekMs(Number(event.target.value))}
-                  />
-                  <span className="cider-timecode">
-                    {formatTime(state.durationMs)}
-                  </span>
-                </div>
-
-                {state.autoplayBlocked && (
-                  <div className="cider-notice" data-tone="warning" style={{ marginTop: 16 }}>
-                    O navegador bloqueou o início automático. Clique em reproduzir — é
-                    a política de autoplay e o Cider não contorna isso.
+                      </div>
+                    </div>
                   </div>
-                )}
 
-                {state.error && (
-                  <div className="cider-notice" data-tone="danger" style={{ marginTop: 16 }}>
-                    {state.error}
+                  <div className="now-playing-progress">
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(1, state.durationMs)}
+                      value={Math.min(state.positionMs, state.durationMs || 0)}
+                      aria-label="Progresso"
+                      onChange={event => engine.seekMs(Number(event.target.value))}
+                    />
+                    <div className="between xsmall faint tabular">
+                      <span>{timecode(state.positionMs)}</span>
+                      <span>{timecode(state.durationMs)}</span>
+                    </div>
                   </div>
-                )}
 
-                {/* Letras em tempo real, no mesmo estilo do desktop. */}
-                <div style={{ marginTop: "var(--cider-space-6)" }}>
-                  {lyrics.status === "loading" && (
-                    <p style={{ color: "var(--cider-text-muted)", fontSize: "var(--cider-text-base)" }}>
-                      Procurando no LRCLIB…
-                    </p>
-                  )}
-                  {lyrics.status === "empty" && (
-                    <p style={{ color: "var(--cider-text-muted)", fontSize: "var(--cider-text-base)" }}>
-                      Não achamos a letra dessa faixa.
-                    </p>
-                  )}
+                  <div className="now-playing-controls">
+                    <button
+                      className="btn icon"
+                      aria-pressed={state.shuffle}
+                      aria-label="Embaralhar"
+                      onClick={engine.toggleShuffle}
+                    >
+                      <Shuffle size={18} />
+                    </button>
+                    <button
+                      className="btn icon"
+                      aria-label="Faixa anterior"
+                      onClick={engine.previous}
+                    >
+                      <SkipBack size={20} />
+                    </button>
+                    <button
+                      className="btn play"
+                      aria-label={playing ? "Pausar" : "Reproduzir"}
+                      onClick={engine.toggle}
+                    >
+                      {playing ? <Pause size={24} /> : <Play size={24} />}
+                    </button>
+                    <button
+                      className="btn icon"
+                      aria-label="Próxima faixa"
+                      onClick={engine.next}
+                    >
+                      <SkipForward size={20} />
+                    </button>
+                    <button
+                      className="btn icon"
+                      aria-label="Repetição"
+                      aria-pressed={state.repeat !== "off"}
+                      onClick={engine.cycleRepeat}
+                    >
+                      {state.repeat === "one" ? (
+                        <Repeat1 size={18} />
+                      ) : (
+                        <Repeat size={18} />
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="now-playing-volume inline">
+                    <button
+                      className="btn icon"
+                      aria-label={state.muted ? "Ativar som" : "Silenciar"}
+                      onClick={engine.toggleMute}
+                    >
+                      {state.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={Math.round((state.muted ? 0 : state.volume) * 100)}
+                      aria-label="Volume"
+                      onChange={event => engine.setVolume(Number(event.target.value) / 100)}
+                    />
+                    <span className="xsmall faint tabular">
+                      {Math.round((state.muted ? 0 : state.volume) * 100)}%
+                    </span>
+                  </div>
+
+                  {state.autoplayBlocked ? (
+                    <div className="notice" data-tone="warning">
+                      <div>
+                        O navegador bloqueou o início automático. Clique em
+                        reproduzir — é a política de autoplay e o Cider não
+                        contorna isso.
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {state.error ? (
+                    <div className="notice" data-tone="danger">
+                      <div>{state.error}</div>
+                    </div>
+                  ) : null}
+                </div>
+              </header>
+
+              {lyrics.status === "ready" ? (
+                <section className="section">
+                  <div className="section-head">
+                    <h2 className="section-title">Letras</h2>
+                  </div>
                   {lyrics.view}
-                  {lyrics.status === "idle" && (
-                    <p style={{ color: "var(--cider-text-faint)", fontSize: "var(--cider-text-base)" }}>
-                      Toque uma faixa para ver a letra.
-                    </p>
-                  )}
+                </section>
+              ) : null}
+
+              {lyrics.status === "loading" ? (
+                <section className="section">
+                  <div className="section-head">
+                    <h2 className="section-title">Letras</h2>
+                  </div>
+                  <p className="muted">Procurando no LRCLIB…</p>
+                </section>
+              ) : null}
+
+              {lyrics.status === "empty" ? (
+                <section className="section">
+                  <div className="section-head">
+                    <h2 className="section-title">Letras</h2>
+                  </div>
+                  <p className="muted">Não achamos a letra dessa faixa.</p>
+                </section>
+              ) : null}
+
+              {results.length > 0 ? (
+                <section className="section">
+                  <div className="section-head">
+                    <h2 className="section-title">Resultados</h2>
+                    <span className="grow" />
+                    <button
+                      type="button"
+                      className="btn sm"
+                      onClick={() => engine.playQueue(results, 0)}
+                    >
+                      <Play size={13} /> Tocar tudo
+                    </button>
+                  </div>
+                  <ul className="track-list">
+                    {results.map(track => (
+                      <li key={track.videoId}>
+                        <button
+                          type="button"
+                          className="track-row yt-row"
+                          onClick={() => engine.playTrack(track, results)}
+                        >
+                          <img
+                            className="cover-thumb"
+                            src={track.artworkUrl}
+                            alt=""
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                          <span className="stack" style={{ minWidth: 0 }}>
+                            <span className="truncate">{track.title}</span>
+                            <span className="xsmall faint truncate">
+                              {track.artist || track.channelName}
+                              {track.version !== "studio" ? ` · ${track.version}` : ""}
+                            </span>
+                          </span>
+                          <span className="grow" />
+                          <span className="xsmall faint tabular">
+                            {timecode(track.durationMs)}
+                          </span>
+                          <ExternalLink size={13} className="faint" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              <div className="notice" data-tone="info">
+                <div>
+                  <strong>Privacidade e atribuição</strong>
+                  <br />
+                  YouTube é a fonte deste conteúdo: o título original do vídeo é
+                  preservado e "Abrir no YouTube" leva ao vídeo. O Cider 2 não
+                  baixa, não converte e não hospeda este vídeo.
                 </div>
               </div>
-            </section>
-
-            {results.length > 0 && (
-              <section>
-                <div className="cider-section-head">
-                  <h2 className="cider-section-title">Resultados</h2>
-                  <span className="grow" />
-                  <button
-                    type="button"
-                    className="cider-btn"
-                    data-size="sm"
-                    onClick={() => engine.playQueue(results, 0)}
-                  >
-                    <Play size={13} /> Tocar tudo
-                  </button>
-                </div>
-                <div className="cider-rows">
-                  {results.map(track => (
-                    <button
-                      key={track.videoId}
-                      type="button"
-                      className="cider-row"
-                      data-playing={state.track?.videoId === track.videoId}
-                      onClick={() => engine.playTrack(track, results)}
-                    >
-                      <img
-                        className="cider-row-art"
-                        src={track.artworkUrl}
-                        alt=""
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                      />
-                      <span style={{ minWidth: 0 }}>
-                        <span className="cider-row-title">{track.title}</span>
-                        <span className="cider-row-meta">
-                          {track.artist || track.channelName}
-                          {track.version !== "studio" ? ` · ${track.version}` : ""}
-                        </span>
-                      </span>
-                      <span className="cider-row-dur">
-                        {formatTime(track.durationMs)}
-                      </span>
-                      <ExternalLink
-                        size={13}
-                        style={{ color: "var(--cider-text-faint)" }}
-                      />
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
+            </div>
+          </main>
         </div>
       </div>
 
-      <CiderPlayerBar />
+      <CiderPlaybar />
     </div>
   );
 }
 
-/** Barra de reprodução fixa, equivalente ao `Playbar` do desktop. */
-function CiderPlayerBar() {
+/** Playbar fixa, com a mesma estrutura do desktop. */
+function CiderPlaybar() {
   const { state, engine } = useCider();
+  const playing = state.phase === "playing";
 
   return (
-    <footer className="cider-playbar">
-      <div className="cider-now-mini">
+    <footer className="playbar" aria-label="Reprodução">
+      <div className="now-playing">
         {state.track?.artworkUrl ? (
           <img
-            className="cider-now-mini-art"
+            className="cover-thumb"
             src={state.track.artworkUrl}
             alt=""
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="cider-now-mini-art" />
+          <div className="cover-thumb" />
         )}
-        <div style={{ minWidth: 0 }}>
-          <div
-            className="cider-row-title"
-            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-          >
-            {state.track?.title ?? "Nada tocando"}
-          </div>
-          <div className="cider-row-meta">
+        <div className="meta grow">
+          <div className="title truncate">{state.track?.title ?? "Nada tocando"}</div>
+          <div className="artist truncate">
             {state.track?.artist || state.track?.channelName || "escolha uma faixa"}
           </div>
+          {state.error ? (
+            <div className="xsmall truncate" style={{ color: "var(--cider-danger)" }}>
+              {state.error}
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <div>
-        <div className="cider-transport-buttons">
+      <div className="transport">
+        <div className="transport-buttons">
           <button
-            className="cider-btn"
-            data-size="icon"
-            data-variant="ghost"
+            className="btn icon"
             aria-pressed={state.shuffle}
-            aria-label="Aleatório"
+            aria-label="Embaralhar"
             onClick={engine.toggleShuffle}
           >
             <Shuffle size={17} />
           </button>
-          <button
-            className="cider-btn"
-            data-size="icon"
-            data-variant="ghost"
-            aria-label="Anterior"
-            disabled={!state.track}
-            onClick={engine.previous}
-          >
+          <button className="btn icon" aria-label="Anterior" onClick={engine.previous}>
             <SkipBack size={18} />
           </button>
           <button
-            className="cider-btn"
-            data-size="icon"
-            data-variant="primary"
-            aria-label={state.phase === "playing" ? "Pausar" : "Reproduzir"}
-            disabled={!state.track}
+            className="btn play"
+            aria-label={playing ? "Pausar" : "Reproduzir"}
             onClick={engine.toggle}
           >
-            {state.phase === "playing" ? (
-              <Pause size={18} />
-            ) : (
-              <Play size={18} />
-            )}
+            {playing ? <Pause size={18} /> : <Play size={18} />}
           </button>
-          <button
-            className="cider-btn"
-            data-size="icon"
-            data-variant="ghost"
-            aria-label="Próxima"
-            disabled={!state.track}
-            onClick={engine.next}
-          >
+          <button className="btn icon" aria-label="Próxima" onClick={engine.next}>
             <SkipForward size={18} />
           </button>
           <button
-            className="cider-btn"
-            data-size="icon"
-            data-variant="ghost"
-            aria-label="Repetir"
+            className="btn icon"
+            aria-label="Repetição"
+            aria-pressed={state.repeat !== "off"}
             onClick={engine.cycleRepeat}
           >
             {state.repeat === "one" ? <Repeat1 size={16} /> : <Repeat size={16} />}
           </button>
         </div>
-        <div className="cider-progress" style={{ marginTop: 6 }}>
-          <span className="cider-timecode">{formatTime(state.positionMs)}</span>
+        <div className="progress-row">
+          <span className="timecode">{timecode(state.positionMs)}</span>
           <input
-            className="cider-range"
             type="range"
             min={0}
             max={Math.max(1, state.durationMs)}
@@ -610,31 +566,24 @@ function CiderPlayerBar() {
             aria-label="Progresso"
             onChange={event => engine.seekMs(Number(event.target.value))}
           />
-          <span className="cider-timecode">{formatTime(state.durationMs)}</span>
+          <span className="timecode right">{timecode(state.durationMs)}</span>
         </div>
       </div>
 
-      <div className="cider-playbar-extras">
-        <div className="cider-volume">
+      <div className="playbar-extras">
+        <div className="volume-control">
           <button
-            className="cider-btn"
-            data-size="icon"
-            data-variant="ghost"
+            className="btn icon"
             aria-label={state.muted ? "Ativar som" : "Silenciar"}
             onClick={engine.toggleMute}
           >
-            {state.muted || state.volume === 0 ? (
-              <VolumeX size={17} />
-            ) : (
-              <Volume2 size={17} />
-            )}
+            {state.muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
           </button>
           <input
-            className="cider-range"
             type="range"
             min={0}
             max={100}
-            value={(state.muted ? 0 : state.volume) * 100}
+            value={Math.round((state.muted ? 0 : state.volume) * 100)}
             aria-label="Volume"
             onChange={event => engine.setVolume(Number(event.target.value) / 100)}
           />
@@ -643,4 +592,3 @@ function CiderPlayerBar() {
     </footer>
   );
 }
-

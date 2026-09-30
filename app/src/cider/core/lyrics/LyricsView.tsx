@@ -1,4 +1,11 @@
-import { useMemo, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type WheelEvent,
+} from "react";
 import { estimateWords } from "./words";
 import type { LyricsLine, LyricsWordView, WordState } from "./types";
 import type { LyricsStyle } from "./presets";
@@ -7,9 +14,9 @@ import type { LyricsStyle } from "./presets";
  * Uma palavra da letra, com o estado que decide cor, glow, escala e blur.
  *
  * O truque do efeito é que **nada de CSS animando sozinho**: cada quadro vem
- * do `LyricsSyncEngine` com a posição real do player, e o `text-shadow` é
- * calculado a partir do progresso. Por isso a palavra "acende" em vez de
- * piscar, e um seek não deixa nada preso no meio.
+ * do motor com a posição real do player, e o `text-shadow` é calculado a
+ * partir do progresso. Por isso a palavra "acende" em vez de piscar, e um seek
+ * não deixa nada preso no meio.
  */
 function AnimatedWord({
   view,
@@ -153,10 +160,18 @@ function AnimatedWord({
 }
 
 /**
- * Bloco de letras, com destaque por palavra.
+ * Bloco de letras com destaque por palavra e rolagem automática.
  *
- * A posição do player é a **única** fonte do tempo: nada de cronômetro
- * próprio. Pausa congela, seek recalcula, mudança de velocidade não afeta.
+ * Duas coisas que a primeira versão daqui não tinha, e que faziam a letra
+ * aparecer "toda junto":
+ *
+ * - **máscara de gradiente** no topo e na base, que é o que faz a coluna
+ *   parecer um rolo contínuo em vez de uma lista;
+ * - **autoscroll** centrando a linha ativa. Sem ele, todas as linhas ficam
+ *   empilhadas no topo do container e a letra vira um bloco só.
+ *
+ * O autoscroll é por **evento**, não por posição: `scrollTo` só é chamado
+ * quando a linha ativa muda, para não brigar com a rolagem do usuário.
  */
 export function LyricsView({
   lines,
@@ -187,9 +202,20 @@ export function LyricsView({
   // duração e todas com respiro errado.
   const resolved = useMemo(() => estimateWords(lines), [lines]);
 
+  const { containerRef, registerLine, onWheel, resumeAutoscroll } = useLyricsScroll(
+    views?.findIndex(view => view.state === "active") ?? -1,
+    style.animation
+  );
+
   return (
     <div className="lyrics-scope" style={cssVars as CSSProperties}>
-      <div className="lyrics-lines" data-align={style.alignment} aria-live="off">
+      <div
+        className="lyrics-lines"
+        data-align={style.alignment}
+        ref={containerRef}
+        onWheel={onWheel}
+        aria-live="off"
+      >
         <div className="lyrics-spacer" />
         {resolved.map((line, index) => {
           const view = views?.[index];
@@ -197,6 +223,7 @@ export function LyricsView({
           return (
             <p
               key={`${line.startTimeMs ?? "x"}-${index}`}
+              ref={element => registerLine(index, element)}
               className="lyrics-line"
               data-state={state}
               data-instrumental={
@@ -204,7 +231,15 @@ export function LyricsView({
               }
               onClick={
                 onSeek && line.startTimeMs !== null
-                  ? () => onSeek(line.startTimeMs!)
+                  ? () => {
+                      resumeAutoscroll();
+                      onSeek(line.startTimeMs!);
+                    }
+                  : undefined
+              }
+              title={
+                onSeek && line.startTimeMs !== null
+                  ? "Clique para pular para este trecho"
                   : undefined
               }
             >
@@ -248,6 +283,67 @@ export function LyricsView({
       </div>
     </div>
   );
+}
+
+/**
+ * Rolagem automática das letras.
+ *
+ * Separate do componente porque precisa guardar duas coisas que o render não
+ * pode ler — o elemento de cada linha e a última rolagem feita — e porque a
+ * única decisão que o render toma (qual linha está ativa) vem do motor.
+ */
+function useLyricsScroll(activeIndex: number, animation: LyricsStyle["animation"]) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const lineRefs = useRef(new Map<number, HTMLParagraphElement>());
+  const lastScrollKey = useRef<string | null>(null);
+  const autoscroll = useRef(true);
+  // "seek" é o salto grande do usuário, que não deve ser animado: rolar do
+  // início ao fim em 400 ms parece travamento, não transição. O índice
+  // anterior vive em estado, porque ler um ref no render é o que a regra de
+  // hooks proíbe — e a detecção precisa acontecer na mesma passagem do render.
+  const [previousIndex, setPreviousIndex] = useState(-1);
+  const seek = previousIndex >= 0 && Math.abs(activeIndex - previousIndex) > 1;
+  if (previousIndex !== activeIndex) setPreviousIndex(activeIndex);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || activeIndex < 0 || !autoscroll.current) return;
+    const element = lineRefs.current.get(activeIndex);
+    if (!element) return;
+    // Só rola quando a linha muda: rolar a cada quadro brigaria com o
+    // usuário e ainda assim gastaria CPU à toa.
+    const key = `${activeIndex}:${seek ? "seek" : "step"}`;
+    if (lastScrollKey.current === key) return;
+    lastScrollKey.current = key;
+    const target =
+      element.offsetTop - container.clientHeight / 2 + element.clientHeight / 2;
+    container.scrollTo({
+      top: Math.max(0, target),
+      behavior: animation === "off" || seek ? "auto" : "smooth",
+    });
+  }, [activeIndex, animation, seek]);
+
+  const registerLine = (index: number, element: HTMLParagraphElement | null) => {
+    if (element) lineRefs.current.set(index, element);
+    else lineRefs.current.delete(index);
+  };
+
+  const onWheel = (event: WheelEvent<HTMLDivElement>) => {
+    // Rolagem manual desliga o autoscroll até a linha seguinte: assim a letra
+    // não "puxa" de volta enquanto a pessoa lê de cima.
+    const container = containerRef.current;
+    if (!container) return;
+    const atTop = container.scrollTop <= 1;
+    const atBottom =
+      container.scrollTop + container.clientHeight >= container.scrollHeight - 1;
+    autoscroll.current = event.deltaY < 0 ? atTop : atBottom;
+  };
+
+  const resumeAutoscroll = () => {
+    autoscroll.current = true;
+  };
+
+  return { containerRef, registerLine, onWheel, resumeAutoscroll };
 }
 
 /** Interpola dois `#rrggbb` por canal. */
