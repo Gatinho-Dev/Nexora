@@ -7,7 +7,7 @@
  * saída para escolher, e um painel vazio seria pior que a ausência dele.
  */
 
-import { ListMusic, MicVocal, Trash2, X } from "lucide-react";
+import { ExternalLink, ListMusic, Loader2, MicVocal, Trash2, X } from "lucide-react";
 
 import { useCider } from "../useCider";
 import { useLyrics } from "../useLyrics";
@@ -21,7 +21,11 @@ export function CiderSidePanel() {
   if (!panel) return null;
 
   return (
-    <section className="side-panel" aria-label={panel === "queue" ? "Fila de reprodução" : "Letras"}>
+    <section
+      className="side-panel"
+      data-panel={panel}
+      aria-label={panel === "queue" ? "Fila de reprodução" : "Letras"}
+    >
       <div className="panel-head">
         <h3>
           {panel === "queue" ? (
@@ -134,7 +138,7 @@ function QueuePanel() {
 
 function LyricsPanel() {
   const { state } = useCider();
-  const lyrics = useLyrics(state.track, state.positionMs, state.phase === "playing");
+  const lyrics = useLyrics(state.track, state.positionMs, state.phase === "playing", "panel");
 
   if (!state.track) {
     return (
@@ -146,16 +150,29 @@ function LyricsPanel() {
     );
   }
 
-  if (lyrics.status === "loading") return <p className="muted small">Procurando no LRCLIB…</p>;
-  if (lyrics.status === "empty") {
+  if (lyrics.status === "loading") {
     return (
-      <p className="muted small">
-        Não encontramos a letra desta faixa no LRCLIB. O Cider não inventa letra: quando a fonte não
-        tem, ele diz que não tem.
+      <p className="muted small lyrics-status">
+        <Loader2 size={14} className="cider-spin" /> Procurando a letra…
       </p>
     );
   }
-  if (!lyrics.view) return null;
 
-  return <div className="lyrics-scope">{lyrics.view}</div>;
+  if (lyrics.status === "empty") {
+    return (
+      <div className="lyrics-empty stack gap-3">
+        <p className="muted small">
+          As fontes automáticas não têm a letra desta faixa. O Cider não inventa letra — mas a busca
+          na web resolve em um clique.
+        </p>
+        {lyrics.searchUrl ? (
+          <a className="btn" href={lyrics.searchUrl} target="_blank" rel="noopener noreferrer">
+            <ExternalLink size={15} /> Procurar a letra no Google
+          </a>
+        ) : null}
+      </div>
+    );
+  }
+
+  return <>{lyrics.view}</>;
 }

@@ -104,18 +104,20 @@ export function CiderSettingsPage() {
  * Casca                                                              *
  * ------------------------------------------------------------------ */
 
+/* Mesma ordem da pílula (transporte, faixa, ações), para a lista de itens aqui
+   bater com o que aparece na tela. */
 const PLAYBAR_SLOTS: Array<{ id: string; label: string }> = [
-  { id: "cover", label: "Capa" },
-  { id: "favorite", label: "Favoritar" },
   { id: "shuffle", label: "Aleatório" },
   { id: "previous", label: "Faixa anterior" },
   { id: "play", label: "Reproduzir/pausar" },
   { id: "next", label: "Próxima faixa" },
   { id: "repeat", label: "Repetição" },
+  { id: "cover", label: "Capa" },
+  { id: "favorite", label: "Favoritar" },
   { id: "progress", label: "Barra de progresso" },
-  { id: "volume", label: "Volume" },
   { id: "lyrics", label: "Letras (painel)" },
   { id: "queue", label: "Fila (painel)" },
+  { id: "volume", label: "Volume" },
 ];
 
 function ShellSettings() {
@@ -319,8 +321,9 @@ function ShellSettings() {
           <div className="setting-label">
             <span className="label">Itens da barra de reprodução</span>
             <span className="desc">
-              Desligar um item o remove da barra. A ordem padrão é a do Cider 2 desktop; a fila e as
-              letras continuam acessíveis pelo teclado (Ctrl+Q e Ctrl+L).
+              Desligar um item o remove da pílula. A ordem padrão é a do Apple Music — controles à
+              esquerda, faixa no meio, ações à direita; a fila e as letras continuam acessíveis pelo
+              teclado (Ctrl+Q e Ctrl+L).
             </span>
           </div>
           <div className="setting-control left wrap">
@@ -356,8 +359,8 @@ function PlaybackSettings() {
     <div className="setting-group">
       <h3>Tocando agora</h3>
       <p className="group-hint">
-        O áudio é sempre o `iframe` oficial do YouTube. Aqui ficam só as partes visuais da tela de
-        foco — nada que dependa de acesso ao som, que o navegador não dá a uma origem diferente.
+        Aqui ficam só as partes visuais da tela de foco — nada que dependa de acesso ao som, que o
+        navegador não dá a uma origem diferente.
       </p>
 
       <div className="setting-row">
@@ -378,9 +381,9 @@ function PlaybackSettings() {
         <div className="setting-label">
           <span className="label">Visualizador</span>
           <span className="desc">
-            O visualizador do desktop lia o áudio antes de sair pela placa de som. Aqui o som está
-            dentro de um `iframe` de outra origem, e o navegador não expõe as amostras: o painel
-            aparece com o aviso de que não há sinal, em vez de fingir que reage à música.
+            O visualizador do desktop lia o áudio antes de sair pela placa de som. Aqui o som vem de
+            outra origem, e o navegador não expõe as amostras: o painel aparece com o aviso de que
+            não há sinal, em vez de fingir que reage à música.
           </span>
         </div>
         <div className="setting-control">
@@ -407,8 +410,9 @@ function SearchSettings() {
     <div className="setting-group">
       <h3>Busca e ranking</h3>
       <p className="group-hint">
-        A busca usa instâncias comunitárias Piped/Invidious, sem chave de API. O ranking (nota de
-        oficial, detecção de versão, deduplicação e teto por canal) é o mesmo do desktop.
+        A busca usa servidores públicos mantidos pela comunidade, sem chave de API. O ranking (nota
+        de oficial, detecção de versão, deduplicação e teto por canal) é o mesmo do desktop. A lista
+        carrega mais resultados sozinha conforme você rola.
       </p>
 
       <div className="setting-row">
@@ -615,27 +619,29 @@ function AboutSettings() {
         <p className="group-hint">
           O Cider 2 web é o mesmo produto do aplicativo desktop, rodando onde o áudio funciona: no
           navegador. A razão é técnica e vale registrar — o WebKitGTK do Linux é compilado sem EME,
-          então o player do YouTube recusa o áudio dentro do aplicativo e responde com os erros
-          152/153 para qualquer vídeo. No navegador, o Widevine existe e o áudio toca.
+          então o player recusa o áudio dentro do aplicativo e responde com os erros 152/153 para
+          qualquer faixa. No navegador, o Widevine existe e o áudio toca.
         </p>
 
         <div className="setting-row">
           <div className="setting-label">
             <span className="label">Player</span>
             <span className="desc">
-              Player oficial do YouTube em `iframe`, comandado por `enablejsapi`, escondido atrás de
-              uma camada opaca. Nenhum áudio é baixado, convertido ou hospedado.
+              Player da fonte de origem, comandado por esta interface e escondido atrás de uma
+              camada opaca. Nenhum áudio é baixado, convertido ou hospedado.
             </span>
           </div>
           <div className="setting-control">
-            <span className="badge success">audio-first</span>
+            <span className="badge success">som primeiro</span>
           </div>
         </div>
 
         <div className="setting-row">
           <div className="setting-label">
             <span className="label">Busca</span>
-            <span className="desc">Instâncias comunitárias Piped/Invidious, sem chave de API.</span>
+            <span className="desc">
+              Servidores públicos da comunidade, sem chave de API e com carregamento progressivo.
+            </span>
           </div>
           <div className="setting-control">
             <Button size="sm" icon={<Activity size={14} />} onClick={() => navigate("/cider/diagnostico")}>
@@ -677,11 +683,11 @@ function AboutSettings() {
         <ul className="stack tight small muted" style={{ paddingLeft: 18 }}>
           <li>
             <strong>Sem equalizador nem DSP.</strong> O navegador não dá acesso ao buffer do áudio
-            dentro do `iframe`. Qualquer EQ aqui seria decorativo.
+            que está tocando. Qualquer EQ aqui seria decorativo.
           </li>
           <li>
             <strong>Sem arquivos locais.</strong> Não há leitura de disco no navegador; a biblioteca
-            é o que passou pelo YouTube.
+            é o que você ouviu aqui.
           </li>
           <li>
             <strong>Instâncias caem.</strong> A busca depende de instâncias comunitárias. Quando
@@ -736,8 +742,8 @@ function AboutSettings() {
         <div>
           Interface, tokens de design, ranking de busca, motor de letras e os seis temas embutidos
           foram portados do Cider 2 desktop — mesmo projeto, mesma identidade. O Cider não é
-          afiliado ao YouTube, ao Google nem ao Cider Collective, e preserva a atribuição de cada
-          vídeo com o título original e o link para o YouTube.
+          afiliado a nenhum dos provedores de conteúdo que consulta, e preserva a atribuição de cada
+          faixa, com o título original e o link para a publicação.
         </div>
       </div>
     </>

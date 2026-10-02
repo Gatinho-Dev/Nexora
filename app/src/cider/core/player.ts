@@ -87,7 +87,7 @@ export function loadYouTubeIframeApi(): Promise<YTGlobal> {
       apiPromise = null;
       reject(
         new Error(
-          "Não foi possível carregar a API do player do YouTube. Verifique a conexão ou se o domínio youtube.com está bloqueado na sua rede."
+          "Não foi possível carregar o player. Verifique a conexão ou se o domínio da fonte está bloqueado na sua rede."
         )
       );
     };
@@ -119,16 +119,16 @@ export function playbackErrorMessage(code: number): string {
     case 2:
       return "O parâmetro do vídeo é inválido — a faixa não pôde ser carregada.";
     case 5:
-      return "O player do YouTube não conseguiu reproduzir este vídeo (erro de HTML5).";
+      return "O player não conseguiu reproduzir esta faixa (erro de HTML5).";
     case 100:
       return "Este vídeo não está disponível: foi removido, é privado ou o autor restringiu a reprodução.";
     case 101:
     case 150:
-      return "O autor deste vídeo não permite reprodução incorporada. Abra no YouTube para assistir.";
+      return "Quem publicou não permite reprodução incorporada. Use “Abrir original” para ouvir na fonte.";
     default:
       return Number.isFinite(code)
-        ? `O player do YouTube reportou um erro (código ${code}).`
-        : "O player do YouTube reportou um erro que não pôde ser identificado.";
+        ? `O player reportou um erro (código ${code}).`
+        : "O player reportou um erro que não pôde ser identificado.";
   }
 }
 

@@ -266,7 +266,7 @@ export function CiderTopbar() {
           ref={searchRef}
           type="search"
           value={term}
-          placeholder="Buscar no YouTube — artist:, album: ou @ refinam"
+          placeholder="Buscar músicas, artistas ou álbuns"
           aria-label="Buscar"
           onChange={(event) => setTerm(event.target.value)}
           onKeyDown={(event) => {
@@ -282,14 +282,14 @@ export function CiderTopbar() {
         onClick={() => navigate("/cider/diagnostico")}
         title={
           sourceHost
-            ? `Última busca respondida por ${sourceHost}. A busca usa instâncias comunitárias Piped/Invidious.`
+            ? `Última busca respondida por ${sourceHost}.`
             : lastSearchError
               ? lastSearchError
-              : "Nenhuma busca nesta sessão ainda. A fonte é uma instância comunitária Piped/Invidious."
+              : "Nenhuma busca nesta sessão ainda."
         }
       >
         <span className="dot" />
-        {sourceHost ?? "Piped/Invidious"}
+        Fonte
       </button>
 
       <IconButton label="Paleta de comandos" onClick={() => setPalette(true)}>
@@ -317,20 +317,38 @@ function safeHost(url: string): string | null {
  * Barra de reprodução                                                *
  * ------------------------------------------------------------------ */
 
-/** Slots da playbar, na ordem padrão do desktop. */
+/**
+ * Slots da playbar, na ordem padrão.
+ *
+ * É a ordem da pílula: transporte, faixa, ações. Antes era a lista única do
+ * desktop (capa primeiro), que na pílula jogaria a capa para o canto esquerdo,
+ * antes dos botões.
+ */
 const DEFAULT_PLAYBAR_ORDER = [
-  "cover",
-  "favorite",
   "shuffle",
   "previous",
   "play",
   "next",
   "repeat",
+  "cover",
+  "favorite",
   "progress",
-  "volume",
   "lyrics",
   "queue",
+  "volume",
 ];
+
+/*
+ * A pílula tem três blocos, como a do Apple Music: controles à esquerda, o que
+ * está tocando no meio e as ações à direita. Cada slot pertence a um bloco, e a
+ * ordem escolhida pelo usuário vale **dentro** dele — assim uma playbar
+ * personalizada continua fazendo sentido, em vez de virar uma fila única.
+ */
+const PILL_SLOTS = {
+  transport: ["shuffle", "previous", "play", "next", "repeat"],
+  now: ["cover", "favorite"],
+  actions: ["lyrics", "queue", "volume"],
+} as const;
 
 export function CiderPlaybar() {
   const navigate = useNavigate();
@@ -340,12 +358,12 @@ export function CiderPlaybar() {
   const panel = useCiderUi((state) => state.panel);
   const togglePanel = useCiderUi((state) => state.togglePanel);
 
-  const active = useMemo(() => {
+  const visible = useMemo(() => {
     const order = settings.playbarOrder.length > 0 ? settings.playbarOrder : DEFAULT_PLAYBAR_ORDER;
     return order.filter((slot) => !settings.playbarHidden.includes(slot));
   }, [settings.playbarOrder, settings.playbarHidden]);
 
-  const has = (slot: string) => active.includes(slot);
+  const group = (slots: readonly string[]) => visible.filter((slot) => slots.includes(slot));
 
   const current = state.track;
   const playing = state.phase === "playing";
@@ -355,118 +373,88 @@ export function CiderPlaybar() {
 
   const repeatLabel =
     state.repeat === "off" ? "Repetir: desligado" : state.repeat === "all" ? "Repetir: fila" : "Repetir: faixa";
+  // O Apple Music conta o que **falta**, não o que já tocou ("-2:50").
+  const remaining = Math.max(0, duration - state.positionMs);
 
-  return (
-    <footer
-      className="playbar"
-      data-position={settings.playbarPosition}
-      aria-label="Barra de reprodução"
-    >
-      <div className="now-playing">
-        {has("cover") ? (
-          <button
-            type="button"
-            onClick={() => navigate("/cider/tocando-agora")}
-            style={{ border: 0, padding: 0, background: "none", cursor: "pointer" }}
-            aria-label="Abrir Tocando agora"
-          >
-            <CoverArt
-              url={current?.artworkUrl}
-              title={current?.title ?? "Cider 2"}
-              className="cover"
-            />
-          </button>
-        ) : null}
-        <div className="meta grow">
-          <div className="title truncate" title={current?.title}>
-            {current ? current.title : "Nada tocando"}
-          </div>
-          <div className="artist truncate">
-            {current
-              ? [current.artist || current.channelName, current.albumHint].filter(Boolean).join(" · ")
-              : "Escolha algo para ouvir"}
-          </div>
-          {state.error ? (
-            <div className="xsmall truncate" style={{ color: "var(--cider-danger)" }} title={state.error}>
-              {state.error}
-            </div>
-          ) : null}
-        </div>
-        {has("favorite") ? (
+  // Cada botão já sai com a própria `key`: a playbar desenha os três blocos com
+  // `map`, e envolver cada um num `<Fragment key>` faria o React avisar a cada
+  // quadro — o plugin de inspeção do projeto injeta uma prop extra em todo
+  // elemento, e `Fragment` só aceita `key` e `children`.
+  const transportButton = (slot: string) => {
+    switch (slot) {
+      case "shuffle":
+        return (
+          <IconButton key="shuffle" label="Reprodução aleatória" active={state.shuffle} onClick={engine.toggleShuffle}>
+            <Shuffle size={17} />
+          </IconButton>
+        );
+      case "previous":
+        return (
+          <IconButton key="previous" label="Faixa anterior" onClick={engine.previous} disabled={!current}>
+            <SkipBack size={20} />
+          </IconButton>
+        );
+      case "play":
+        return (
           <IconButton
-            label={isFavorite ? "Remover dos favoritos" : "Favoritar"}
-            active={isFavorite}
+            key="play"
+            label={playing ? "Pausar" : "Reproduzir"}
+            tone="play"
+            onClick={engine.toggle}
             disabled={!current}
-            onClick={() => current && toggleFavoriteWithToast(current)}
           >
-            <Heart size={18} />
+            {playing ? <Pause size={20} /> : <Play size={20} />}
           </IconButton>
-        ) : null}
-      </div>
-
-      <div className="transport">
-        <div className="transport-buttons">
-          {has("shuffle") ? (
-            <IconButton label="Reprodução aleatória" active={state.shuffle} onClick={engine.toggleShuffle}>
-              <Shuffle size={17} />
-            </IconButton>
-          ) : null}
-          {has("previous") ? (
-            <IconButton label="Faixa anterior" onClick={engine.previous}>
-              <SkipBack size={19} />
-            </IconButton>
-          ) : null}
-          {has("play") ? (
-            <IconButton
-              label={playing ? "Pausar" : "Reproduzir"}
-              tone="play"
-              onClick={engine.toggle}
-              disabled={!current}
-            >
-              {playing ? <Pause size={19} /> : <Play size={19} />}
-            </IconButton>
-          ) : null}
-          {has("next") ? (
-            <IconButton label="Próxima faixa" onClick={engine.next} disabled={!current}>
-              <SkipForward size={19} />
-            </IconButton>
-          ) : null}
-          {has("repeat") ? (
-            <IconButton label={repeatLabel} active={state.repeat !== "off"} onClick={engine.cycleRepeat}>
-              {state.repeat === "one" ? <Repeat1 size={17} /> : <Repeat size={17} />}
-            </IconButton>
-          ) : null}
-        </div>
-
-        {has("progress") ? (
-          <div className="progress-row">
-            {settings.showTimecodes ? <span className="timecode">{timecode(state.positionMs)}</span> : null}
-            <ProgressSlider
-              positionMs={state.positionMs}
-              durationMs={duration}
-              style={settings.progressStyle}
-              onSeek={engine.seekMs}
-            />
-            {settings.showTimecodes ? (
-              <span className="timecode right">{timecode(duration)}</span>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="playbar-extras">
-        {has("lyrics") ? (
-          <IconButton label="Letras" active={panel === "lyrics"} onClick={() => togglePanel("lyrics")}>
-            <MicVocal size={17} />
+        );
+      case "next":
+        return (
+          <IconButton key="next" label="Próxima faixa" onClick={engine.next} disabled={!current}>
+            <SkipForward size={20} />
           </IconButton>
-        ) : null}
-        {has("queue") ? (
-          <IconButton label="Fila de reprodução" active={panel === "queue"} onClick={() => togglePanel("queue")}>
-            <ListMusic size={17} />
+        );
+      case "repeat":
+        return (
+          <IconButton
+            key="repeat"
+            label={repeatLabel}
+            active={state.repeat !== "off"}
+            onClick={engine.cycleRepeat}
+          >
+            {state.repeat === "one" ? <Repeat1 size={17} /> : <Repeat size={17} />}
           </IconButton>
-        ) : null}
-        {has("volume") ? (
-          <div className="volume-control">
+        );
+      default:
+        return null;
+    }
+  };
+
+  const actionButton = (slot: string) => {
+    switch (slot) {
+      case "lyrics":
+        return (
+          <IconButton
+            key="lyrics"
+            label="Letras"
+            active={panel === "lyrics"}
+            onClick={() => togglePanel("lyrics")}
+          >
+            <MicVocal size={18} />
+          </IconButton>
+        );
+      case "queue":
+        return (
+          <IconButton
+            key="queue"
+            label="Fila de reprodução"
+            active={panel === "queue"}
+            onClick={() => togglePanel("queue")}
+          >
+            <ListMusic size={18} />
+          </IconButton>
+        );
+      case "volume":
+        return (
+          <div key="volume" className="volume-control">
             <IconButton
               label={muted ? "Reativar som" : "Silenciar"}
               onClick={() => engine.setVolume(state.volume > 0 ? 0 : 0.85)}
@@ -482,20 +470,84 @@ export function CiderPlaybar() {
               aria-label="Volume"
               className="volume-range"
               onChange={(event) => engine.setVolume(Number(event.target.value))}
-              style={{ width: 92 }}
             />
           </div>
-        ) : null}
-        <button
-          type="button"
-          className="connection-pill"
-          data-state="connected"
-          onClick={() => navigate("/cider/diagnostico")}
-          title="Onde o áudio está sendo reproduzido"
-        >
-          navegador · iframe do YouTube
-        </button>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <footer
+      className="playbar"
+      data-position={settings.playbarPosition}
+      aria-label="Barra de reprodução"
+    >
+      <div className="playbar-pill">
+        <div className="pill-transport">{group(PILL_SLOTS.transport).map(transportButton)}</div>
+
+        <div className="pill-now">
+          {group(PILL_SLOTS.now).includes("cover") ? (
+            <button
+              type="button"
+              className="pill-cover"
+              onClick={() => navigate("/cider/tocando-agora")}
+              aria-label="Abrir Tocando agora"
+            >
+              <CoverArt
+                url={current?.artworkUrl}
+                title={current?.title ?? "Cider 2"}
+                className="cover"
+              />
+            </button>
+          ) : null}
+          <div className="meta grow">
+            <div className="title truncate" title={current?.title}>
+              {current ? current.title : "Nada tocando"}
+            </div>
+            <div className="artist truncate">
+              {current
+                ? [current.artist || current.channelName, current.albumHint].filter(Boolean).join(" — ")
+                : "Escolha algo para ouvir"}
+            </div>
+            {state.error ? (
+              <div className="xsmall truncate" style={{ color: "var(--cider-danger)" }} title={state.error}>
+                {state.error}
+              </div>
+            ) : null}
+          </div>
+          {group(PILL_SLOTS.now).includes("favorite") ? (
+            <IconButton
+              label={isFavorite ? "Remover dos favoritos" : "Favoritar"}
+              active={isFavorite}
+              disabled={!current}
+              onClick={() => current && toggleFavoriteWithToast(current)}
+            >
+              <Heart size={17} />
+            </IconButton>
+          ) : null}
+        </div>
+
+        <div className="pill-actions">{group(PILL_SLOTS.actions).map(actionButton)}</div>
       </div>
+
+      {visible.includes("progress") ? (
+        <div className="playbar-progress">
+          {settings.showTimecodes ? (
+            <span className="timecode">{timecode(state.positionMs)}</span>
+          ) : null}
+          <ProgressSlider
+            positionMs={state.positionMs}
+            durationMs={duration}
+            style={settings.progressStyle}
+            onSeek={engine.seekMs}
+          />
+          {settings.showTimecodes ? (
+            <span className="timecode right">-{timecode(remaining)}</span>
+          ) : null}
+        </div>
+      ) : null}
     </footer>
   );
 }

@@ -718,8 +718,8 @@ export function CiderPlaylistsPage() {
           <div className="page-kicker">Biblioteca</div>
           <h1>Playlists</h1>
           <p className="muted">
-            Playlists locais, deste navegador. O YouTube não permite editar playlists de conta sem
-            autorização, então aqui elas são suas de verdade — e não uma lista somente-leitura.
+            Playlists locais, deste navegador: aqui elas são suas de verdade — criar, renomear,
+            reordenar e apagar, sem depender de conta nenhuma.
           </p>
         </div>
         <div className="page-actions">

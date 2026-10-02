@@ -22,6 +22,76 @@
   gap: 18px;
 }
 
+/*
+ * Painel lateral.
+ *
+ * Aqui a letra **ocupa a altura toda**: o painel vai até o fim da janela e a
+ * lista estica junto, com os espaçadores mantendo a linha ativa no meio — o
+ * arranjo do painel de letras do Apple Music. Sem isso, uma letra curta se
+ * acomoda no topo, o resto do painel fica vazio e a letra parece "acabar" no
+ * meio da tela.
+ *
+ * O prefixo `.cider-root` (e a especificidade extra) é necessário porque o
+ * `bridge.css` limita a letra a 520 px para o layout de página.
+ */
+.cider-root .lyrics-scope[data-variant="panel"] {
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  gap: 4px;
+}
+
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-lines {
+  flex: 1 1 auto;
+  padding: 2px 0 8px;
+  gap: calc(var(--cider-space-4) * 1.2);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 13%,
+    #000 74%,
+    transparent 100%
+  );
+}
+
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-spacer {
+  flex: 1 1 auto;
+  height: 14%;
+  min-height: 8%;
+}
+
+/* A letra do painel é grande, mas acompanha a largura: em telas estreitas 36 px
+   deixariam três palavras por linha. */
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-line {
+  font-size: clamp(25px, 1.1vw + 16px, 36px);
+  line-height: 1.3;
+}
+
+/* No painel a letra não pisca em neon: ela fica legível, e o acento do Cider
+   entra no halo da palavra cantada (veja `useLyrics`). */
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-line[data-state="active"] {
+  transform: none;
+}
+
+/* O crédito da fonte no painel é uma linha discreta no rodapé, como no desktop
+   — sem competir com a letra. */
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-footer {
+  padding: 0 2px 4px;
+  font-size: var(--cider-text-xs);
+  opacity: 0.72;
+}
+
+.lyrics-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lyrics-empty {
+  padding: 4px 0;
+  align-items: flex-start;
+}
+
 .lyrics-meta {
   display: flex;
   align-items: center;

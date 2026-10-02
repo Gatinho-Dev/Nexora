@@ -295,29 +295,120 @@
 /* ------------------------------------------------------------------ *
  * Barra de reprodução                                                *
  * ------------------------------------------------------------------ */
+/*
+ * Barra de reprodução em pílula.
+ *
+ * O rodapé ocupa a faixa reservada da grade (para a lista nunca ficar embaixo
+ * do player sem saber), mas **a pílula é que é o player**: flutuante, de vidro,
+ * com os controles à esquerda, a capa e o título no meio e as ações à direita —
+ * o arranjo do Apple Music. A barra sólida de borda a borda saiu: o conteúdo
+ * aparece atrás dela, com um degradê suave para não cortar a última linha.
+ */
 .playbar {
-  display: grid;
-  grid-template-columns: minmax(200px, 1fr) minmax(320px, 2fr) minmax(200px, 1fr);
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--cider-space-4);
-  padding: var(--cider-space-3) var(--cider-space-5);
-  min-height: var(--cider-playbar-height);
-  border-top: 1px solid var(--cider-border);
-  background: color-mix(in srgb, var(--cider-bg-elevated) calc(var(--cider-glass-opacity) * 100%), transparent);
-  backdrop-filter: blur(var(--cider-blur)) saturate(170%);
+  gap: 4px;
+  padding: 4px var(--cider-space-5) 10px;
+  /* A faixa reservada precisa caber a pílula **e** a linha de progresso: com
+     só a altura antiga, o progresso ficava cortado no rodapé da janela. */
+  min-height: calc(var(--cider-playbar-height) + 14px);
+  background: linear-gradient(
+    to top,
+    var(--cider-bg) 42%,
+    color-mix(in srgb, var(--cider-bg) 55%, transparent) 78%,
+    transparent 100%
+  );
   position: relative;
-  z-index: 6;
+  z-index: 30;
+}
+
+.playbar-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--cider-space-3);
+  width: min(880px, 100%);
+  padding: 7px 14px;
+  border: 1px solid color-mix(in srgb, var(--cider-border) 70%, transparent);
+  border-radius: var(--cider-radius-full);
+  background: color-mix(in srgb, var(--cider-bg-elevated) calc(var(--cider-glass-opacity) * 100%), transparent);
+  backdrop-filter: blur(calc(var(--cider-blur) * 1.1)) saturate(180%);
+  -webkit-backdrop-filter: blur(calc(var(--cider-blur) * 1.1)) saturate(180%);
+  box-shadow:
+    var(--cider-shadow-lg),
+    inset 0 1px 0 color-mix(in srgb, var(--cider-text) 10%, transparent);
+}
+
+.pill-transport,
+.pill-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.pill-now {
+  display: flex;
+  align-items: center;
+  gap: var(--cider-space-3);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pill-cover {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+  border-radius: var(--cider-radius-sm);
+}
+
+.pill-cover .cover {
+  display: block;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--cider-radius-sm);
+  object-fit: cover;
+  box-shadow: var(--cider-shadow-sm);
+}
+
+.pill-now .meta { min-width: 0; line-height: 1.25; }
+.pill-now .title { font-size: var(--cider-text-base); font-weight: var(--cider-weight-medium); }
+.pill-now .artist { font-size: var(--cider-text-xs); color: var(--cider-text-muted); }
+
+.playbar-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--cider-space-3);
+  width: min(880px, 100%);
+}
+
+/* A linha de progresso do Apple Music é fina e discreta (e engorda no hover,
+   pelo próprio componente). */
+.playbar-progress .progress {
+  height: 16px;
+}
+
+.playbar-progress .progress-track {
+  height: 3px;
 }
 
 .playbar[data-position="floating"] {
   position: fixed;
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
-  border: 1px solid var(--cider-border);
-  border-radius: var(--cider-radius-xl);
-  box-shadow: var(--cider-shadow-lg);
-  min-height: 76px;
+  left: 0;
+  right: 0;
+  bottom: 14px;
+  min-height: 0;
+  padding-bottom: 0;
+  background: none;
+}
+
+.playbar[data-position="floating"] .playbar-pill {
+  box-shadow:
+    var(--cider-shadow-xl),
+    inset 0 1px 0 color-mix(in srgb, var(--cider-text) 10%, transparent);
 }
 
 .now-playing { display: flex; align-items: center; gap: var(--cider-space-3); min-width: 0; }
@@ -342,7 +433,8 @@
 .timecode.right { text-align: right; }
 
 .playbar-extras { display: flex; align-items: center; justify-content: flex-end; gap: var(--cider-space-2); }
-.volume-control { display: flex; align-items: center; gap: var(--cider-space-2); min-width: 128px; }
+.volume-control { display: flex; align-items: center; gap: var(--cider-space-2); }
+.volume-control .volume-range { width: 76px; }
 
 /* ------------------------------------------------------------------ *
  * Painéis laterais (fila, letras, dispositivos)                       *
@@ -352,7 +444,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(420px, 42vw);
+  width: min(560px, 46vw);
   border-left: 1px solid var(--cider-border);
   background: color-mix(in srgb, var(--cider-bg-elevated) 96%, transparent);
   backdrop-filter: blur(var(--cider-blur)) saturate(170%);

@@ -11,6 +11,7 @@
  */
 
 import { searchTracks, type SearchOutcome } from "./search";
+import type { SearchNext } from "./api/search";
 import type { CiderTrack, SearchPreferences } from "./api/query";
 import type { CiderEngine } from "./engine";
 import { useCiderLibrary } from "./library";
@@ -24,13 +25,21 @@ import { ciderToast, useCiderUi } from "./ui";
  *
  * Toda busca da interface passa por aqui: é o que faz o selo da topbar e a
  * tela de Diagnóstico dizerem a verdade sobre a fonte em uso.
+ *
+ * Com `next`, é a página seguinte de uma busca já feita — a lista exibida só
+ * anexa o que chegou, então um tropeço numa página de continuação **não** vira
+ * um erro de busca na tela (a lista que o usuário já vê continua válida).
  */
-export async function runSearch(query: string, preferences?: SearchPreferences): Promise<SearchOutcome> {
-  const outcome = await searchTracks(query, preferences ?? currentSearchPreferences());
+export async function runSearch(
+  query: string,
+  preferences?: SearchPreferences,
+  next: SearchNext | null = null,
+): Promise<SearchOutcome> {
+  const outcome = await searchTracks(query, preferences ?? currentSearchPreferences(), next);
   useCiderUi.getState().setSearchMeta({
     source: outcome.source,
     attempts: outcome.attempts,
-    error: outcome.error,
+    error: outcome.error && outcome.tracks.length === 0 ? outcome.error : null,
   });
   return outcome;
 }

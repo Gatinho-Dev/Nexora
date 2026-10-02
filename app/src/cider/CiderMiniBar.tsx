@@ -142,8 +142,8 @@ export function CiderMiniBar() {
           href={track.url}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Abrir no YouTube"
-          title="Abrir no YouTube"
+          aria-label="Abrir o original em uma aba nova"
+          title="Abrir o original em uma aba nova"
         >
           <ExternalLink size={15} />
         </a>

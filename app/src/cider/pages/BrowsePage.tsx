@@ -28,7 +28,7 @@ const THEMES: Theme[] = [
   {
     id: "hits",
     title: "Mais tocadas",
-    description: "Buscas por listas e paradas publicadas no YouTube",
+    description: "Buscas por listas e paradas publicadas",
     queries: ["músicas mais tocadas", "top hits playlist", "hits do momento"],
   },
   {
@@ -102,10 +102,10 @@ export function CiderBrowsePage() {
       <div className="page-head">
         <div>
           <div className="page-kicker">Explorar</div>
-          <h1>Descobrir pelo que existe no YouTube</h1>
+          <h1>Descobrir por temas e paradas</h1>
           <p className="muted">
             Cada tema abaixo é um conjunto de consultas reais. Não há catálogo editorial escondido:
-            o que aparece é o que a busca devolve, com o título original do vídeo preservado.
+            o que aparece é o que a busca devolve, com o título original preservado.
           </p>
         </div>
         <div className="page-actions">
@@ -180,7 +180,7 @@ export function CiderBrowsePage() {
                 Tocar esta mistura
               </Button>
               <span className="xsmall faint">
-                tudo continua sendo reproduzido pelo player oficial do YouTube
+                tudo aqui é reproduzido pelo mesmo player, sem sair da tela
               </span>
             </div>
           </>

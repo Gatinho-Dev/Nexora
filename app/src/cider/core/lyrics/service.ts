@@ -1,21 +1,33 @@
 /**
- * Letras: LRCLIB direto do navegador.
+ * Letras: LRCLIB com busca ampla na web como segunda fonte.
  *
  * No Cider 2 desktop o Rust buscava, com cache em SQLite e fallback via busca
- * web. Aqui vai direto ao LRCLIB por `fetch`. Duas coisas continuam valendo:
+ * web. Aqui a ordem é a mesma, com as duas etapas explícitas:
  *
- * - **LRCLIB é gratuito e sem chave**, mas exige um `User-Agent` identificável.
- *   Sem ele a API devolve 403, e o erro aparece como "letra indisponível" em vez
- *   de "requer identificação";
- * - **404 é resposta normal**, não erro: a letra dessa faixa simplesmente não
- *   existe lá. Precisa virar `null`, não uma exceção.
+ * 1. **LRCLIB** — gratuito e sem chave, e a única fonte daqui que entrega tempo
+ *    por linha (ou seja, a única que vira karaokê). Exige um `User-Agent`
+ *    identificável: sem ele a API devolve 403, e o erro apareceria como "letra
+ *    indisponível" em vez de "requer identificação";
+ * 2. **busca ampla na web** (`api.lyrics.ovh`, pública e sem chave, liberada
+ *    para CORS) — o catálogo do LRCLIB não cobre tudo, e uma letra **sem
+ *    sincronia** ainda é melhor que nenhuma. O texto entra marcado como tal, em
+ *    vez de fingir um acompanhamento que a fonte não tem.
+ *
+ * Se nem isso achar, a interface oferece a busca no Google — o usuário nunca
+ * fica sem saída, e o app nunca inventa letra.
+ *
+ * **404 é resposta normal**, não erro: a letra dessa faixa simplesmente não
+ * existe lá. Precisa virar `null`, não uma exceção.
  */
 
+import { stripNoise } from "../metadata";
 import { parseLrc, parsePlain } from "./parser";
 import { estimateWords } from "./words";
 import type { LyricsLine } from "./types";
 
 const LRCLIB = "https://lrclib.net/api";
+/** Fonte de letra sem chave e com CORS liberado, usada como segunda tentativa. */
+const WEB_LYRICS = "https://api.lyrics.ovh/v1";
 /**
  * Identifica a origem da requisição, como o LRCLIB pede. Nada de dado
  * pessoal: é a mesma string que o Cider 2 desktop usava.
@@ -40,7 +52,8 @@ export interface LyricsResult {
    * em vez de fingir que a fonte mandou karaokê.
    */
   estimated: boolean;
-  source: "lrclib";
+  /** De onde veio a letra: o catálogo com tempo ou a busca ampla na web. */
+  source: "lrclib" | "web";
   provider: string;
   attribution: string;
 }
@@ -68,8 +81,91 @@ export async function fetchLyrics(query: LyricsQuery): Promise<LyricsResult | nu
     : undefined;
   if (hit) return toResult(hit);
 
+  // 3) Segunda fonte: busca ampla na web, sem sincronia. O texto entra inteiro e
+  //    marcado como não sincronizado — melhor que a tela vazia, sem mentir.
+  const web = await fetchWebLyrics(query);
+  if (web) return web;
+
   return null;
 }
+
+/**
+ * Nome do artista limpo para uma consulta por URL ("Artista - Topic" → "Artista").
+ *
+ * A lista de créditos também sai: "ANDREA ft. OTILIA, SHAGGY, COSTI" vira
+ * "ANDREA", que é como os catálogos de letra indexam. Só o `ft.`/`feat.`
+ * separado por espaço dispara o corte — vírgula sozinha derrubaria banda de
+ * verdade ("Earth, Wind & Fire").
+ */
+function cleanArtist(value: string): string {
+  return value
+    .split(/\s+(?:ft|feat|featuring)\.?\s+/i)[0]!
+    .replace(/\s*[-–—]\s*(topic|vevo|official)\s*$/i, "")
+    .replace(/\s*(vevo|official)\s*$/i, "")
+    .replace(/\s*-\s*$/i, "")
+    .trim();
+}
+
+/**
+ * Títulos a tentar numa fonte de letras, do mais provável ao mais literal.
+ *
+ * O nome da publicação traz marcadores que a fonte não conhece — e o `|` é o
+ * pior deles, porque `stripNoise` preserva tudo depois dele ("Passion |
+ * Official Music Video 2015"). Para uma letra, o primeiro segmento é a música.
+ */
+function titleCandidates(value: string): string[] {
+  const head = value.split(/[|·]/)[0] ?? "";
+  const out = [stripNoise(head).trim(), stripNoise(value).trim()];
+  return [...new Set(out.filter(Boolean))];
+}
+
+/**
+ * Busca ampla fora do catálogo: tenta a letra em fontes públicas da web.
+ *
+ * O título passa pelo `stripNoise` porque o que chega aqui é o nome da
+ * publicação ("Passion (Official Video)"), e os sites de letra não conhecem
+ * esse sufixo. Quando o nome tem `|`, vale tentar também só o primeiro
+ * segmento — é ele que costuma ser o nome da música.
+ */
+async function fetchWebLyrics(query: LyricsQuery): Promise<LyricsResult | null> {
+  const artist = cleanArtist(query.artist);
+  const titles = titleCandidates(query.title);
+  if (!artist || titles.length === 0) return null;
+
+  for (const title of titles) {
+    const payload = (await fetchJson(
+      `${WEB_LYRICS}/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`
+    )) as { lyrics?: string } | null;
+    const text = typeof payload?.lyrics === "string" ? payload.lyrics : "";
+    const lines = parsePlain(text);
+    if (lines.length === 0) continue;
+
+    return {
+      lines,
+      synced: false,
+      estimated: false,
+      source: "web",
+      provider: artist,
+      attribution: `Letra por ${artist} · lyrics.ovh`,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Busca na web para conferir a letra quando nenhuma fonte automática respondeu.
+ * É o último recurso da interface — um endereço de busca, não um scrape frágil.
+ */
+export function lyricsSearchUrl(artist: string, title: string): string {
+  const term = [cleanArtist(artist), titleCandidates(title)[0] ?? title.trim(), "letra"]
+    .filter(Boolean)
+    .join(" ");
+  return `https://www.google.com/search?q=${encodeURIComponent(term)}`;
+}
+
+/** Superfície de teste: limpeza de nome é regra, não detalhe de formatação. */
+export const __testing = { cleanArtist, titleCandidates };
 
 interface LrclibTrack {
   id: number;
@@ -82,12 +178,16 @@ interface LrclibTrack {
   syncedLyrics?: string | null;
 }
 
-async function request(url: string): Promise<unknown> {
+async function request(path: string): Promise<unknown> {
+  return fetchJson(`${LRCLIB}${path}`);
+}
+
+/** Um GET JSON tolerante: qualquer falha (rede, HTTP, formato) vira `null`. */
+async function fetchJson(url: string): Promise<unknown> {
   try {
-    const response = await fetch(`${LRCLIB}${url}`, {
+    const response = await fetch(url, {
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
     });
-    if (response.status === 404) return null;
     if (!response.ok) return null;
     return await response.json();
   } catch {

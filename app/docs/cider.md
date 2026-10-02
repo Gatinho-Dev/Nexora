@@ -86,6 +86,19 @@ O ranking (nota de oficial, detecção de versão, deduplicação, limite por ca
 ordem invertida "Artista - Música" para achar canal que publica ao contrário) foi
 portado do Cider 2 desktop e vive em `src/cider/api/query.ts`.
 
+A lista **cresce ao rolar**. Não há campo de limite para o usuário ajustar: uma
+sentinela no fim da lista dispara a página seguinte enquanto o resultado tem
+continuação. Cada página vem pelo mesmo caminho da primeira (`runSearch` com o
+cursor anterior), então ordem, teto por canal e deduplicação valem para todas —
+e uma página que só repete faixa já na tela é pulada, com teto de páginas para
+não varrer a fonte inteira de uma vez.
+
+O cursor depende do protocolo: o Piped devolve um `nextpage` **opaco**, que vale
+só na instância que o emitiu (o token morre junto com ela, e por isso a página
+seguinte não refaz failover); o Invidious pagina por `&page=N`, com teto de 10
+páginas. Fim da lista é `next: null` — a interface escreve isso, em vez de girar
+um carregador para sempre.
+
 ## Configuração
 
 ```bash
@@ -100,6 +113,20 @@ Desligado com `false`, o player some e a atividade é recusada.
 A tela do `/cider` replica o **Cider 2 desktop**: mesma paleta e tokens
 (`src/cider/styles/tokens.css`, copiado do desktop), mesma casca — sidebar,
 topbar com busca, coluna principal, playbar fixa e painel de letras.
+
+A playbar é uma **pílula** no estilo do Apple Music: controles de transporte à
+esquerda, capa e faixa no meio, ações (letras, fila, volume) à direita, com o
+progresso numa linha logo abaixo mostrando o tempo **restante** (`-2:18`). A
+ordem personalizada do usuário vale dentro de cada bloco, não como fila única —
+sem isso, mover a capa para a esquerda empurraria os botões para o meio.
+
+O painel de letras ocupa a altura da janela (não a altura útil acima da
+playbar) e alinha as linhas grandes e esmaecidas do Apple Music, com o acento do
+tema só no halo da palavra cantada.
+
+Os textos da interface **não nomeiam a plataforma de origem**: falam de "fonte",
+"player" e "publicação". O motor continua sendo o mesmo `iframe` descrito abaixo —
+mudou o vocabulário, não a arquitetura.
 
 As telas são as do desktop, endereçáveis uma a uma:
 
@@ -172,6 +199,19 @@ O mesmo motor do desktop, portado sem alteração de comportamento:
   avisa que a estimativa é do Cider 2, e não da fonte;
 - **preset `karaoke`**, o mais próximo do efeito do Apple Music: brilho 0.8 e
   decaimento de 1.2 s, para a palavra cantada continuar acesa depois de passar.
+
+A letra vem de uma **cadeia de fontes**, e a interface diz de onde veio:
+
+1. **LRCLIB** (exata, depois busca ampla) — única fonte com tempo por linha;
+2. **`api.lyrics.ovh`** — letra sem sincronia, marcada como tal no rodapé;
+3. **busca no Google** — quando nenhuma das duas tem a faixa, o estado vazio
+   oferece "Procurar a letra no Google". É um endereço de busca, não um scrape:
+   o app prefere levar a pessoa até a letra a inventar texto.
+
+Antes de consultar as fontes por URL, o nome é limpo: `ft.`/`feat.` sai do
+artista e o segmento depois de `|` sai do título. É medível — no `lyrics.ovh`,
+`Post Malone/Sunflower` responde 200 e `Post Malone/Sunflower | Official Video`
+responde 404.
 
 O `letterSpacing` dos presets é `-0.02em`. O valor herdado do desktop era
 `-0.2em` — dez vezes maior — e a 34 px encolhia ~7 px por caractere: as palavras

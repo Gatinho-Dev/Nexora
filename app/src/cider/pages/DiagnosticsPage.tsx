@@ -44,7 +44,7 @@ async function probeDrm(): Promise<Check> {
       title: "DRM do navegador (EME)",
       status: "fail",
       detail:
-        "Este navegador não expõe requestMediaKeySystemAccess. O player do YouTube pode recusar o áudio — é exatamente o problema do WebKitGTK no aplicativo desktop.",
+        "Este navegador não expõe requestMediaKeySystemAccess. O player pode recusar o áudio — é exatamente o problema do WebKitGTK no aplicativo desktop.",
     };
   }
   try {
@@ -58,7 +58,7 @@ async function probeDrm(): Promise<Check> {
       id: "drm",
       title: "DRM do navegador (EME)",
       status: "ok",
-      detail: "Widevine disponível: o player oficial do YouTube consegue entregar o áudio.",
+      detail: "Widevine disponível: o player consegue entregar o áudio.",
     };
   } catch (error) {
     return {
@@ -153,12 +153,12 @@ export function CiderDiagnosticsPage() {
       drm,
       {
         id: "iframe",
-        title: "IFrame Player API do YouTube",
+        title: "API do player",
         status:
           typeof window !== "undefined" && (window as { YT?: unknown }).YT ? "ok" : state.track ? "fail" : "neutral",
         detail:
           typeof window !== "undefined" && (window as { YT?: unknown }).YT
-            ? "A API oficial carregou e o player está montado no dock persistente."
+            ? "A API do player carregou e está montada no dock persistente."
             : state.track
               ? "A API não carregou — pode ser bloqueio de script, extensão de privacidade ou rede restrita."
               : "Ainda não carregada (nenhuma faixa foi tocada nesta sessão).",
@@ -328,7 +328,7 @@ export function CiderDiagnosticsPage() {
           title="Como a busca é feita"
           action={<span className="xsmall faint">sem proxy nosso no meio</span>}
         />
-        <div className="audio-path" data-source="youtube">
+        <div className="audio-path" data-source="community">
           <div className="audio-path-head">
             <strong>Navegador → instância comunitária → metadados</strong>
             <span className="badge warning">fonte comunitária</span>
@@ -346,15 +346,15 @@ export function CiderDiagnosticsPage() {
             </li>
             <li data-processed="false">
               <span className="step-label">Reprodução</span>
-              <span>player oficial do YouTube, escondido atrás de camada opaca</span>
-              <span className="badge">iframe</span>
+              <span>player da fonte, escondido atrás de camada opaca</span>
+              <span className="badge">som</span>
             </li>
           </ul>
           <ul className="audio-path-notes">
             <li>
               <span>•</span>
               <span>
-                O áudio nunca passa pelas instâncias comunitárias: elas só devolvem metadados (título,
+                O áudio nunca passa pelos servidores de busca: eles só devolvem metadados (título,
                 canal, duração, id).
               </span>
             </li>
@@ -362,7 +362,7 @@ export function CiderDiagnosticsPage() {
               <span>•</span>
               <span>
                 Nenhum equalizador ou DSP existe nesta versão porque o navegador não dá acesso ao
-                buffer do `iframe`.
+                buffer do áudio que está tocando.
               </span>
             </li>
           </ul>
