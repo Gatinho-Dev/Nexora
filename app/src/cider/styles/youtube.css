@@ -245,7 +245,7 @@
   background: color-mix(in srgb, var(--cider-bg-elevated) 80%, transparent);
 }
 
-.audio-path[data-source="youtube"] {
+.audio-path[data-source="community"] {
   border-left: 3px solid var(--cider-warning);
 }
 

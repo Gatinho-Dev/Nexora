@@ -83,11 +83,11 @@ export function CiderOnboarding() {
 
           {step === 1 ? (
             <section className="wizard-step">
-              <h2>O áudio vem do YouTube, sem baixar nada</h2>
+              <h2>O áudio toca sem baixar nada</h2>
               <p>
-                O Cider web não baixa, não converte e não hospeda áudio: quem toca é o player
-                oficial do YouTube, comandado por esta interface. Nenhum vídeo é exibido — a capa
-                fica por cima.
+                O Cider web não baixa, não converte e não hospeda áudio: quem toca é o player da
+                fonte, comandado por esta interface, e a capa fica por cima — a tela é toda da
+                música.
               </p>
               <div className="stack">
                 <div className="notice" data-tone="info">
@@ -102,11 +102,11 @@ export function CiderOnboarding() {
                 <div className="notice" data-tone="info">
                   <ShieldCheck size={18} />
                   <div>
-                    <strong>A busca é sem chave e comunitária</strong>
+                    <strong>A busca é sem chave</strong>
                     <br />
-                    Os metadados vêm de instâncias públicas Piped/Invidious. Elas caem de vez em
-                    quando — quando isso acontece, o Cider diz qual instância falhou em vez de
-                    mostrar uma lista vazia sem explicação.
+                    Os metadados vêm de servidores públicos mantidos pela comunidade. Eles caem de
+                    vez em quando — quando isso acontece, o Cider diz exatamente onde falhou em vez
+                    de mostrar uma lista vazia sem explicação.
                   </div>
                 </div>
               </div>
@@ -125,8 +125,8 @@ export function CiderOnboarding() {
                 <div>
                   <strong>Limitações desta versão</strong>
                   <br />
-                  Sem equalizador (o navegador não dá acesso ao áudio do iframe), sem arquivos
-                  locais, sem plugins e sem atalhos globais de sistema. O Diagnóstico mostra o que
+                  Sem equalizador (o navegador não dá acesso ao áudio que está tocando), sem
+                  arquivos locais, sem plugins e sem atalhos globais de sistema. O Diagnóstico mostra o que
                   está funcionando na sua máquina agora.
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { LyricsTimeline } from "./lyricsTimeline";
 import { parseLrc } from "./core/lyrics/parser";
+import { __testing as lyricsService, lyricsSearchUrl } from "./core/lyrics/service";
 
 /** `parseLrc` devolve o resultado completo; o motor quer as linhas. */
 const lines = (lrc: string) => parseLrc(lrc).lines;
@@ -222,3 +223,39 @@ describe("rolagem das letras", () => {
     expect(lyrics).toMatch(/\.lyrics-spacer\s*\{[^}]*height/s);
   });
 });
+
+describe("limpeza do nome para as fontes de letra", () => {
+  // Medido contra o `api.lyrics.ovh`: "Post Malone/Sunflower" responde 200 e
+  // "Post Malone/Sunflower | Official Video" responde 404. Sem limpar o nome da
+  // publicação, a segunda fonte praticamente nunca acerta.
+  it("corta a lista de créditos do artista no ft./feat.", () => {
+    expect(lyricsService.cleanArtist("ANDREA ft. OTILIA, SHAGGY, COSTI")).toBe("ANDREA");
+    expect(lyricsService.cleanArtist("SZA feat. Travis Scott")).toBe("SZA");
+  });
+
+  it("preserva vírgula de nome de banda", () => {
+    expect(lyricsService.cleanArtist("Earth, Wind & Fire")).toBe("Earth, Wind & Fire");
+    expect(lyricsService.cleanArtist("Milky Chance - Topic")).toBe("Milky Chance");
+  });
+
+  it("descarta o que vem depois do `|` no título", () => {
+    const candidates = lyricsService.titleCandidates("Passion | Official Music Video 2015");
+    expect(candidates[0]).toBe("Passion");
+    // O nome inteiro continua como segunda tentativa: o segmento antes do `|`
+    // nem sempre é a música ("A | B" pode ser "Artista | Outra coisa").
+    expect(candidates).toContain("Passion | Official Music Video 2015");
+    expect(lyricsService.titleCandidates("Song (Official Video)")).toEqual(["Song"]);
+    // Hífen não é separador: `Artista - Música` é o nome inteiro da publicação.
+    expect(lyricsService.titleCandidates("Milky Chance - Passion")).toEqual([
+      "Milky Chance - Passion",
+    ]);
+  });
+
+  it("o link de busca do Google leva o nome limpo", () => {
+    const url = lyricsSearchUrl("Milky Chance", "Passion | Official Music Video 2015");
+    expect(url).toContain("google.com/search?q=");
+    expect(decodeURIComponent(url)).toContain("Milky Chance Passion letra");
+    expect(decodeURIComponent(url)).not.toContain("Official");
+  });
+});
+

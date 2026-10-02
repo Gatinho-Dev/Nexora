@@ -23,7 +23,7 @@ export function CiderImmersive() {
   const setImmersive = useCiderUi((state) => state.setImmersive);
   const setLayout = useCiderUi((state) => state.setImmersiveLayout);
   const { state, engine } = useCider();
-  const lyrics = useLyrics(state.track, state.positionMs, state.phase === "playing");
+  const lyrics = useLyrics(state.track, state.positionMs, state.phase === "playing", "immersive");
 
   if (!immersive) return null;
 
@@ -65,13 +65,25 @@ export function CiderImmersive() {
         )}
         {showLyrics ? (
           lyrics.view ? (
-            <div className="immersive-lyrics lyrics-scope">{lyrics.view}</div>
+            <div className="immersive-lyrics">{lyrics.view}</div>
           ) : (
-            <p className="muted" style={{ maxWidth: 380 }}>
-              {lyrics.status === "loading"
-                ? "Procurando a letra no LRCLIB…"
-                : "Não encontramos a letra desta faixa."}
-            </p>
+            <div className="stack gap-3" style={{ maxWidth: 380 }}>
+              <p className="muted">
+                {lyrics.status === "loading"
+                  ? "Procurando a letra…"
+                  : "As fontes automáticas não têm a letra desta faixa."}
+              </p>
+              {lyrics.status !== "loading" && lyrics.searchUrl ? (
+                <a
+                  className="btn"
+                  href={lyrics.searchUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Procurar a letra no Google
+                </a>
+              ) : null}
+            </div>
           )
         ) : (
           <div className="stack" style={{ maxWidth: 420 }}>
@@ -79,11 +91,7 @@ export function CiderImmersive() {
             <p className="muted">
               {current ? current.artist || current.channelName : "Pesquise uma música para começar."}
             </p>
-            {current ? (
-              <p className="xsmall faint">
-                YouTube é a fonte deste conteúdo · player oficial · {timecode(duration)}
-              </p>
-            ) : null}
+            {current ? <p className="xsmall faint tabular">{timecode(duration)}</p> : null}
           </div>
         )}
       </div>

@@ -155,9 +155,16 @@ export function CiderApp() {
             </Routes>
           </main>
         </div>
-        <CiderSidePanel />
       </div>
 
+      {/*
+        * O painel lateral vive **fora** do `app-body` de propósito: assim ele vai
+        * até o fim da janela, e não até o topo da playbar. Com a playbar em
+        * pílula (flutuante, acima de tudo), a letra ganha a altura toda — é o
+        * que faz o painel parecer o do Apple Music em vez de uma caixa que
+        * termina no meio da tela.
+        */}
+      <CiderSidePanel />
       <CiderPlaybar />
       <CiderToasts />
       <CiderCommandPalette />

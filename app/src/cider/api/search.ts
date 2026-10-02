@@ -41,11 +41,28 @@ export interface RawVideo {
   url: string;
 }
 
+/**
+ * Como pedir a **próxima página** da mesma busca.
+ *
+ * As duas fontes paginam de formas diferentes, e a diferença fica encapsulada
+ * aqui: o Piped devolve um token opaco (que só serve para outra requisição na
+ * mesma instância) e o Invidious um número de página. Quem exibe a lista só
+ * precisa saber se há continuação ou não.
+ */
+export type SearchNext =
+  | { protocol: "piped"; instance: string; token: string }
+  | { protocol: "invidious"; instance: string; page: number };
+
+/** Teto de páginas do Invidious: a lista cresce, mas não infinitamente. */
+const INVIDIOUS_MAX_PAGE = 10;
+
 export interface SearchOutcome {
   videos: RawVideo[];
   /** Instância que respondeu. */
   source: string | null;
   attempts: Attempt[];
+  /** Continuação da lista. `null` aqui significa **fim**: não há mais nada. */
+  next: SearchNext | null;
 }
 
 interface PipedItem {
@@ -54,6 +71,12 @@ interface PipedItem {
   uploaderName?: string;
   thumbnail?: string;
   duration?: number;
+}
+
+interface PipedPayload {
+  items?: PipedItem[];
+  /** Token de continuação, no formato `{"url":…,"id":…}` (string JSON). */
+  nextpage?: string | null;
 }
 
 function withTimeout(ms: number): { signal: AbortSignal; done: () => void } {
@@ -73,7 +96,7 @@ function pipedVideoId(item: PipedItem): string {
 }
 
 function normalizePiped(payload: unknown): RawVideo[] {
-  const items = (payload as { items?: PipedItem[] } | null)?.items;
+  const items = (payload as PipedPayload | null)?.items;
   if (!Array.isArray(items)) return [];
   return items
     .map(item => {
@@ -90,6 +113,18 @@ function normalizePiped(payload: unknown): RawVideo[] {
     })
     // Vídeo sem duração ou sem id não dá barra de progresso nem player.
     .filter(video => video.videoId.length >= 11 && video.duration > 0);
+}
+
+/**
+ * Token de continuação do Piped, quando ele oferece um.
+ *
+ * O valor é o próprio campo `nextpage` da resposta — uma string JSON — enviado
+ * de volta tal e qual em `/nextpage/search`. Sem ele, a lista acabou.
+ */
+function pipedNextToken(payload: unknown, instance: string): SearchNext | null {
+  const token = (payload as PipedPayload | null)?.nextpage;
+  if (typeof token !== "string" || token.length === 0) return null;
+  return { protocol: "piped", instance, token };
 }
 
 interface InvidiousItem {
@@ -127,13 +162,19 @@ function normalizeInvidious(payload: unknown): RawVideo[] {
  * instância que estoura o orçamento global é abandonada, e as seguintes herdam
  * o mesmo orçamento — que é o comportamento honesto: se a primeira está
  * lenta, as outras também estarão.
+ *
+ * Com `next`, a função **não** refaz o failover: ela pede exatamente a página
+ * indicada. A lista cresce por rolagem (uma página por vez), e não por busca
+ * nova — é o que faz o carregamento progressivo continuar de onde parou.
  */
 export async function searchVideos(
   query: string,
-  limit = 25
+  limit = 25,
+  next: SearchNext | null = null
 ): Promise<SearchOutcome> {
   const trimmed = query.trim();
-  if (!trimmed) return { videos: [], source: null, attempts: [] };
+  if (!trimmed) return { videos: [], source: null, attempts: [], next: null };
+  if (next) return searchNextPage(trimmed, limit, next);
 
   const attempts: Attempt[] = [];
   const { signal, done } = withTimeout(SEARCH_TIMEOUT_MS);
@@ -151,12 +192,13 @@ export async function searchVideos(
           attempts.push({ instance, error: `HTTP ${response.status}` });
           continue;
         }
-        const videos = normalizePiped(await response.json()).slice(0, limit);
+        const payload = await response.json();
+        const videos = normalizePiped(payload).slice(0, limit);
         if (videos.length === 0) {
           attempts.push({ instance, error: "resposta sem vídeos" });
           continue;
         }
-        return { videos, source: instance, attempts };
+        return { videos, source: instance, attempts, next: pipedNextToken(payload, instance) };
       } catch (error) {
         attempts.push({ instance, error: describeFetchError(error) });
       }
@@ -179,7 +221,12 @@ export async function searchVideos(
           attempts.push({ instance, error: "resposta sem vídeos" });
           continue;
         }
-        return { videos, source: instance, attempts };
+        return {
+          videos,
+          source: instance,
+          attempts,
+          next: { protocol: "invidious", instance, page: 2 },
+        };
       } catch (error) {
         attempts.push({ instance, error: describeFetchError(error) });
       }
@@ -188,7 +235,74 @@ export async function searchVideos(
     done();
   }
 
-  return { videos: [], source: null, attempts };
+  return { videos: [], source: null, attempts, next: null };
+}
+
+/** Pede uma continuação já conhecida (token do Piped ou página do Invidious). */
+async function searchNextPage(
+  query: string,
+  limit: number,
+  next: SearchNext
+): Promise<SearchOutcome> {
+  const attempts: Attempt[] = [];
+  const { signal, done } = withTimeout(SEARCH_TIMEOUT_MS);
+
+  try {
+    if (next.protocol === "piped") {
+      const url =
+        `${next.instance}/nextpage/search?q=${encodeURIComponent(query)}` +
+        `&filter=videos&nextpage=${encodeURIComponent(next.token)}`;
+      try {
+        const response = await fetch(url, { signal, headers: { Accept: "application/json" } });
+        if (!response.ok) {
+          attempts.push({ instance: next.instance, error: `HTTP ${response.status}` });
+          return { videos: [], source: null, attempts, next: null };
+        }
+        const payload = await response.json();
+        return {
+          videos: normalizePiped(payload).slice(0, limit),
+          source: next.instance,
+          attempts,
+          next: pipedNextToken(payload, next.instance),
+        };
+      } catch (error) {
+        // A instância caiu no meio da lista: a continuação morre com ela, porque
+        // o token só vale nessa instância. Fim honesto, não lista embaralhada.
+        attempts.push({ instance: next.instance, error: describeFetchError(error) });
+        return { videos: [], source: null, attempts, next: null };
+      }
+    }
+
+    if (next.page > INVIDIOUS_MAX_PAGE) {
+      return { videos: [], source: null, attempts, next: null };
+    }
+
+    const url =
+      `${next.instance}/api/v1/search?q=${encodeURIComponent(query)}` +
+      `&type=video&page=${next.page}`;
+    try {
+      const response = await fetch(url, { signal, headers: { Accept: "application/json" } });
+      if (!response.ok) {
+        attempts.push({ instance: next.instance, error: `HTTP ${response.status}` });
+        return { videos: [], source: null, attempts, next: null };
+      }
+      const videos = normalizeInvidious(await response.json()).slice(0, limit);
+      return {
+        videos,
+        source: next.instance,
+        attempts,
+        next:
+          videos.length > 0 && next.page < INVIDIOUS_MAX_PAGE
+            ? { protocol: "invidious", instance: next.instance, page: next.page + 1 }
+            : null,
+      };
+    } catch (error) {
+      attempts.push({ instance: next.instance, error: describeFetchError(error) });
+      return { videos: [], source: null, attempts, next: null };
+    }
+  } finally {
+    done();
+  }
 }
 
 function describeFetchError(error: unknown): string {
@@ -229,4 +343,10 @@ export function searchInstances(): Array<{ url: string; protocol: "piped" | "inv
   ];
 }
 
-export const __testing = { normalizePiped, normalizeInvidious, pipedVideoId, PIPED_INSTANCES };
+export const __testing = {
+  normalizePiped,
+  normalizeInvidious,
+  pipedVideoId,
+  pipedNextToken,
+  PIPED_INSTANCES,
+};

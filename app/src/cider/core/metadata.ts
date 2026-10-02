@@ -225,7 +225,7 @@ export function publicationKind(channel: string, title: string): string {
   if (haystack.includes("live") || haystack.includes("ao vivo")) return "Ao vivo";
   if (haystack.includes("remix")) return "Remix";
   if (haystack.includes("cover")) return "Cover";
-  return "Vídeo do YouTube";
+  return "Publicação avulsa";
 }
 
 /** `m:ss` ou `h:mm:ss` a partir dos milissegundos. */

@@ -23,15 +23,19 @@ function AnimatedWord({
   style,
   activeColor,
   inactiveColor,
+  glowColor,
   onSeek,
 }: {
   view: LyricsWordView;
   style: LyricsStyle;
   activeColor: string;
   inactiveColor: string;
+  /** Cor do halo da palavra ativa; sem ele, o halo usa a própria cor ativa. */
+  glowColor?: string;
   onSeek?: (ms: number) => void;
 }) {
   const { word, state, progress } = view;
+  const halo = glowColor ?? activeColor;
 
   const computed = useMemo(() => {
     const glow = Math.max(0, Math.min(1, style.wordGlow));
@@ -75,18 +79,18 @@ function AnimatedWord({
           Math.min(1, 0.35 + progress * 0.65)
         );
         const scale = 1 + (style.activeScale - 1) * Math.max(0.35, progress);
-        const halo = glow * 18 * Math.max(0.4, progress);
+        const haloSize = glow * 18 * Math.max(0.4, progress);
         return {
           ...base,
           opacity: 1,
           color: mix,
           transform: `translate3d(0,0,0) scale(${scale.toFixed(3)})`,
           textShadow:
-            halo > 0.5
-              ? `0 0 ${halo.toFixed(1)}px ${withAlpha(
-                  activeColor,
+            haloSize > 0.5
+              ? `0 0 ${haloSize.toFixed(1)}px ${withAlpha(
+                  halo,
                   glow * 0.55
-                )}, 0 0 ${(halo * 2.2).toFixed(1)}px ${withAlpha(activeColor, glow * 0.28)}`
+                )}, 0 0 ${(haloSize * 2.2).toFixed(1)}px ${withAlpha(halo, glow * 0.28)}`
               : `0 1px ${Math.round(shadowStrength * 6)}px rgba(0,0,0,${(
                   0.35 * shadowStrength
                 ).toFixed(2)})`,
@@ -106,7 +110,7 @@ function AnimatedWord({
           color: interpolateHex(inactiveColor, activeColor, glow * 0.35),
           textShadow:
             glow > 0.3
-              ? `0 0 ${(glow * 5).toFixed(1)}px ${withAlpha(activeColor, glow * 0.14)}`
+              ? `0 0 ${(glow * 5).toFixed(1)}px ${withAlpha(halo, glow * 0.14)}`
               : "none",
           filter:
             style.blurInactivePx > 0
@@ -115,7 +119,7 @@ function AnimatedWord({
         };
       }
     }
-  }, [state, progress, style, activeColor, inactiveColor]);
+  }, [state, progress, style, activeColor, inactiveColor, halo]);
 
   const transitionMs =
     style.animation === "off"
@@ -181,20 +185,29 @@ export function LyricsView({
   style,
   activeColor,
   inactiveColor,
+  glowColor,
   onSeek,
   cssVars,
   attribution,
   estimated,
+  synced = true,
+  variant = "inline",
 }: {
   lines: LyricsLine[];
   views?: Array<{ state: WordState; progress: number; words: LyricsWordView[] }>;
   style: LyricsStyle;
   activeColor: string;
   inactiveColor: string;
+  /** Cor do halo da palavra ativa (o acento do Cider, por padrão a cor ativa). */
+  glowColor?: string;
   onSeek?: (ms: number) => void;
   cssVars: Record<string, string>;
   attribution?: string;
   estimated: boolean;
+  /** `false` quando a letra não tem marcação de tempo (veio da busca ampla). */
+  synced?: boolean;
+  /** Onde a letra está sendo desenhada: cada lugar tem sua medida. */
+  variant?: "inline" | "panel" | "fullscreen" | "immersive";
 }) {
   // Linhas sem tempo por palavra recebem estimativa: é o que faz o karaokê
   // funcionar mesmo quando a fonte só manda o tempo da linha.
@@ -210,7 +223,7 @@ export function LyricsView({
   );
 
   return (
-    <div className="lyrics-scope" style={cssVars as CSSProperties}>
+    <div className="lyrics-scope" data-variant={variant} style={cssVars as CSSProperties}>
       <div
         className="lyrics-lines"
         data-align={style.alignment}
@@ -253,6 +266,7 @@ export function LyricsView({
                       style={style}
                       activeColor={activeColor}
                       inactiveColor={inactiveColor}
+                      glowColor={glowColor}
                       onSeek={onSeek}
                     />
                   ))
@@ -277,9 +291,11 @@ export function LyricsView({
       </div>
       <div className="lyrics-footer xsmall faint">
         <span>
-          {estimated
-            ? "Sincronização por palavra estimada pelo Cider 2 a partir dos tempos de linha."
-            : "Destaque por linha (estimativa por palavra desligada)."}
+          {!synced
+            ? "Letra sem marcação de tempo: ela aparece inteira, sem acompanhar a música."
+            : estimated
+              ? "Sincronia por palavra estimada a partir dos tempos de linha."
+              : "Sincronia por palavra vinda da fonte."}
         </span>
         {attribution ? <span className="truncate"> · {attribution}</span> : null}
       </div>

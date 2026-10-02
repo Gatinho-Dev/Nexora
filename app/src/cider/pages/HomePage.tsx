@@ -34,11 +34,11 @@ export function CiderHomePage() {
       <header className="page-hero home-hero">
         <div>
           <div className="page-kicker">Cider 2 · web</div>
-          <h1>Sua música, encontrada no YouTube.</h1>
+          <h1>Sua música, em um só lugar.</h1>
           <p className="muted">
-            O Cider busca o vídeo em instâncias comunitárias, toca pelo player oficial do YouTube e
-            cuida da fila, das letras (LRCLIB) e da sua biblioteca local. Nada é baixado, convertido
-            ou hospedado aqui — e nada de catálogo inventado.
+            O Cider cuida da fila, das letras e da sua biblioteca local, com o áudio tocando em
+            segundo plano enquanto você navega. Nada é baixado, convertido ou hospedado aqui — e
+            nada de catálogo inventado.
           </p>
           <div className="inline" style={{ marginTop: 12 }}>
             <Button variant="primary" icon={<Search size={16} />} onClick={() => navigate("/cider/pesquisa")}>
@@ -78,8 +78,8 @@ export function CiderHomePage() {
                 {current.title}
               </button>
               <span className="xsmall muted truncate">{current.artist || current.channelName}</span>
-              <span className="xsmall faint">
-                {timecode(state.durationMs || current.durationMs)} · YouTube é a fonte deste conteúdo
+              <span className="xsmall faint tabular">
+                {timecode(state.durationMs || current.durationMs)}
               </span>
             </div>
           </div>

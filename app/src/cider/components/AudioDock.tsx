@@ -37,7 +37,7 @@ export function CiderAudioDock() {
       mounted.current = false;
       ciderToast(
         "error",
-        "Não foi possível carregar o player do YouTube",
+        "Não foi possível carregar o player",
         error instanceof Error ? error.message : String(error),
         { timeoutMs: 12000 },
       );

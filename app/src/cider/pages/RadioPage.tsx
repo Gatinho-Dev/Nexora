@@ -60,7 +60,7 @@ export function CiderRadioPage() {
           <p className="muted">
             A estação é montada com consultas reais ao redor da semente — artista puro, canal
             “Topic” e coletâneas — e a fila respeita um teto por canal para não virar a discografia
-            de um publicador só. Nenhuma recomendação privada do YouTube é usada.
+            de um publicador só.
           </p>
         </div>
         <div className="page-actions">

@@ -83,43 +83,14 @@ export function CiderNowPlayingPage() {
         <CoverArt url={current.artworkUrl} title={current.title} className="now-playing-art" />
 
         <div className="now-playing-info stack">
-          <span className="xsmall faint uppercase">YouTube · player oficial</span>
           <h1 className="now-playing-title">{current.title}</h1>
           <p className="now-playing-artist">{current.artist || current.channelName}</p>
-
-          {current.youtubeTitle && current.youtubeTitle !== current.title ? (
-            <p className="xsmall faint">
-              Título original do vídeo: <span title={current.youtubeTitle}>{current.youtubeTitle}</span>
-            </p>
-          ) : null}
 
           <p className="xsmall faint">
             {[current.version !== "studio" ? current.version : null, current.isExplicit ? "conteúdo explícito" : null]
               .filter(Boolean)
               .join(" · ")}
           </p>
-
-          {/* O vídeo fica no dock global, atrás de uma camada opaca: aqui a capa
-              é a superfície do player, como no modo de áudio do desktop. */}
-          <div className="card tight inline" style={{ justifyContent: "space-between", gap: 12 }}>
-            <div className="inline" style={{ minWidth: 0 }}>
-              <IconButton
-                label={playing ? "Pausar" : "Reproduzir"}
-                tone="play"
-                onClick={engine.toggle}
-              >
-                {playing ? <Pause size={20} /> : <Play size={20} />}
-              </IconButton>
-              <div className="stack tight" style={{ minWidth: 0 }}>
-                <span className="small semibold">Superfície do player</span>
-                <span className="xsmall faint">
-                  O vídeo oficial está montado atrás desta camada opaca — o Cider é audio-first e
-                  nunca exibe o vídeo.
-                </span>
-              </div>
-            </div>
-            <span className="badge">{state.phase}</span>
-          </div>
 
           {settings.nowPlayingVisualizer ? (
             <div className="visualizer" data-active="false" style={{ height: 120 }} aria-hidden="true" />
@@ -209,8 +180,14 @@ export function CiderNowPlayingPage() {
             <Button icon={<Activity size={16} />} onClick={() => navigate("/cider/diagnostico")}>
               Diagnóstico do player
             </Button>
-            <a className="btn" href={current.url} target="_blank" rel="noopener noreferrer">
-              <ExternalLink size={16} /> Abrir no YouTube
+            <a
+              className="btn"
+              href={current.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abrir o original em uma aba nova"
+            >
+              <ExternalLink size={16} /> Abrir original
             </a>
           </div>
 
@@ -249,9 +226,8 @@ export function CiderNowPlayingPage() {
 
           {state.error ? (
             <Notice tone="danger" title="O player reportou um problema">
-              {state.error} Se o problema for de incorporação (códigos 101/150), o autor do vídeo
-              não permite tocar fora do YouTube — a lista continua valendo, e "Abrir no YouTube" leva
-              ao vídeo.
+              {state.error} Se o problema for de incorporação (códigos 101/150), a fonte não permite
+              tocar aqui — a lista continua valendo, e "Abrir original" leva até o conteúdo.
             </Notice>
           ) : null}
         </div>
@@ -308,17 +284,27 @@ export function CiderNowPlayingPage() {
               </button>
             }
           />
-          {lyrics.status === "loading" ? <p className="muted small">Procurando no LRCLIB…</p> : null}
+          {lyrics.status === "loading" ? <p className="muted small">Procurando a letra…</p> : null}
           {lyrics.status === "empty" ? (
-            <p className="muted small">Não achamos a letra desta faixa no LRCLIB.</p>
+            <div className="stack gap-3">
+              <p className="muted small">
+                As fontes automáticas não têm a letra desta faixa — a busca na web resolve em um
+                clique.
+              </p>
+              {lyrics.searchUrl ? (
+                <a className="btn" href={lyrics.searchUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink size={15} /> Procurar a letra no Google
+                </a>
+              ) : null}
+            </div>
           ) : null}
-          {lyrics.status === "ready" ? <div className="lyrics-scope">{lyrics.view}</div> : null}
+          {lyrics.status === "ready" ? lyrics.view : null}
         </section>
       ) : null}
 
       <Notice tone="info" title="Privacidade e atribuição">
-        YouTube é a fonte deste conteúdo: o título original do vídeo é preservado e "Abrir no
-        YouTube" leva ao vídeo. O Cider não baixa, não converte e não hospeda este vídeo.{" "}
+        O Cider reproduz cada faixa pelo player da fonte de origem e preserva a atribuição de quem
+        publicou. Nada é baixado, convertido ou hospedado aqui.{" "}
         <Info size={13} />
       </Notice>
     </div>

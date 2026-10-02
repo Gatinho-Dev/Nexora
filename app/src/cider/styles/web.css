@@ -195,8 +195,8 @@
   flex: 0 0 auto;
 }
 
-/* A pílula de origem da playbar tem rótulo longo na web ("navegador · iframe do
-   YouTube") e, ao contrário do desktop, não cabia em uma linha. */
+/* O selo de origem (topbar) é um rótulo curto que nunca pode quebrar em duas
+   linhas dentro da barra. */
 .cider-root .connection-pill {
   white-space: nowrap;
 }
@@ -249,6 +249,34 @@
   to { transform: rotate(360deg); }
 }
 
+/**
+ * Painel de letras.
+ *
+ * O painel não rola como um bloco: quem rola é a letra, e o rodapé de crédito
+ * fica fixo embaixo. O respiro inferior reserva a área da pílula da playbar,
+ * que flutua por cima do painel (como no Apple Music, onde o controle flutua
+ * sobre o conteúdo).
+ */
+.cider-root .side-panel[data-panel="lyrics"] .panel-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 4px var(--cider-space-5) calc(var(--cider-playbar-height) + var(--cider-space-2));
+}
+
+/* O painel de letras é mais largo que o da fila: a letra grande precisa de
+   linha longa para não quebrar em três palavras. */
+.cider-root .side-panel[data-panel="lyrics"] {
+  width: min(620px, 52vw);
+}
+
+@media (max-width: 1100px) {
+  .cider-root .side-panel,
+  .cider-root .side-panel[data-panel="lyrics"] {
+    width: min(100%, 92vw);
+  }
+}
+
 /* ------------------------------------------------------------------ *
  * Classes de tela introduzidas pela portagem web                      *
  * ------------------------------------------------------------------ */
@@ -299,6 +327,17 @@
     width: 100%;
     max-width: 220px;
   }
+}
+
+/* Fim da lista de resultados: é a sentinela que pede a próxima página quando
+   entra na tela, e o aviso honesto de quando não há mais nada. */
+.search-tail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: var(--cider-space-4) 0;
+  text-align: center;
 }
 
 /* Uma linha por tema na tela Explorar: título acima, consultas abaixo. */
