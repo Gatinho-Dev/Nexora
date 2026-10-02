@@ -22,7 +22,14 @@ import type { SearchNext } from "../api/search";
 import { useCider } from "../useCider";
 import { useCiderLibrary } from "../library";
 import { useCiderSettings } from "../settings/store";
-import { currentSearchPreferences, playFrom, rememberSearch, runSearch, toggleFavoriteWithToast } from "../play";
+import {
+  currentSearchPreferences,
+  playAfter,
+  playFrom,
+  rememberSearch,
+  runSearch,
+  toggleFavoriteWithToast,
+} from "../play";
 import { useCiderUi } from "../ui";
 import { Button, EmptyState, Notice, SectionHeader, Switch } from "../components/primitives";
 import { YoutubeRow } from "../components/TrackList";
@@ -329,6 +336,7 @@ export function CiderSearchPage() {
                 playing={state.phase === "playing"}
                 favorite={favoriteIds.includes(track.videoId)}
                 onPlay={() => playFrom(engine, results, index)}
+                onPlayAfter={() => playAfter(engine, [track])}
                 onAddToQueue={() => engine.appendQueue([track])}
                 onToggleFavorite={() => toggleFavoriteWithToast(track)}
               />

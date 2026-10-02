@@ -159,6 +159,23 @@ no hover (ou sempre, na faixa atual, quando ele vira pause). O resto da linha n�
 toca mais nada — foi um pedido explícito e também evita começar música sem
 querer ao selecionar a linha.
 
+A **fila** segue o desenho do Apple Music (iOS 18) em torno de uma distinção que
+o motor guarda por entrada (`src/cider/core/queue.ts`): o que veio de um
+**contexto** — o álbum, a busca, a estação que começou a tocar — e o que foi posto
+**à mão**. "Tocar depois" encaixa a faixa logo depois da atual; "Adicionar à fila"
+manda para o fim absoluto; **"Limpar"** tira só o que está à mão e deixa o
+contexto intacto — sem essa separação, limpar significaria jogar fora o álbum que
+está tocando. Tocar uma lista nova que **descartaria** faixas à mão pergunta antes
+("Reproduzir isto limpará a sua fila"), que é a correção do acidente clássico de
+começar um álbum apagar em silêncio a fila que a pessoa montou; quando nada se
+perde, o clique continua imediato e não há pergunta nenhuma.
+
+Duas regras que o motor aplica para a fila não andar em círculos: a faixa que já
+está na fila **muda de lugar** em vez de aparecer duas vezes, e a que está tocando
+nunca sai — nem quando foi ela mesma colocada à mão, porque o áudio já está
+carregado e a interface passaria a dizer que nada toca enquanto a música segue.
+As entradas à mão aparecem marcadas no painel da fila.
+
 O painel de letras ocupa a altura da janela (não a altura útil acima da
 playbar) e alinha as linhas grandes e esmaecidas do Apple Music, com o acento do
 tema só no halo da palavra cantada.

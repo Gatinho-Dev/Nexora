@@ -32,7 +32,7 @@ import {
   useCiderLibrary,
   type Playlist,
 } from "../library";
-import { playFrom, toggleFavoriteWithToast } from "../play";
+import { playAfter, playFrom, toggleFavoriteWithToast } from "../play";
 import { deriveStats, formatDuration } from "../stats";
 import { AddToPlaylistButton } from "../components/AddToPlaylist";
 import { CoverArt } from "../components/CoverArt";
@@ -201,6 +201,7 @@ export function CiderLibraryPage() {
           playing={state.phase === "playing"}
           favorites={favoriteIds}
           onPlay={(index) => playFrom(engine, tracks.slice(0, 12), index)}
+          onPlayAfter={(track) => playAfter(engine, [track])}
           onAddToQueue={(track) => engine.appendQueue([track])}
           onToggleFavorite={(track) => toggleFavoriteWithToast(track)}
         />
@@ -321,6 +322,7 @@ export function CiderAlbumPage() {
         playing={state.phase === "playing"}
         favorites={favorites.map((track) => track.videoId)}
         onPlay={(index) => playFrom(engine, album.tracks, index)}
+        onPlayAfter={(track) => playAfter(engine, [track])}
         onAddToQueue={(track) => engine.appendQueue([track])}
         onToggleFavorite={(track) => toggleFavoriteWithToast(track)}
       />
@@ -437,6 +439,7 @@ export function CiderArtistPage() {
         playing={state.phase === "playing"}
         favorites={favorites.map((track) => track.videoId)}
         onPlay={(index) => playFrom(engine, artist.tracks, index)}
+        onPlayAfter={(track) => playAfter(engine, [track])}
         onAddToQueue={(track) => engine.appendQueue([track])}
         onToggleFavorite={(track) => toggleFavoriteWithToast(track)}
       />
@@ -489,6 +492,7 @@ export function CiderSongsPage() {
           playing={state.phase === "playing"}
           favorites={favorites.map((track) => track.videoId)}
           onPlay={(index) => playFrom(engine, tracks, index)}
+          onPlayAfter={(track) => playAfter(engine, [track])}
           onAddToQueue={(track) => engine.appendQueue([track])}
           onToggleFavorite={(track) => toggleFavoriteWithToast(track)}
         />
@@ -682,6 +686,7 @@ export function CiderFavoritesPage() {
           playing={state.phase === "playing"}
           favorites={favorites.map((track) => track.videoId)}
           onPlay={(index) => playFrom(engine, favorites, index)}
+          onPlayAfter={(track) => playAfter(engine, [track])}
           onAddToQueue={(track) => engine.appendQueue([track])}
           onToggleFavorite={(track) => toggleFavoriteWithToast(track)}
         />
@@ -887,6 +892,7 @@ export function CiderPlaylistPage() {
           playing={state.phase === "playing"}
           favorites={favorites.map((track) => track.videoId)}
           onPlay={(index) => playFrom(engine, playlist.tracks, index)}
+          onPlayAfter={(track) => playAfter(engine, [track])}
           onAddToQueue={(track) => engine.appendQueue([track])}
           onToggleFavorite={(track) => toggleFavoriteWithToast(track)}
           onRemove={(track) => removeFromPlaylist(playlist.id, track.videoId)}

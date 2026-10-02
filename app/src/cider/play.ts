@@ -18,6 +18,7 @@ import { useCiderLibrary } from "./library";
 import { useCiderSettings } from "./settings/store";
 import { searchPreferencesOf, type CiderSettings } from "./settings/types";
 import { assembleStation, radioQueries, type RadioSeed } from "./radio";
+import { manualLosses } from "./core/queue";
 import { ciderToast, useCiderUi } from "./ui";
 
 /**
@@ -68,14 +69,53 @@ export async function searchAndPlay(query: string, engine: CiderEngine): Promise
     ciderToast("warning", "A busca não devolveu nada", outcome.error ?? `Nenhum resultado para “${query}”.`);
     return false;
   }
-  engine.playQueue(outcome.tracks, 0);
+  requestPlay(engine, outcome.tracks, 0);
   return true;
+}
+
+/**
+ * Quantas faixas colocadas à mão esta troca de contexto jogaria fora.
+ *
+ * Zero é o caso comum (a fila veio de um álbum, de uma busca, de uma estação), e
+ * é o que mantém a pergunta rara: ela só aparece quando a pessoa **perde** algo
+ * que montou.
+ */
+function queueLosses(engine: CiderEngine, next: CiderTrack[]): number {
+  const snapshot = engine.snapshot();
+  return manualLosses(snapshot.queue, snapshot.manual, next);
+}
+
+/**
+ * Toca uma lista nova, perguntando antes quando isso for **descartar** faixas
+ * colocadas à mão.
+ *
+ * É a correção do iOS 18 para o pior acidente do player antigo: começar um álbum
+ * apagava em silêncio a fila que a pessoa tinha montado. Aqui a troca de contexto
+ * continua sendo um clique (é o gesto normal de "tocar este álbum"), mas o que
+ * foi posto à mão avisa antes de sair.
+ */
+export function requestPlay(engine: CiderEngine, tracks: CiderTrack[], index = 0): void {
+  if (tracks.length === 0) return;
+  const at = Math.max(0, Math.min(tracks.length - 1, index));
+  const losses = queueLosses(engine, tracks);
+  if (losses === 0) {
+    engine.playQueue(tracks, at);
+    return;
+  }
+  useCiderUi.getState().askQueuePrompt({
+    title: "Reproduzir isto limpará a sua fila",
+    message:
+      losses === 1
+        ? "A faixa que você colocou na fila será removida. O que está tocando agora continua igual até esta começar."
+        : `As ${losses} faixas que você colocou na fila serão removidas. O que está tocando agora continua igual até esta começar.`,
+    confirmLabel: "Reproduzir",
+    onConfirm: () => engine.playQueue(tracks, at),
+  });
 }
 
 /** Toca a lista a partir de `index` (a fila passa a ser exatamente esta lista). */
 export function playFrom(engine: CiderEngine, tracks: CiderTrack[], index = 0): void {
-  if (tracks.length === 0) return;
-  engine.playQueue(tracks, Math.max(0, Math.min(tracks.length - 1, index)));
+  requestPlay(engine, tracks, index);
 }
 
 /** Acrescenta faixas ao fim da fila atual, sem interromper a atual. */
@@ -83,6 +123,60 @@ export function addToQueue(engine: CiderEngine, tracks: CiderTrack[]): number {
   if (tracks.length === 0) return 0;
   engine.appendQueue(tracks);
   return tracks.length;
+}
+
+/**
+ * "Tocar depois": as faixas entram logo **depois da atual**, sem mexer no resto.
+ *
+ * É a outra metade do par que o iOS 18 separou: "Tocar depois" responde "quero
+ * ouvir isto agora, em seguida" e "Adicionar à fila" responde "quero isto mais
+ * tarde, depois de tudo". Sem nada tocando, as duas começam a fila.
+ */
+export function playAfter(engine: CiderEngine, tracks: CiderTrack[]): number {
+  if (tracks.length === 0) return 0;
+  const before = engine.snapshot();
+  const first = tracks[0]!;
+  const label = tracks.length === 1 ? first.title : `${tracks.length} faixas`;
+  const wasNext = before.queue[before.index + 1]?.videoId === first.videoId;
+  engine.playAfter(tracks);
+
+  // A ação precisa dizer o que fez. "Tocar depois" de uma faixa que já estava
+  // ali (ou já era a próxima) não muda nada na tela — e sem aviso a pessoa fica
+  // sem saber se o clique pegou.
+  if (!before.track) {
+    ciderToast("success", "Tocando agora", label);
+    return tracks.length;
+  }
+  if (wasNext) {
+    ciderToast(
+      "info",
+      "Já era a próxima",
+      `${label} já ia tocar depois de ${before.track.title}.`
+    );
+    return tracks.length;
+  }
+  ciderToast("success", "Vai tocar depois", `${label} entra depois de ${before.track.title}.`);
+  return tracks.length;
+}
+
+/**
+ * "Limpar": tira da fila só o que foi adicionado à mão e conta o que saiu.
+ *
+ * O contexto (o álbum, a lista, a estação) fica — é a diferença entre limpar a
+ * fila e parar tudo, que continua sendo o `clearQueue` do minibar.
+ */
+export function clearManualQueue(engine: CiderEngine): number {
+  const removed = engine.clearManualQueue();
+  ciderToast(
+    removed > 0 ? "success" : "info",
+    removed > 0 ? "Fila limpa" : "Nada para limpar",
+    removed > 0
+      ? removed === 1
+        ? "A faixa adicionada à mão saiu da fila. O que veio do contexto continua."
+        : `${removed} faixas adicionadas à mão saíram. O que veio do contexto continua.`
+      : "Esta fila veio inteira de um álbum, de uma lista ou de uma estação."
+  );
+  return removed;
 }
 
 /** Alterna favorito e avisa o que aconteceu. */
@@ -144,14 +238,14 @@ export async function startStation(seed: RadioSeed, engine: CiderEngine): Promis
   });
 
   if (seed.track) {
-    engine.playQueue([seed.track, ...station], 0);
+    requestPlay(engine, [seed.track, ...station], 0);
     return { added: station.length, queries, error: station.length === 0 ? error : null };
   }
 
   if (station.length === 0) {
     return { added: 0, queries, error: error ?? "Nenhuma faixa utilizável para esta semente." };
   }
-  engine.playQueue(station, 0);
+  requestPlay(engine, station, 0);
   return { added: station.length, queries, error: null };
 }
 

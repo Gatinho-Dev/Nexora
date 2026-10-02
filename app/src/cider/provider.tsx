@@ -30,6 +30,7 @@ const EMPTY: PlayerSnapshot = {
   durationMs: 0,
   track: null,
   queue: [],
+  manual: [],
   index: -1,
   volume: 0.8,
   muted: false,

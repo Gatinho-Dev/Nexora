@@ -12,7 +12,7 @@ import { Compass, Heart, Info, Play, Search, Sparkles } from "lucide-react";
 
 import { useCider } from "../useCider";
 import { useCiderLibrary } from "../library";
-import { playFrom } from "../play";
+import { playAfter, playFrom } from "../play";
 import { CoverArt } from "../components/CoverArt";
 import { MediaCard, Button, EmptyState, SectionHeader } from "../components/primitives";
 import { timecode } from "../format";
@@ -123,6 +123,7 @@ export function CiderHomePage() {
             playing={state.phase === "playing"}
             favorites={favorites.map((track) => track.videoId)}
             onPlay={(index) => playFrom(engine, recent, index)}
+            onPlayAfter={(track) => playAfter(engine, [track])}
             onAddToQueue={(track) => engine.appendQueue([track])}
           />
         </section>
@@ -144,6 +145,7 @@ export function CiderHomePage() {
             playing={state.phase === "playing"}
             favorites={favorites.map((track) => track.videoId)}
             onPlay={(index) => playFrom(engine, favorites.slice(0, 10), index)}
+            onPlayAfter={(track) => playAfter(engine, [track])}
             onAddToQueue={(track) => engine.appendQueue([track])}
           />
         </section>
