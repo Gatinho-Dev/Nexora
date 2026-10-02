@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type WheelEvent,
 } from "react";
+import { splitParenthetical, splitParentheticalText } from "./parenthetical";
 import { estimateWords } from "./words";
 import type { LyricsLine, LyricsWordView, WordState } from "./types";
 import type { LyricsStyle } from "./presets";
@@ -287,6 +288,17 @@ export function LyricsView({
     () => resolved.map((line) => emphasisWords(line)),
     [resolved]
   );
+  // A subletra é uma propriedade da **linha**, não do quadro: separar a cada
+  // quadro alocaria duas listas por linha a cada 16 ms. Como só depende das
+  // palavras resolvidas, a separação acontece uma vez por documento.
+  const wordParts = useMemo(
+    () => resolved.map((line) => (line.words?.length ? splitParenthetical(line.words) : null)),
+    [resolved]
+  );
+  const textParts = useMemo(
+    () => resolved.map((line) => (line.words?.length ? null : splitParentheticalText(line.text))),
+    [resolved]
+  );
 
   const { containerRef, registerLine, onWheel, resumeAutoscroll } = useLyricsScroll(
     views?.findIndex(view => view.state === "active") ?? -1,
@@ -306,6 +318,36 @@ export function LyricsView({
         {resolved.map((line, index) => {
           const view = views?.[index];
           const state = view?.state ?? "upcoming";
+          const parts = wordParts[index];
+          const plain = textParts[index];
+          const words = view?.words;
+          /**
+           * Uma palavra da linha: a principal ou, com `backing`, a subletra.
+           *
+           * O `view` é o mesmo objeto do motor — só o **texto** troca, e só no
+           * apoio, para os parênteses não aparecerem embaixo (veja
+           * `parenthetical.ts`). O tempo, o estado e o progresso continuam
+           * vindo de lá, então a subletra acende junto com a música.
+           */
+          const renderWord = (wordIndex: number, backing = false) => {
+            const wordView = words?.[wordIndex];
+            if (!wordView) return null;
+            const display = backing ? parts?.backingDisplay.get(wordIndex) : undefined;
+            return (
+              <AnimatedWord
+                key={`${backing ? "b" : "m"}-${wordIndex}-${wordView.word.startTimeMs}`}
+                view={
+                  display ? { ...wordView, word: { ...wordView.word, ...display } } : wordView
+                }
+                style={style}
+                activeColor={activeColor}
+                inactiveColor={inactiveColor}
+                glowColor={glowColor}
+                emphasis={emphasisLines[index]?.has(wordIndex) ?? false}
+                onSeek={onSeek}
+              />
+            );
+          };
           return (
             <p
               key={`${line.startTimeMs ?? "x"}-${index}`}
@@ -330,18 +372,16 @@ export function LyricsView({
               }
             >
               {line.words && line.words.length > 0 && view
-                ? view.words.map((wordView, wordIndex) => (
-                    <AnimatedWord
-                      key={`${wordIndex}-${wordView.word.startTimeMs}`}
-                      view={wordView}
-                      style={style}
-                      activeColor={activeColor}
-                      inactiveColor={inactiveColor}
-                      glowColor={glowColor}
-                      emphasis={emphasisLines[index]?.has(wordIndex) ?? false}
-                      onSeek={onSeek}
-                    />
-                  ))
+                ? parts
+                  ? // Com subletra a linha vira dois blocos: a letra principal na
+                    // mesma linha do texto e o apoio **embaixo**, menor.
+                    [
+                      parts.main.map(wordIndex => renderWord(wordIndex)),
+                      <span key="backing" className="lyrics-backing">
+                        {parts.backing.map(wordIndex => renderWord(wordIndex, true))}
+                      </span>,
+                    ]
+                  : view.words.map((_, wordIndex) => renderWord(wordIndex))
                 : (
                     // Linha sem palavra marcada (instrumental ou letra sem
                     // tempo): ela segue a mesma regra das palavras — cinza até
@@ -350,19 +390,30 @@ export function LyricsView({
                       className="lyrics-plainline"
                       style={state === "past" ? { color: activeColor } : undefined}
                     >
-                      {line.text || "♪"}
-                      {state === "active" && (view?.progress ?? 0) > 0 ? (
-                        <span
-                          className="progress-mask"
-                          style={{
-                            width: `${(view?.progress ?? 0) * 100}%`,
-                            color: activeColor,
-                          }}
-                          aria-hidden="true"
-                        >
+                      {plain ? (
+                        // Sem tempo por palavra não há varredura aqui: a linha
+                        // aparece inteira, com o apoio na linha de baixo.
+                        <>
+                          {plain.main}
+                          <span className="lyrics-backing">{plain.backing}</span>
+                        </>
+                      ) : (
+                        <>
                           {line.text || "♪"}
-                        </span>
-                      ) : null}
+                          {state === "active" && (view?.progress ?? 0) > 0 ? (
+                            <span
+                              className="progress-mask"
+                              style={{
+                                width: `${(view?.progress ?? 0) * 100}%`,
+                                color: activeColor,
+                              }}
+                              aria-hidden="true"
+                            >
+                              {line.text || "♪"}
+                            </span>
+                          ) : null}
+                        </>
+                      )}
                     </span>
                   )}
             </p>

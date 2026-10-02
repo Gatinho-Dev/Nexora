@@ -9,6 +9,12 @@ import { __testing as lyricsService, lyricsSearchUrl } from "./core/lyrics/servi
 const lines = (lrc: string) => parseLrc(lrc).lines;
 import { LyricsSyncEngine } from "./core/lyrics/sync";
 import { distributeWords, activeWordIndex } from "./core/lyrics/words";
+import {
+  splitParenthetical,
+  splitParentheticalText,
+  type BackingWordDisplay,
+} from "./core/lyrics/parenthetical";
+import type { LyricsWord } from "./core/lyrics/types";
 import { LYRICS_PRESETS, lyricsCssVariables } from "./core/lyrics/presets";
 
 /** LRC mínimo: duas linhas, a primeira com tempo por palavra implícito. */
@@ -221,6 +227,96 @@ describe("rolagem das letras", () => {
       "utf-8"
     );
     expect(lyrics).toMatch(/\.lyrics-spacer\s*\{[^}]*height/s);
+  });
+});
+
+describe("subletra entre parênteses", () => {
+  /** Palavras como o `LyricsView` as recebe: tokenizadas e com tempo. */
+  const words = (text: string) => distributeWords(text, 0, 4_000);
+  /** Reconstrói o que aparece na tela, com os espaços do texto original. */
+  const visible = (
+    list: LyricsWord[],
+    indices: number[],
+    display?: Map<number, BackingWordDisplay>
+  ) =>
+    indices
+      .map((index, position) => {
+        const word = list[index]!;
+        const shown = display?.get(index);
+        const text = shown
+          ? `${shown.text}${shown.punctuation ?? ""}`
+          : `${word.text}${word.punctuation ?? ""}`;
+        const spaceBefore = shown ? shown.spaceBefore : Boolean(word.spaceBefore);
+        return `${position === 0 || !spaceBefore ? "" : " "}${text}`;
+      })
+      .join("");
+
+  it("separa o apoio que vem depois da letra principal", () => {
+    const line = words("But show me, can you keep it up? (It up)");
+    const parts = splitParenthetical(line)!;
+
+    // O parêntese sai da letra de cima e vira o bloco de baixo, sem os
+    // parênteses — é a referência do Apple Music ("It up" embaixo).
+    expect(visible(line, parts.main)).toBe("But show me, can you keep it up?");
+    expect(visible(line, parts.backing, parts.backingDisplay)).toBe("It up");
+  });
+
+  it("separa também quando o parêntese está no meio da linha", () => {
+    const line = words("I still got feelings (ooh) you are my passion");
+    const parts = splitParenthetical(line)!;
+
+    // Cada lado mantém a ordem original: o apoio não "puxa" o que vem depois.
+    expect(visible(line, parts.main)).toBe("I still got feelings you are my passion");
+    expect(visible(line, parts.backing, parts.backingDisplay)).toBe("ooh");
+  });
+
+  it("preserva a pontuação que está dentro dos parênteses", () => {
+    const line = words("Don't run away love (don't run, away)");
+    const parts = splitParenthetical(line)!;
+
+    expect(visible(line, parts.backing, parts.backingDisplay)).toBe("don't run, away");
+  });
+
+  it("linha inteira de apoio não some: ela fica só na subletra", () => {
+    const line = words("(It up)");
+    const parts = splitParenthetical(line)!;
+
+    expect(parts.main).toHaveLength(0);
+    expect(visible(line, parts.backing, parts.backingDisplay)).toBe("It up");
+  });
+
+  it("não mexe em linha sem parênteses", () => {
+    expect(splitParenthetical(words("You are the one for me"))).toBeNull();
+    expect(splitParentheticalText("You are the one for me")).toBeNull();
+  });
+
+  it("parêntese desbalanceado não engole o resto da linha", () => {
+    // Um `(` solto marcaria tudo o que vem depois como apoio. Melhor deixar a
+    // linha como veio.
+    expect(splitParenthetical(words("Keep it up (live from Wembley"))).toBeNull();
+    expect(splitParentheticalText("Keep it up (live from Wembley")).toBeNull();
+  });
+
+  it("palavra que mistura os dois lados fica inteira na letra principal", () => {
+    // Caso raro (sem espaço entre a palavra e o parêntese). A palavra é uma só
+    // unidade de tempo: cortá-la deixaria metade sem tempo. Sem nenhuma palavra
+    // de apoio, a linha fica exatamente como veio, com os parênteses à mostra.
+    const line = words("My passion(ooh) tonight");
+    expect(splitParenthetical(line)).toBeNull();
+    expect(visible(line, [0, 1, 2])).toBe("My passion(ooh) tonight");
+
+    // Na letra sem tempo não há o que preservar: o corte pode ser dentro da
+    // palavra, e nada se perde.
+    expect(splitParentheticalText("My passion(ooh) tonight")).toEqual({
+      main: "My passion tonight",
+      backing: "ooh",
+    });
+  });
+
+  it("letra sem tempo também separa o apoio", () => {
+    const parts = splitParentheticalText("But show me, can you keep it up? (It up)")!;
+    expect(parts.main).toBe("But show me, can you keep it up?");
+    expect(parts.backing).toBe("It up");
   });
 });
 

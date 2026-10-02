@@ -257,6 +257,14 @@ O mesmo motor do desktop, portado sem alteração de comportamento:
   anda com a posição real do player (pausa congela, seek move);
 - **a palavra cantada sobe um pouco**: 1,6 px, proporcionais ao progresso (2,4 px
   quando a palavra é esticada). Mais que isso o texto dança;
+- **a subletra entre parênteses vai para baixo**: muita fonte escreve o canto
+  de apoio na mesma linha ("... can you keep it up? (It up)"). O apoio vira um
+  bloco menor **embaixo** da letra, sem os parênteses, como no Apple Music — e
+  como a música soa (voz principal na frente, resposta atrás). É uma separação
+  preguiçosa de propósito: acontece uma vez por documento (não a cada quadro) e
+  a palavra do apoio continua com o seu tempo, então ela acende e é pintada como
+  qualquer outra. Parêntese desbalanceado não vira subletra — a linha fica como
+  veio, em vez de a metade de baixo engolir o resto do texto;
 - **palavras esticadas ganham halo extra**, sem lista de palavras escolhidas a
   dedo: a marcação é o **tempo** — se uma palavra dura mais de 1,7× a média das
   vizinhas da mesma linha (e mais de 600 ms), ela é tratada como nota segurada e
