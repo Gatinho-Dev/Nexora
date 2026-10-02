@@ -12,11 +12,13 @@ import { useNavigate, useLocation } from "react-router";
 import {
   ChevronLeft,
   ChevronRight,
+  CirclePower,
   Expand,
   Heart,
   ListMusic,
   MicVocal,
   Menu,
+  MoreHorizontal,
   Pause,
   Play,
   Repeat,
@@ -37,7 +39,8 @@ import { CIDER_NAV_GROUPS, orderedNavItems, routeTitle } from "../nav";
 import { useCiderHistory } from "../history";
 import { useCiderLibrary } from "../library";
 import { toggleFavoriteWithToast } from "../play";
-import { CoverArt } from "./CoverArt";
+import { PlayableCover } from "./PlayableCover";
+import { releaseNowPlaying } from "../activity";
 import { timecode } from "../format";
 import { IconButton, ProgressSlider } from "./primitives";
 
@@ -333,6 +336,7 @@ const DEFAULT_PLAYBAR_ORDER = [
   "cover",
   "favorite",
   "progress",
+  "more",
   "lyrics",
   "queue",
   "volume",
@@ -343,11 +347,16 @@ const DEFAULT_PLAYBAR_ORDER = [
  * está tocando no meio e as ações à direita. Cada slot pertence a um bloco, e a
  * ordem escolhida pelo usuário vale **dentro** dele — assim uma playbar
  * personalizada continua fazendo sentido, em vez de virar uma fila única.
+ *
+ * A barra de progresso, que antes era uma linha **fora** da pílula, agora é um
+ * slot do bloco do meio: no Apple Music ela corre por baixo da capa e do título,
+ * dentro do mesmo retângulo, e o desenho de "tudo numa cápsula só" dependia
+ * disso.
  */
 const PILL_SLOTS = {
   transport: ["shuffle", "previous", "play", "next", "repeat"],
-  now: ["cover", "favorite"],
-  actions: ["lyrics", "queue", "volume"],
+  now: ["cover", "favorite", "progress"],
+  actions: ["more", "lyrics", "queue", "volume"],
 } as const;
 
 export function CiderPlaybar() {
@@ -357,6 +366,21 @@ export function CiderPlaybar() {
   const favorites = useCiderLibrary((state) => state.favorites);
   const panel = useCiderUi((state) => state.panel);
   const togglePanel = useCiderUi((state) => state.togglePanel);
+  const setLyricsScreen = useCiderUi((state) => state.setLyricsScreen);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  // O menu fecha ao clicar fora — inclusive no iframe do player, que engole o
+  // clique. Sem o `pointerdown` fora, ele ficava aberto por cima da interface
+  // enquanto a pessoa ouvia.
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onDown = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [menuOpen]);
 
   const visible = useMemo(() => {
     const order = settings.playbarOrder.length > 0 ? settings.playbarOrder : DEFAULT_PLAYBAR_ORDER;
@@ -452,6 +476,68 @@ export function CiderPlaybar() {
             <ListMusic size={18} />
           </IconButton>
         );
+      case "more":
+        return (
+          <div key="more" className="pill-more" ref={menuRef}>
+            <IconButton
+              label="Mais opções"
+              active={menuOpen}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((value) => !value)}
+            >
+              <MoreHorizontal size={18} />
+            </IconButton>
+            {menuOpen ? (
+              <div className="pill-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setLyricsScreen(true);
+                  }}
+                >
+                  <MicVocal size={16} /> Letra em tela cheia
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate("/cider/tocando-agora");
+                  }}
+                >
+                  <Expand size={16} /> Abrir Tocando agora
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!current}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    if (current) toggleFavoriteWithToast(current);
+                  }}
+                >
+                  <Heart size={16} /> {isFavorite ? "Remover dos favoritos" : "Favoritar"}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!current}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    // Mesma ação do "Encerrar Cider" da janela flutuante:
+                    // para o som, limpa a fila e tira a faixa do perfil.
+                    engine.clearQueue();
+                    releaseNowPlaying();
+                  }}
+                >
+                  <CirclePower size={16} /> Encerrar o Cider
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
       case "volume":
         return (
           <div key="volume" className="volume-control">
@@ -484,23 +570,28 @@ export function CiderPlaybar() {
       data-position={settings.playbarPosition}
       aria-label="Barra de reprodução"
     >
+      {/*
+        * Uma cápsula só, com tudo dentro: transporte à esquerda, a faixa no
+        * meio (capa, título e a barra de progresso correndo por baixo dela) e
+        * as ações à direita. A linha de progresso **não** é mais um rodapé
+        * separado — no Apple Music ela vive dentro do mesmo retângulo, e era
+        * isso que fazia a barra parecer três blocos em vez de um player.
+        */}
       <div className="playbar-pill">
         <div className="pill-transport">{group(PILL_SLOTS.transport).map(transportButton)}</div>
 
         <div className="pill-now">
           {group(PILL_SLOTS.now).includes("cover") ? (
-            <button
-              type="button"
+            <PlayableCover
               className="pill-cover"
-              onClick={() => navigate("/cider/tocando-agora")}
-              aria-label="Abrir Tocando agora"
-            >
-              <CoverArt
-                url={current?.artworkUrl}
-                title={current?.title ?? "Cider 2"}
-                className="cover"
-              />
-            </button>
+              imageClassName="cover"
+              url={current?.artworkUrl}
+              title={current?.title ?? "Cider 2"}
+              disabled={!current}
+              // Clicar na capa do que está tocando abre a letra em tela cheia —
+              // é o gesto do Apple Music, e o mesmo que as setas anunciam.
+              onExpand={() => setLyricsScreen(true)}
+            />
           ) : null}
           <div className="meta grow">
             <div className="title truncate" title={current?.title}>
@@ -527,27 +618,26 @@ export function CiderPlaybar() {
               <Heart size={17} />
             </IconButton>
           ) : null}
+          {group(PILL_SLOTS.now).includes("progress") ? (
+            <div className="pill-progress">
+              {settings.showTimecodes ? (
+                <span className="pill-time tabular">{timecode(state.positionMs)}</span>
+              ) : null}
+              <ProgressSlider
+                positionMs={state.positionMs}
+                durationMs={duration}
+                style={settings.progressStyle}
+                onSeek={engine.seekMs}
+              />
+              {settings.showTimecodes ? (
+                <span className="pill-time right tabular">{`-${timecode(remaining)}`}</span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="pill-actions">{group(PILL_SLOTS.actions).map(actionButton)}</div>
       </div>
-
-      {visible.includes("progress") ? (
-        <div className="playbar-progress">
-          {settings.showTimecodes ? (
-            <span className="timecode">{timecode(state.positionMs)}</span>
-          ) : null}
-          <ProgressSlider
-            positionMs={state.positionMs}
-            durationMs={duration}
-            style={settings.progressStyle}
-            onSeek={engine.seekMs}
-          />
-          {settings.showTimecodes ? (
-            <span className="timecode right">-{timecode(remaining)}</span>
-          ) : null}
-        </div>
-      ) : null}
     </footer>
   );
 }

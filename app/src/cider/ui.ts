@@ -29,6 +29,14 @@ interface CiderUiStore {
   panel: PanelKind | null;
   immersive: boolean;
   immersiveLayout: ImmersiveLayout | null;
+  /**
+   * Tela cheia de letras: a que abre ao clicar na capa do que está tocando.
+   *
+   * É separada do modo imersivo porque responde a outra pergunta. O imersivo é
+   * "quero ver a capa grande"; esta tela é "quero a letra, com o controle do
+   * lado", e é onde a letra é lida de verdade.
+   */
+  lyricsScreen: boolean;
   palette: boolean;
   /** Gaveta da barra lateral em telas estreitas. */
   sidebarOpen: boolean;
@@ -51,6 +59,7 @@ interface CiderUiStore {
   setImmersive: (value: boolean) => void;
   toggleImmersive: () => void;
   setImmersiveLayout: (layout: ImmersiveLayout | null) => void;
+  setLyricsScreen: (value: boolean) => void;
   setPalette: (value: boolean) => void;
   setSidebarOpen: (value: boolean) => void;
   setSearchMeta: (meta: {
@@ -70,6 +79,7 @@ export const useCiderUi = create<CiderUiStore>((set, get) => ({
   panel: null,
   immersive: false,
   immersiveLayout: null,
+  lyricsScreen: false,
   palette: false,
   sidebarOpen: false,
   searchSource: null,
@@ -88,6 +98,8 @@ export const useCiderUi = create<CiderUiStore>((set, get) => ({
   toggleImmersive: () => set((state) => ({ immersive: !state.immersive })),
 
   setImmersiveLayout: (layout) => set({ immersiveLayout: layout }),
+
+  setLyricsScreen: (value) => set({ lyricsScreen: value }),
 
   setPalette: (value) => set({ palette: value }),
 

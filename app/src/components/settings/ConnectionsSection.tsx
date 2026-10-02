@@ -282,15 +282,26 @@ export function ConnectionsSection() {
                       </div>
                     </>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={disconnect.isPending}
-                    onClick={() => disconnect.mutate({ provider: id })}
-                    className="h-8 w-full text-xs text-red-300 hover:bg-red-400/10 hover:text-red-200"
-                  >
-                    Desconectar
-                  </Button>
+                  {/*
+                    * O Cider não tem conta para desconectar: quem conecta é a
+                    * própria sessão, a cada faixa publicada. Um botão
+                    * "Desconectar" aqui só apagaria a linha de
+                    * `user_connections` — que volta na faixa seguinte — e daria
+                    * a impressão de que algo foi desligado. Quem esconde a
+                    * atividade são os controles acima (perfil, atividade,
+                    * visibilidade); quem para de ouvir é o "Encerrar o Cider".
+                    */}
+                  {!PUSH_PROVIDERS.has(id) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={disconnect.isPending}
+                      onClick={() => disconnect.mutate({ provider: id })}
+                      className="h-8 w-full text-xs text-red-300 hover:bg-red-400/10 hover:text-red-200"
+                    >
+                      Desconectar
+                    </Button>
+                  )}
                 </div>
               )}
             </article>

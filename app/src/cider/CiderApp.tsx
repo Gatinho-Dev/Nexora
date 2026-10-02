@@ -20,6 +20,7 @@ import { CiderSidePanel } from "./components/SidePanel";
 import { CiderToasts } from "./components/Toasts";
 import { CiderCommandPalette } from "./components/CommandPalette";
 import { CiderImmersive } from "./components/Immersive";
+import { CiderLyricsScreen } from "./components/LyricsScreen";
 import { CiderOnboarding } from "./components/Onboarding";
 import { CiderHomePage } from "./pages/HomePage";
 import { CiderNowPlayingPage } from "./pages/NowPlayingPage";
@@ -107,6 +108,7 @@ export function CiderApp() {
       }
       if (event.key === "Escape") {
         if (ui.palette) ui.setPalette(false);
+        else if (ui.lyricsScreen) ui.setLyricsScreen(false);
         else if (ui.immersive) ui.setImmersive(false);
         else if (ui.panel) ui.setPanel(null);
       }
@@ -168,6 +170,7 @@ export function CiderApp() {
       <CiderPlaybar />
       <CiderToasts />
       <CiderCommandPalette />
+      <CiderLyricsScreen />
       <CiderImmersive />
       <CiderOnboarding />
     </div>

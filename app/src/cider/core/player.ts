@@ -174,6 +174,17 @@ export class YouTubePlayer {
 
   private pending: { videoId: string; startSeconds: number } | null = null;
 
+  /**
+   * Elemento onde o player foi montado.
+   *
+   * A IFrame Player API **substitui** o host pelo próprio `<iframe>`, então o
+   * nó original deixa de existir. Guardar a referência é o que permite
+   * distinguir "já montado neste host" de "montado num host que saiu da
+   * página" — sem isso, um remonte (HMR, troca de host) reutilizaria um player
+   * apontando para um nó detachado: o vídeo "toca", o som não sai.
+   */
+  private host: HTMLElement | null = null;
+
   private ticker: number | null = null;
 
   private hooks: PlayerHooks;
@@ -207,11 +218,25 @@ export class YouTubePlayer {
 
   /** Monta o player dentro de `host` e carrega a API oficial. */
   async mount(host: HTMLElement): Promise<void> {
-    if (this.player) return;
+    if (this.player && this.host?.isConnected && this.host === host) return;
+    if (this.player) {
+      // Host trocado ou fora do documento: recria do zero.
+      try {
+        this.player.destroy();
+      } catch {
+        // O player já pode estar destruído; recriar é o que importa.
+      }
+      this.player = null;
+      // `ready` falso já silencia o ticker antigo: ele checa o estado a cada
+      // 250 ms e não reporta nada enquanto o player novo não montar.
+      this.ready = false;
+      this.host = null;
+    }
     if (!host.isConnected) {
       throw new Error("O elemento do player não está na página.");
     }
     this.api = await loadYouTubeIframeApi();
+    this.host = host;
 
     await new Promise<void>((resolve, reject) => {
       try {

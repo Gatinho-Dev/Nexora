@@ -23,6 +23,70 @@
 }
 
 /*
+ * Letra em tela cheia: é a leitura, não o painel.
+ *
+ * A coluna ocupa a altura toda (o painel de 520 px do `bridge.css` não vale
+ * aqui), a fonte é grande e a máscara é mais alta — no Apple Music dá para ler
+ * quatro ou cinco linhas e a linha cantada fica no meio, com as seguintes
+ * desbotando para baixo.
+ */
+.cider-root .lyrics-scope[data-variant="fullscreen"] {
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  gap: 6px;
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  padding: 8px 0;
+  gap: clamp(14px, 1.6vh, 26px);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 14%,
+    #000 68%,
+    transparent 100%
+  );
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-spacer {
+  flex: 1 1 auto;
+  height: 10%;
+  min-height: 4%;
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line {
+  font-size: clamp(28px, 1.6vw + 18px, 50px);
+  line-height: 1.24;
+  letter-spacing: -0.022em;
+  font-weight: 700;
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-state="active"] {
+  transform: none;
+}
+
+/* Na tela cheia as duas direções são distinguíveis, como no Apple Music: o
+   trecho já cantado continua legível (é para onde o olho volta) e o que ainda
+   vem é uma sombra mais apagada. */
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-state="upcoming"] {
+  opacity: 0.3;
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-state="past"] {
+  opacity: 0.58;
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-footer {
+  font-size: 11px;
+  opacity: 0.42;
+  padding: 0 2px 2px;
+}
+
+/*
  * Painel lateral.
  *
  * Aqui a letra **ocupa a altura toda**: o painel vai até o fim da janela e a
@@ -187,6 +251,22 @@
   white-space: pre;
 }
 
+/*
+ * Palavra enfatizada (cantada devagar).
+ *
+ * O tempo da palavra vem da fonte, então "devagar" não é palpite: a palavra é
+ * marcada quando dura bem mais que as vizinhas da mesma linha (veja
+ * `LyricsView`). O halo extra é o mesmo mecanismo da palavra ativa — só que
+ * mais forte e por mais tempo, que é o que faz a palavra "relate" da Sabrina
+ * Carpenter brilhar enquanto ela a estica, em vez de acender e apagar.
+ */
+.lyrics-word[data-emphasis="true"][data-state="active"] {
+  z-index: 1;
+}
+
+/* Redução de movimento também vale para o preenchimento: sem transição, a
+   palavra troca de cor de uma vez, sem varredura. */
+
 /* Quando o tempo é estimado (a fonte só manda o tempo da linha), deixamos isso
    visível — de forma discreta, sem poluir a leitura. */
 .lyrics-word[data-estimated="true"] {
@@ -348,4 +428,212 @@
   transition: none !important;
   filter: none !important;
   transform: none !important;
+}
+
+/* ------------------------------------------------------------------ *
+ * Tela cheia de letras (a que abre ao clicar na capa)                  *
+ * ------------------------------------------------------------------ *
+ * Arranjo da imagem de referência: ✕ no canto superior esquerdo, a capa com
+ * os controles logo abaixo num bloco à esquerda, a letra grande à direita, e o
+ * fundo sendo a própria capa **muito** desfocada — as cores da música passando
+ * atrás de tudo, sem detalhe nenhum.
+ *
+ * O fundo vive numa camada própria (`.lyrics-screen-bg`) com `blur(90px)`: um
+ * filtro nessa ordem de grandeza "derrete" a capa em manchas grandes, que é o
+ * efeito da referência. O `scale(1.18)` é obrigatório junto, porque o desfoque
+ * come as bordas e sobraria um degradê transparente no contorno.
+ */
+.lyrics-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  overflow: hidden;
+  color: #fff;
+  animation: lyrics-screen-in var(--cider-duration-base) var(--cider-ease-out) both;
+}
+
+@keyframes lyrics-screen-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.lyrics-screen-bg {
+  position: absolute;
+  inset: -8%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(90px) saturate(160%) brightness(0.92);
+  transform: scale(1.18);
+  pointer-events: none;
+}
+
+.lyrics-screen-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 110% at 20% 0%, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.55) 70%),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.34));
+  pointer-events: none;
+}
+
+.lyrics-screen-close {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--cider-radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: background var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.lyrics-screen-close:hover { background: rgba(255, 255, 255, 0.2); }
+
+.lyrics-screen-body {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(24px, 3.6vw, 72px);
+  height: 100%;
+  padding: clamp(56px, 7vh, 88px) clamp(28px, 4.5vw, 84px) clamp(24px, 4vh, 56px);
+  min-height: 0;
+}
+
+.lyrics-screen-left {
+  display: grid;
+  align-content: center;
+  justify-items: stretch;
+  gap: 12px;
+  width: 100%;
+  max-width: min(520px, 100%);
+  margin: 0 auto;
+}
+
+.lyrics-screen-art {
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--cider-radius-lg);
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+}
+
+.lyrics-screen-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lyrics-screen-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.lyrics-screen-text { min-width: 0; }
+
+.lyrics-screen-title {
+  font-size: var(--cider-text-md);
+  font-weight: var(--cider-weight-bold);
+  line-height: 1.3;
+}
+
+.lyrics-screen-artist {
+  font-size: var(--cider-text-sm);
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.35;
+}
+
+.lyrics-screen-tools { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+
+.lyrics-screen-tool {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--cider-radius-full);
+  background: none;
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  transition: background var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.lyrics-screen-tool:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+.lyrics-screen-tool[aria-pressed="true"] { color: #fff; }
+.lyrics-screen-tool.big { width: 52px; height: 52px; color: #fff; }
+.lyrics-screen-tool:disabled { opacity: 0.4; cursor: default; }
+
+.lyrics-screen-progress { display: grid; gap: 4px; }
+
+.lyrics-screen-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Na tela cheia o progresso é branco: o cinza do tema desapareceria sobre uma
+   capa clara desfocada. */
+.lyrics-screen .progress-track { background: rgba(255, 255, 255, 0.26); }
+.lyrics-screen .progress-fill { background: rgba(255, 255, 255, 0.92); }
+.lyrics-screen .progress-handle { background: #fff; }
+
+.lyrics-screen-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.8vw, 14px);
+  margin-top: 2px;
+}
+
+.lyrics-screen-volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(340px, 82%);
+  margin: 4px auto 0;
+}
+
+.lyrics-screen-volume .volume-range { flex: 1 1 auto; min-width: 0; }
+
+.lyrics-screen-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  min-height: 0;
+}
+
+.lyrics-screen-message {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: var(--cider-text-md);
+}
+
+/* Em telas estreitas a capa vai para cima e a letra embaixo: as duas colunas
+   lado a lado não caberiam sem espremer a letra a três palavras por linha. */
+@media (max-width: 980px) {
+  .lyrics-screen-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    padding-top: 64px;
+  }
+  .lyrics-screen-left { max-width: 260px; }
+  .lyrics-screen-right { min-height: 0; }
 }

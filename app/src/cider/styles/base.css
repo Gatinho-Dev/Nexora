@@ -1,19 +1,33 @@
 /* Cider 2 — estilos base, splash de carregamento e utilitários. */
 
-*,
-*::before,
-*::after {
+/*
+ * Tudo aqui é **escopado** ao Cider, e isso não é estilo: é correção.
+ *
+ * No desktop estes seletores podiam ser globais porque o aplicativo era a
+ * página inteira. Na web o Cider é uma rota dentro da Nexora, e o CSS de
+ * `/cider` **não sai do documento** quando a pessoa volta para o chat: o módulo
+ * já foi carregado e as folhas continuam valendo. Com `html, body, #root` e
+ * `body { overflow: hidden }` no escopo global, voltar do player deixava a
+ * Nexora sem altura e sem rolagem; e o `.hidden { display: none !important }`
+ * dos utilitários (mais abaixo) vencia os `hidden md:flex` do Tailwind, fazendo
+ * colunas inteiras do layout sumirem — só a lista de amigos online continuava
+ * à vista. Por isso o prefixo `.cider-root` (e `.cider-minibar` para o que vive
+ * fora da rota) em tudo que não é classe própria do Cider.
+ */
+.cider-root,
+.cider-root *,
+.cider-root *::before,
+.cider-root *::after,
+.cider-minibar,
+.cider-minibar *,
+.cider-audio-dock,
+.cider-audio-dock * {
   box-sizing: border-box;
 }
 
-html,
-body,
-#root {
+.cider-root {
   height: 100%;
   margin: 0;
-}
-
-body {
   font-family: var(--cider-font);
   font-size: var(--cider-text-base);
   line-height: var(--cider-leading-normal);
@@ -24,53 +38,77 @@ body {
   overflow: hidden;
 }
 
-h1, h2, h3, h4, h5, h6, p, figure, blockquote {
+/* O mini-player vive fora de `.cider-root` e precisa da mesma tipografia. */
+.cider-minibar {
+  font-family: var(--cider-font);
+}
+
+.cider-root h1,
+.cider-root h2,
+.cider-root h3,
+.cider-root h4,
+.cider-root h5,
+.cider-root h6,
+.cider-root p,
+.cider-root figure,
+.cider-root blockquote {
   margin: 0;
 }
 
-h1 { font-size: var(--cider-text-2xl); font-weight: var(--cider-weight-bold); letter-spacing: var(--cider-tracking-tight); }
-h2 { font-size: var(--cider-text-xl); font-weight: var(--cider-weight-bold); letter-spacing: var(--cider-tracking-tight); }
-h3 { font-size: var(--cider-text-lg); font-weight: var(--cider-weight-semibold); letter-spacing: -0.01em; }
-h4 { font-size: var(--cider-text-md); font-weight: var(--cider-weight-semibold); }
+.cider-root h1 { font-size: var(--cider-text-2xl); font-weight: var(--cider-weight-bold); letter-spacing: var(--cider-tracking-tight); }
+.cider-root h2 { font-size: var(--cider-text-xl); font-weight: var(--cider-weight-bold); letter-spacing: var(--cider-tracking-tight); }
+.cider-root h3 { font-size: var(--cider-text-lg); font-weight: var(--cider-weight-semibold); letter-spacing: -0.01em; }
+.cider-root h4 { font-size: var(--cider-text-md); font-weight: var(--cider-weight-semibold); }
 
-a { color: inherit; text-decoration: none; }
-a.text-link { color: var(--cider-accent); }
-a.text-link:hover { text-decoration: underline; }
+.cider-root a { color: inherit; text-decoration: none; }
+.cider-root a.text-link { color: var(--cider-accent); }
+.cider-root a.text-link:hover { text-decoration: underline; }
 
-button, input, select, textarea {
+.cider-root button,
+.cider-root input,
+.cider-root select,
+.cider-root textarea,
+.cider-minibar button,
+.cider-minibar input {
   font: inherit;
   color: inherit;
 }
 
-img { display: block; max-width: 100%; }
+.cider-root img { display: block; max-width: 100%; }
 
-::selection {
+.cider-root ::selection {
   background: color-mix(in srgb, var(--cider-accent) 40%, transparent);
   color: var(--cider-text);
 }
 
 /* Foco visível apenas na navegação por teclado. */
-:focus-visible {
+.cider-root :focus-visible,
+.cider-minibar :focus-visible {
   outline: 2px solid color-mix(in srgb, var(--cider-accent) 80%, transparent);
   outline-offset: 2px;
   border-radius: var(--cider-radius-sm);
 }
 
 /* Barras de rolagem discretas */
-* {
+.cider-root *,
+.cider-minibar * {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--cider-text-muted) 45%, transparent) transparent;
 }
 
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb {
+.cider-root *::-webkit-scrollbar,
+.cider-minibar *::-webkit-scrollbar { width: 10px; height: 10px; }
+.cider-root *::-webkit-scrollbar-track,
+.cider-minibar *::-webkit-scrollbar-track { background: transparent; }
+.cider-root *::-webkit-scrollbar-thumb,
+.cider-minibar *::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--cider-text-muted) 35%, transparent);
   border-radius: var(--cider-radius-full);
   border: 3px solid transparent;
   background-clip: content-box;
 }
-*::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--cider-text-muted) 60%, transparent); }
+.cider-root *::-webkit-scrollbar-thumb:hover,
+.cider-minibar *::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--cider-text-muted) 60%, transparent); }
 
 /* ------------------------------------------------------------------ *
  * Splash de carregamento (definido no index.html e removido no boot)  *
@@ -117,55 +155,63 @@ img { display: block; max-width: 100%; }
 
 /* ------------------------------------------------------------------ *
  * Utilitários                                                        *
- * ------------------------------------------------------------------ */
-.stack { display: flex; flex-direction: column; }
-.row { display: flex; align-items: center; }
-.between { display: flex; align-items: center; justify-content: space-between; }
-.wrap { flex-wrap: wrap; }
-.center { display: flex; align-items: center; justify-content: center; }
-.grow { flex: 1 1 auto; min-width: 0; }
-.gap-1 { gap: var(--cider-space-1); }
-.gap-2 { gap: var(--cider-space-2); }
-.gap-3 { gap: var(--cider-space-3); }
-.gap-4 { gap: var(--cider-space-4); }
-.gap-5 { gap: var(--cider-space-5); }
-.gap-6 { gap: var(--cider-space-6); }
-.gap-8 { gap: var(--cider-space-8); }
-.pad-4 { padding: var(--cider-space-4); }
-.pad-6 { padding: var(--cider-space-6); }
-.mt-2 { margin-top: var(--cider-space-2); }
-.mt-4 { margin-top: var(--cider-space-4); }
-.mt-6 { margin-top: var(--cider-space-6); }
-.mb-2 { margin-bottom: var(--cider-space-2); }
-.mb-4 { margin-bottom: var(--cider-space-4); }
-.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.clamp-2 {
+ * ------------------------------------------------------------------ *
+ * Escopados por `.cider-root`: vários destes nomes existem no Tailwind
+ * (`hidden`, `relative`, `truncate`, `uppercase`, `grow`, `mt-2`…) com outro
+ * significado. Soltos no documento, o `.hidden { display: none !important }`
+ * daqui vencia os `hidden md:flex` da Nexora e colunas inteiras do chat
+ * desapareciam ao voltar do player.
+ */
+.cider-root .stack { display: flex; flex-direction: column; }
+.cider-root .row { display: flex; align-items: center; }
+.cider-root .between { display: flex; align-items: center; justify-content: space-between; }
+.cider-root .wrap { flex-wrap: wrap; }
+.cider-root .center { display: flex; align-items: center; justify-content: center; }
+.cider-root .grow { flex: 1 1 auto; min-width: 0; }
+.cider-root .gap-1 { gap: var(--cider-space-1); }
+.cider-root .gap-2 { gap: var(--cider-space-2); }
+.cider-root .gap-3 { gap: var(--cider-space-3); }
+.cider-root .gap-4 { gap: var(--cider-space-4); }
+.cider-root .gap-5 { gap: var(--cider-space-5); }
+.cider-root .gap-6 { gap: var(--cider-space-6); }
+.cider-root .gap-8 { gap: var(--cider-space-8); }
+.cider-root .pad-4 { padding: var(--cider-space-4); }
+.cider-root .pad-6 { padding: var(--cider-space-6); }
+.cider-root .mt-2 { margin-top: var(--cider-space-2); }
+.cider-root .mt-4 { margin-top: var(--cider-space-4); }
+.cider-root .mt-6 { margin-top: var(--cider-space-6); }
+.cider-root .mb-2 { margin-bottom: var(--cider-space-2); }
+.cider-root .mb-4 { margin-bottom: var(--cider-space-4); }
+.cider-root .truncate,
+.cider-minibar .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cider-root .clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.muted { color: var(--cider-text-muted); }
-.faint { color: var(--cider-text-faint); }
-.small { font-size: var(--cider-text-sm); }
-.xsmall { font-size: var(--cider-text-xs); }
-.mono { font-family: var(--cider-font-mono); }
-.tabular { font-variant-numeric: tabular-nums; }
-.semibold { font-weight: var(--cider-weight-semibold); }
-.bold { font-weight: var(--cider-weight-bold); }
-.uppercase { text-transform: uppercase; letter-spacing: var(--cider-tracking-wide); }
-.hidden { display: none !important; }
-.relative { position: relative; }
-.scroll-y { overflow-y: auto; overflow-x: hidden; }
+.cider-root .muted { color: var(--cider-text-muted); }
+.cider-root .faint { color: var(--cider-text-faint); }
+.cider-root .small { font-size: var(--cider-text-sm); }
+.cider-root .xsmall { font-size: var(--cider-text-xs); }
+.cider-root .mono { font-family: var(--cider-font-mono); }
+.cider-root .tabular,
+.cider-minibar .tabular { font-variant-numeric: tabular-nums; }
+.cider-root .semibold { font-weight: var(--cider-weight-semibold); }
+.cider-root .bold { font-weight: var(--cider-weight-bold); }
+.cider-root .uppercase { text-transform: uppercase; letter-spacing: var(--cider-tracking-wide); }
+.cider-root .hidden { display: none !important; }
+.cider-root .relative { position: relative; }
+.cider-root .scroll-y { overflow-y: auto; overflow-x: hidden; }
 
-.accent-text {
+.cider-root .accent-text {
   background: var(--cider-gradient-brand);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
-.divider {
+.cider-root .divider {
   height: 1px;
   background: var(--cider-border);
   border: 0;
@@ -173,7 +219,7 @@ img { display: block; max-width: 100%; }
 }
 
 /* Estados vazios e de carregamento */
-.empty-state {
+.cider-root .empty-state {
   display: grid;
   place-items: center;
   gap: var(--cider-space-3);
@@ -182,7 +228,7 @@ img { display: block; max-width: 100%; }
   color: var(--cider-text-muted);
 }
 
-.skeleton {
+.cider-root .skeleton {
   background: linear-gradient(
     90deg,
     var(--cider-surface) 25%,

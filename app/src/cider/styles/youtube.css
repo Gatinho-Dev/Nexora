@@ -374,8 +374,13 @@
   cursor: default;
 }
 
-.yt-row .cover {
+/* A capa do resultado é maior que a da lista de biblioteca: é o que dá o peso
+   visual da busca. */
+.yt-row .cover,
+.yt-row-cover .track-art {
   flex: none;
+  width: 56px;
+  height: 56px;
   border-radius: var(--cider-radius-sm);
 }
 

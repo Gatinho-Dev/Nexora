@@ -10,6 +10,34 @@ import { estimateWords } from "./words";
 import type { LyricsLine, LyricsWordView, WordState } from "./types";
 import type { LyricsStyle } from "./presets";
 
+/** Conjunto vazio reaproveitado: a maioria das linhas não tem palavra esticada. */
+const NO_EMPHASIS: ReadonlySet<number> = new Set<number>();
+
+/**
+ * Palavras "esticadas" de uma linha — as que merecem o halo extra.
+ *
+ * O critério não é a palavra em si, e sim o **tempo**: se ela dura bem mais que
+ * as vizinhas da mesma linha, a pessoa está segurando a nota. É o que faz o
+ * "relate" da Sabrina Carpenter brilhar enquanto é esticado, sem nenhuma lista
+ * de palavras escolhidas a dedo (que envelheceria a cada música nova).
+ *
+ * Os dois pisos existem para não marcar qualquer coisa: a linha precisa ter ao
+ * menos duas palavras (senão não há com o que comparar) e a palavra precisa
+ * passar de 600 ms de duração.
+ */
+function emphasisWords(line: LyricsLine | undefined): ReadonlySet<number> {
+  const words = line?.words ?? [];
+  if (words.length < 2) return NO_EMPHASIS;
+  const durations = words.map((word) => Math.max(0, word.endTimeMs - word.startTimeMs));
+  const mean = durations.reduce((total, value) => total + value, 0) / durations.length;
+  const threshold = Math.max(600, mean * 1.7);
+  const marked = new Set<number>();
+  durations.forEach((duration, index) => {
+    if (duration >= threshold) marked.add(index);
+  });
+  return marked.size > 0 ? marked : NO_EMPHASIS;
+}
+
 /**
  * Uma palavra da letra, com o estado que decide cor, glow, escala e blur.
  *
@@ -24,6 +52,7 @@ function AnimatedWord({
   activeColor,
   inactiveColor,
   glowColor,
+  emphasis,
   onSeek,
 }: {
   view: LyricsWordView;
@@ -32,13 +61,18 @@ function AnimatedWord({
   inactiveColor: string;
   /** Cor do halo da palavra ativa; sem ele, o halo usa a própria cor ativa. */
   glowColor?: string;
+  /** `true` quando a palavra é cantada devagar (ver `emphasisWords`). */
+  emphasis?: boolean;
   onSeek?: (ms: number) => void;
 }) {
   const { word, state, progress } = view;
   const halo = glowColor ?? activeColor;
+  // O halo é multiplicado na palavra esticada; a cor nunca muda, para a letra
+  // continuar sendo letra e não um letreiro de neon.
+  const glowStrength = emphasis ? Math.min(1, style.wordGlow * 1.25 + 0.3) : Math.min(1, style.wordGlow);
 
   const computed = useMemo(() => {
-    const glow = Math.max(0, Math.min(1, style.wordGlow));
+    const glow = Math.max(0, glowStrength);
     const shadowStrength = style.shadowIntensity;
     const base = {
       opacity: 1,
@@ -71,31 +105,46 @@ function AnimatedWord({
           transform: `translate3d(0,${(style.slideDistance * 0.2).toFixed(0)}px,0) scale(1)`,
         };
       case "active": {
-        // A cor acende conforme a palavra é cantada: `progress` é real, não
-        // temporizador, então acompanha a velocidade e pausa junto.
+        // A palavra **se enche** da esquerda para a direita conforme é cantada:
+        // um degradê duro no ponto do progresso, recortado pelas letras
+        // (`background-clip: text`). Antes a palavra só trocava de cor de uma
+        // vez, e o efeito parecia um interruptor; agora acompanha a voz.
+        //
+        // `progress` é a posição real do player, não um temporizador: pausar
+        // congela o preenchimento no lugar e um seek o move junto.
+        const fill = Math.min(1, Math.max(0, progress));
+        const fillPercent = (fill * 100).toFixed(2);
         const mix = interpolateHex(
           inactiveColor,
           activeColor,
-          Math.min(1, 0.35 + progress * 0.65)
+          Math.min(1, 0.3 + fill * 0.7)
         );
-        const scale = 1 + (style.activeScale - 1) * Math.max(0.35, progress);
-        const haloSize = glow * 18 * Math.max(0.4, progress);
+        const scale = 1 + (style.activeScale - 1) * Math.max(0.35, fill);
+        const haloSize = glow * (emphasis ? 24 : 18) * Math.max(0.4, fill);
+        // A palavra cantada sobe um pouquinho — "bem pouquinho" mesmo: 1,6 px
+        // (2,4 px quando é esticada). Mais que isso o texto dança e a leitura
+        // fica desconfortável.
+        const lift = -(emphasis ? 2.4 : 1.6) * fill;
         return {
           ...base,
           opacity: 1,
-          color: mix,
-          transform: `translate3d(0,0,0) scale(${scale.toFixed(3)})`,
+          color: "transparent",
+          backgroundImage: `linear-gradient(90deg, ${mix} 0 ${fillPercent}%, ${inactiveColor} ${fillPercent}% 100%)`,
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          transform: `translate3d(0, ${lift.toFixed(2)}px, 0) scale(${scale.toFixed(3)})`,
           textShadow:
             haloSize > 0.5
               ? `0 0 ${haloSize.toFixed(1)}px ${withAlpha(
                   halo,
                   glow * 0.55
-                )}, 0 0 ${(haloSize * 2.2).toFixed(1)}px ${withAlpha(halo, glow * 0.28)}`
+                )}, 0 0 ${(haloSize * 2.4).toFixed(1)}px ${withAlpha(halo, glow * 0.3)}`
               : `0 1px ${Math.round(shadowStrength * 6)}px rgba(0,0,0,${(
                   0.35 * shadowStrength
                 ).toFixed(2)})`,
           filter: "none",
-          fontWeight: Math.min(800, style.fontWeight + 60),
+          fontWeight: Math.min(800, style.fontWeight + (emphasis ? 80 : 60)),
         };
       }
       case "past":
@@ -104,13 +153,20 @@ function AnimatedWord({
         // única vez no `<span>` abaixo. Um `transitionDuration` aqui seria
         // sobrescrito pelo atalho (e faria o React avisar sobre misturar
         // atalho com longhand no mesmo objeto de estilo).
+        //
+        // A palavra esticada continua com o halo aceso depois de passar: é o
+        // que faz o brilho do "relate" durar o tempo da nota e não o do
+        // quadro em que ela foi cantada.
         return {
           ...base,
           opacity: Math.max(style.inactiveOpacity + 0.12, 0.5),
-          color: interpolateHex(inactiveColor, activeColor, glow * 0.35),
+          color: interpolateHex(inactiveColor, activeColor, glow * (emphasis ? 0.5 : 0.35)),
           textShadow:
             glow > 0.3
-              ? `0 0 ${(glow * 5).toFixed(1)}px ${withAlpha(halo, glow * 0.14)}`
+              ? `0 0 ${(glow * (emphasis ? 9 : 5)).toFixed(1)}px ${withAlpha(
+                  halo,
+                  glow * (emphasis ? 0.24 : 0.14)
+                )}`
               : "none",
           filter:
             style.blurInactivePx > 0
@@ -119,7 +175,7 @@ function AnimatedWord({
         };
       }
     }
-  }, [state, progress, style, activeColor, inactiveColor, halo]);
+  }, [state, progress, style, activeColor, inactiveColor, halo, glowStrength, emphasis]);
 
   const transitionMs =
     style.animation === "off"
@@ -134,6 +190,7 @@ function AnimatedWord({
     <span
       className="lyrics-word"
       data-state={state}
+      data-emphasis={emphasis ? "true" : undefined}
       data-estimated={word.estimated ? "true" : "false"}
       style={
         {
@@ -216,6 +273,12 @@ export function LyricsView({
   // é o começo da próxima, e estimar linha a linha deixaria a última sem
   // duração e todas com respiro errado.
   const resolved = useMemo(() => estimateWords(lines), [lines]);
+  // As palavras "esticadas" são derivadas das linhas resolvidas: dependem das
+  // durações (estimadas ou não), que só existem depois de `estimateWords`.
+  const emphasisLines = useMemo(
+    () => resolved.map((line) => emphasisWords(line)),
+    [resolved]
+  );
 
   const { containerRef, registerLine, onWheel, resumeAutoscroll } = useLyricsScroll(
     views?.findIndex(view => view.state === "active") ?? -1,
@@ -267,6 +330,7 @@ export function LyricsView({
                       activeColor={activeColor}
                       inactiveColor={inactiveColor}
                       glowColor={glowColor}
+                      emphasis={emphasisLines[index]?.has(wordIndex) ?? false}
                       onSeek={onSeek}
                     />
                   ))

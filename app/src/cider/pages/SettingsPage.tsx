@@ -115,6 +115,7 @@ const PLAYBAR_SLOTS: Array<{ id: string; label: string }> = [
   { id: "cover", label: "Capa" },
   { id: "favorite", label: "Favoritar" },
   { id: "progress", label: "Barra de progresso" },
+  { id: "more", label: "Mais opções" },
   { id: "lyrics", label: "Letras (painel)" },
   { id: "queue", label: "Fila (painel)" },
   { id: "volume", label: "Volume" },
