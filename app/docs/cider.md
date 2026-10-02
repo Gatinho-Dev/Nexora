@@ -350,8 +350,93 @@ A interpolação de posição vive em `LyricsTimeline`, uma fonte externa lida c
 `useSyncExternalStore`. Não é detalhe de estilo: o player reporta a posição 4×
 por segundo, e sem interpolar o destaque daria saltos visíveis de 250 ms.
 
+## Ouvir junto (sessão de escuta compartilhada)
+
+É a peça social que faltava: uma pessoa abre uma sessão, as outras entram e todo
+mundo ouve **a mesma faixa no mesmo ponto** — com reações subindo sobre a capa.
+Entrada pelo menu `…` da pílula ("Ouvir junto"), que abre o painel do mesmo nome.
+
+### Papéis
+
+- **anfitrião** — quem abre a sessão. É dono da fila e da reprodução: pular,
+  voltar, pausar e a posição saem do motor dele;
+- **convidado** — entrou por um código (ou por convite). O player dele **segue** o
+  estado do anfitrião, e os controles da playbar viram **pedidos**: "próxima",
+  "anterior", "play/pause" e a busca de posição viajam até o anfitrião, que
+  aplica e publica o resultado. Sem isso, dois controles independentes fariam a
+  sessão andar para lados diferentes — o oposto de ouvir junto.
+
+O convidado também não mexe na fila localmente: `Adicionar à fila` e
+`Tocar depois` viram **sugestões** para o anfitrião (até 10 por gesto), e a
+faixa aparece na fila dele.
+
+### Como o alinhamento funciona
+
+Três decisões, todas em `src/cider/core/listen.ts` e fixadas por teste:
+
+1. **a janela publicada começa na faixa atual.** O anfitrião manda `[atual,
+   ...próximas]` (até 50), com `index: 0` — não a fila inteira. Um álbum de 500
+   faixas não caberia numa mensagem, e o que o convidado precisa é o que toca e o
+   que vem depois;
+2. **a assinatura ignora o progresso fino.** Ela muda em troca de faixa, mudança
+   de play/pause, mudança de fila e a cada **5 s** de progresso — o batimento que
+   mantém a sessão alinhada sem transformar cada tique do relógio numa mensagem.
+   Quando algo muda antes do intervalo mínimo, a publicação é **agendada**, nunca
+   descartada;
+3. **a banda de tolerância é de 3 s.** Os dois players nunca tocam no mesmo
+   milissegundo; corrigir cada segundo faria o áudio engasgar. A posição alvo
+   ainda compensa o tempo de viagem medido com o relógio **local** de quando o
+   estado chegou — a única conta que não depende de os dois computadores estarem
+   com a hora certa.
+
+Quem entra numa sessão **pausada** não ouve uma batida antes do pause: o motor
+usa `cueVideoById` em vez de `loadVideoById` (`engine.followQueue`), e a intenção
+de tocar ou não é preservada mesmo quando o `<iframe>` ainda está inicializando.
+
+### Reações
+
+A lista de emojis é **fechada** (`CIDER_LISTEN_EMOJIS`, em `contracts/constants`)
+e o servidor a valida: uma lista aberta deixaria um cliente autenticado animar
+texto arbitrário sobre a capa de todo mundo. A reação de quem reagiu aparece na
+hora (eco local) e o servidor entrega aos outros; os dois lados respeitam o mesmo
+intervalo mínimo, então ninguém vê uma animação que o resto da sessão não viu.
+
+Elas sobem da altura da playbar, com deslocamento próprio para não subirem
+coladas, e somem sozinhas (`listen-rise`, 2,6 s). Quem pediu menos movimento
+recebe a mesma reação sem o voo (`listen-fade`, via `prefers-reduced-motion` ou
+as configurações de animação do Cider).
+
+### Servidor
+
+Nada de banco: a sessão é do **processo do realtime**, como as salas de voz
+(`api/ciderListen.ts` + as mensagens `cider:listen:*` em `api/realtime.ts`).
+
+- **uma sessão por usuário** e teto de **12 pessoas**;
+- **o anfitrião é a sessão**: quando ele sai (ou fecha a conexão), ela acaba e os
+  convidados são avisados — não existe sala sem áudio para acompanhar;
+- **convites** só para **amigos aceitos** e **online** (o convite toca na tela do
+  outro agora; para quem está offline não há onde tocar);
+- o estado publicado é revalidado no servidor (`sanitizeListenState`): a faixa que
+  toca **está** na fila, e "nada tocando" só existe com a fila vazia. Estado torto
+  é **recusado**, não consertado — consertar faria o convidado seguir uma fila que
+  o anfitrião não tem;
+- reações e publicações de estado têm limite de frequência por usuário, e a lista
+  de emojis é validada aqui — o tipo do TS não protege nada em runtime.
+
+O painel mostra o código da sessão para copiar (quem está do lado lê em voz alta)
+e a lista de amigos para convidar. O `CiderListenBridge` (montado no
+`CiderProvider`, acima do roteador) é quem liga realtime e motor à store — a
+sessão continua valendo **fora de `/cider`**, onde o mini-player segue o
+anfitrião do mesmo jeito.
+
 ## Limitações conhecidas
 
+- **A sessão de escuta não sobrevive a um recarregamento.** O registro é em
+  memória e a identidade é o socket: fechar a aba, cair a conexão ou reiniciar o
+  servidor termina a sessão (os convidados são avisados e voltam para as próprias
+  filas). Escutar junto é uma atividade ao vivo, não um objeto para reabrir
+  amanhã — persistir isso exigiria escolher um lugar no banco para uma sala de
+  minutos.
 - **O áudio não passa pelo equalizador.** O navegador não dá acesso ao buffer do
   iframe. A DSP só valeria para arquivos locais, que esta versão não carrega.
 - **Sem histórico local nem biblioteca sincronizada.** O Cider 2 desktop tinha
@@ -365,7 +450,8 @@ por segundo, e sem interpolar o destaque daria saltos visíveis de 250 ms.
 
 ```bash
 npm run test      # inclui src/cider/core/core.test.ts, src/cider/settings/settings.test.ts
-                  # e src/cider/{library,radio,lyrics,cssScope,queue,queueAdd}.test.ts
+                  # e src/cider/{library,radio,lyrics,cssScope,queue,queueAdd,listen}.test.ts
+                  # e api/ciderListen.test.ts (regras da sessão de escuta, no servidor)
 npm run check
 npm run lint
 ```

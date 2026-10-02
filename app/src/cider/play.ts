@@ -19,6 +19,7 @@ import { useCiderSettings } from "./settings/store";
 import { searchPreferencesOf, type CiderSettings } from "./settings/types";
 import { assembleStation, radioQueries, type RadioSeed } from "./radio";
 import { manualLosses } from "./core/queue";
+import { suggestToListen, useCiderListen } from "./listen";
 import { ciderToast, useCiderUi } from "./ui";
 
 /**
@@ -118,9 +119,31 @@ export function playFrom(engine: CiderEngine, tracks: CiderTrack[], index = 0): 
   requestPlay(engine, tracks, index);
 }
 
+/**
+ * Numa sessão de escuta, a fila é do anfitrião.
+ *
+ * Para o convidado, "adicionar à fila" e "tocar depois" viram **sugestões**:
+ * mexer no motor local seria desfeito no estado seguinte do anfitrião, e a
+ * pessoa veria a faixa entrar na fila e sumir sozinha — pior do que um gesto
+ * que assume de quem é a fila.
+ */
+function suggestIfFollowing(tracks: CiderTrack[]): number | null {
+  const session = useCiderListen.getState().session;
+  if (!session || session.me.role !== "guest") return null;
+  const sent = suggestToListen(tracks);
+  ciderToast(
+    "info",
+    sent === 1 ? "Sugerida para a sessão" : `${sent} faixas sugeridas`,
+    "Quem tem a fila é o anfitrião — a sugestão chega para ele."
+  );
+  return sent;
+}
+
 /** Acrescenta faixas ao fim da fila atual, sem interromper a atual. */
 export function addToQueue(engine: CiderEngine, tracks: CiderTrack[]): number {
   if (tracks.length === 0) return 0;
+  const suggested = suggestIfFollowing(tracks);
+  if (suggested !== null) return suggested;
   engine.appendQueue(tracks);
   return tracks.length;
 }
@@ -134,6 +157,8 @@ export function addToQueue(engine: CiderEngine, tracks: CiderTrack[]): number {
  */
 export function playAfter(engine: CiderEngine, tracks: CiderTrack[]): number {
   if (tracks.length === 0) return 0;
+  const suggested = suggestIfFollowing(tracks);
+  if (suggested !== null) return suggested;
   const before = engine.snapshot();
   const first = tracks[0]!;
   const label = tracks.length === 1 ? first.title : `${tracks.length} faixas`;

@@ -172,7 +172,17 @@ export class YouTubePlayer {
 
   private startAtMs = 0;
 
-  private pending: { videoId: string; startSeconds: number } | null = null;
+  private pending: { videoId: string; startSeconds: number; autoPlay: boolean } | null = null;
+
+  /**
+   * Se o vídeo que está sendo carregado deve começar tocando.
+   *
+   * Existe por causa de "Ouvir junto": o convidado entra numa sessão que pode
+   * estar **pausada**, e nesse caso o vídeo precisa ficar pronto no ponto certo
+   * sem tocar nem um instante. `loadVideoById` toca por definição; quem carrega
+   * sem tocar é `cueVideoById`, e é ele que este campo escolhe.
+   */
+  private autoPlay = true;
 
   /**
    * Elemento onde o player foi montado.
@@ -279,6 +289,10 @@ export class YouTubePlayer {
               if (this.pending) {
                 const pending = this.pending;
                 this.pending = null;
+                // A intenção de tocar (ou não) veio antes de o player existir:
+                // aplicá-la aqui é o que faz o convidado de uma sessão pausada
+                // ficar pronto sem dar uma batida de som.
+                this.autoPlay = pending.autoPlay;
                 this.loadVideo(pending.videoId, pending.startSeconds);
               }
               this.startTicker();
@@ -294,23 +308,34 @@ export class YouTubePlayer {
     });
   }
 
-  /** Toca uma lista de ids do YouTube, começando em `startIndex`. */
+  /**
+   * Toca uma lista de ids do YouTube, começando em `startIndex`.
+   *
+   * `autoPlay: false` carrega sem tocar — usado quando o Cider está **seguindo**
+   * o player de outra pessoa, que pode estar pausado.
+   */
   async playQueue(
     videoIds: string[],
     startIndex: number,
-    startTimeMs = 0
+    startTimeMs = 0,
+    autoPlay = true
   ): Promise<void> {
     if (videoIds.length === 0) throw new Error("A fila está vazia.");
     this.queue = videoIds;
     this.index = Math.max(0, Math.min(videoIds.length - 1, startIndex));
-    await this.changeIndex(this.index, startTimeMs);
+    await this.changeIndex(this.index, startTimeMs, autoPlay);
   }
 
-  async changeIndex(index: number, startTimeMs = 0): Promise<void> {
+  async changeIndex(
+    index: number,
+    startTimeMs = 0,
+    autoPlay = true
+  ): Promise<void> {
     const videoId = this.queue[index];
     if (!videoId) return;
     this.index = index;
     this.startAtMs = startTimeMs;
+    this.autoPlay = autoPlay;
     // O primeiro play da sessão precisa vir de um clique. Marcamos aqui porque
     // `playQueue` só é chamado a partir de um handler de clique.
     this.unlocked = true;
@@ -319,17 +344,20 @@ export class YouTubePlayer {
 
   private loadVideo(videoId: string, startSeconds: number): void {
     if (!this.player || !this.ready) {
-      this.pending = { videoId, startSeconds };
+      this.pending = { videoId, startSeconds, autoPlay: this.autoPlay };
       return;
     }
     this.currentId = videoId;
     this.startAtMs = startSeconds * 1000;
     this.setPhase("loading", null);
+    const start = Math.max(0, Math.floor(startSeconds));
     try {
-      this.player.loadVideoById({
-        videoId,
-        startSeconds: Math.max(0, Math.floor(startSeconds)),
-      });
+      const methods = this.player as unknown as Record<string, unknown>;
+      if (this.autoPlay || typeof methods.cueVideoById !== "function") {
+        this.player.loadVideoById({ videoId, startSeconds: start });
+      } else {
+        this.player.cueVideoById({ videoId, startSeconds: start });
+      }
       this.hooks.onTrackChanged?.(videoId);
     } catch (error) {
       this.handleError(5);

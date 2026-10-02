@@ -7,14 +7,15 @@
  * saída para escolher, e um painel vazio seria pior que a ausência dele.
  */
 
-import { ExternalLink, ListMusic, Loader2, MicVocal, Plus, Trash2, X } from "lucide-react";
+import { ExternalLink, ListMusic, Loader2, MicVocal, Plus, Trash2, Users, X } from "lucide-react";
 
 import { useCider } from "../useCider";
+import { useCiderListen } from "../listen";
 import { useLyrics } from "../useLyrics";
 import { useCiderUi } from "../ui";
 import { timecode } from "../format";
 import { clearManualQueue } from "../play";
-import { Button, EmptyState, IconButton } from "./primitives";
+import { Button, EmptyState, IconButton, Notice } from "./primitives";
 
 export function CiderSidePanel() {
   const panel = useCiderUi((state) => state.panel);
@@ -53,7 +54,12 @@ export function CiderSidePanel() {
 function QueuePanel() {
   const { state, engine } = useCider();
   const openAdd = useCiderUi((store) => store.setQueueAddOpen);
+  const listenSession = useCiderListen((store) => store.session);
   const current = state.track;
+  const following = listenSession?.me.role === "guest" ? listenSession : null;
+  const hostName = following
+    ? (following.members.find((member) => member.userId === following.hostId)?.name ?? "o anfitrião")
+    : null;
 
   const addButton = (
     <Button className="queue-add-open" icon={<Plus size={15} />} onClick={() => openAdd(true)}>
@@ -77,6 +83,17 @@ function QueuePanel() {
 
   return (
     <div className="stack">
+      {/*
+        * A fila mostrada numa sessão é a do anfitrião. Dizer isso aqui evita a
+        * leitura errada mais provável: achar que clicar num item toca ele para
+        * todos — quem toca é quem tem a fila.
+        */}
+      {following ? (
+        <Notice tone="info" icon={<Users size={14} />}>
+          Você está ouvindo junto com {hostName}. Esta é a fila dele: os controles da barra viram
+          pedidos.
+        </Notice>
+      ) : null}
       {/*
         * Dois botões, duas coisas diferentes:
         *

@@ -22,6 +22,7 @@ import {
   Pause,
   Play,
   Repeat,
+  Radio,
   Repeat1,
   Search,
   Settings,
@@ -41,6 +42,7 @@ import { useCiderLibrary } from "../library";
 import { toggleFavoriteWithToast } from "../play";
 import { PlayableCover } from "./PlayableCover";
 import { releaseNowPlaying } from "../activity";
+import { requestFromListen, useCiderListen } from "../listen";
 import { timecode } from "../format";
 import { IconButton, ProgressSlider } from "./primitives";
 
@@ -367,6 +369,8 @@ export function CiderPlaybar() {
   const panel = useCiderUi((state) => state.panel);
   const togglePanel = useCiderUi((state) => state.togglePanel);
   const setLyricsScreen = useCiderUi((state) => state.setLyricsScreen);
+  const setListenOpen = useCiderUi((state) => state.setListenOpen);
+  const listenSession = useCiderListen((store) => store.session);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -391,6 +395,21 @@ export function CiderPlaybar() {
 
   const current = state.track;
   const playing = state.phase === "playing";
+  /*
+   * Numa sessão de escuta, quem tem a fila é o anfitrião: os controles do
+   * convidado viram **pedidos**. Sem isso, apertar "próxima" aqui só afastaria
+   * o convidado do grupo até o próximo estado do anfitrião o puxar de volta —
+   * que é um botão que parece quebrado por não ter dono.
+   */
+  const listeningGuest = listenSession?.me.role === "guest" ? listenSession : null;
+  const listenHostName = listeningGuest
+    ? (listeningGuest.members.find((member) => member.userId === listeningGuest.hostId)?.name ??
+      "o anfitrião")
+    : null;
+  const nextTrack = () => (listeningGuest ? requestFromListen("next") : engine.next());
+  const previousTrack = () =>
+    listeningGuest ? requestFromListen("previous") : engine.previous();
+  const togglePlay = () => (listeningGuest ? requestFromListen("toggle") : engine.toggle());
   const isFavorite = current ? favorites.some((track) => track.videoId === current.videoId) : false;
   const duration = state.durationMs || current?.durationMs || 0;
   const muted = state.muted || state.volume === 0;
@@ -408,13 +427,24 @@ export function CiderPlaybar() {
     switch (slot) {
       case "shuffle":
         return (
-          <IconButton key="shuffle" label="Reprodução aleatória" active={state.shuffle} onClick={engine.toggleShuffle}>
+          <IconButton
+            key="shuffle"
+            label={listeningGuest ? "Na sessão, quem manda na fila é o anfitrião" : "Reprodução aleatória"}
+            active={!listeningGuest && state.shuffle}
+            disabled={!!listeningGuest}
+            onClick={engine.toggleShuffle}
+          >
             <Shuffle size={17} />
           </IconButton>
         );
       case "previous":
         return (
-          <IconButton key="previous" label="Faixa anterior" onClick={engine.previous} disabled={!current}>
+          <IconButton
+            key="previous"
+            label={listeningGuest ? "Pedir a faixa anterior" : "Faixa anterior"}
+            onClick={previousTrack}
+            disabled={!current}
+          >
             <SkipBack size={20} />
           </IconButton>
         );
@@ -424,7 +454,7 @@ export function CiderPlaybar() {
             key="play"
             label={playing ? "Pausar" : "Reproduzir"}
             tone="play"
-            onClick={engine.toggle}
+            onClick={togglePlay}
             disabled={!current}
           >
             {playing ? <Pause size={20} /> : <Play size={20} />}
@@ -432,7 +462,12 @@ export function CiderPlaybar() {
         );
       case "next":
         return (
-          <IconButton key="next" label="Próxima faixa" onClick={engine.next} disabled={!current}>
+          <IconButton
+            key="next"
+            label={listeningGuest ? "Pedir a próxima faixa" : "Próxima faixa"}
+            onClick={nextTrack}
+            disabled={!current}
+          >
             <SkipForward size={20} />
           </IconButton>
         );
@@ -440,8 +475,9 @@ export function CiderPlaybar() {
         return (
           <IconButton
             key="repeat"
-            label={repeatLabel}
-            active={state.repeat !== "off"}
+            label={listeningGuest ? "Na sessão, quem manda na fila é o anfitrião" : repeatLabel}
+            active={!listeningGuest && state.repeat !== "off"}
+            disabled={!!listeningGuest}
             onClick={engine.cycleRepeat}
           >
             {state.repeat === "one" ? <Repeat1 size={17} /> : <Repeat size={17} />}
@@ -519,6 +555,16 @@ export function CiderPlaybar() {
                   }}
                 >
                   <Heart size={16} /> {isFavorite ? "Remover dos favoritos" : "Favoritar"}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setListenOpen(true);
+                  }}
+                >
+                  <Radio size={16} /> {listenSession ? "Sessão de escuta" : "Ouvir junto"}
                 </button>
                 <button
                   type="button"
@@ -602,6 +648,9 @@ export function CiderPlaybar() {
                 ? [current.artist || current.channelName, current.albumHint].filter(Boolean).join(" — ")
                 : "Escolha algo para ouvir"}
             </div>
+            {listenHostName ? (
+              <div className="xsmall truncate listen-following">Ouvindo junto com {listenHostName}</div>
+            ) : null}
             {state.error ? (
               <div className="xsmall truncate" style={{ color: "var(--cider-danger)" }} title={state.error}>
                 {state.error}
@@ -627,7 +676,7 @@ export function CiderPlaybar() {
                 positionMs={state.positionMs}
                 durationMs={duration}
                 style={settings.progressStyle}
-                onSeek={engine.seekMs}
+                onSeek={(ms) => (listeningGuest ? requestFromListen("seek", ms) : engine.seekMs(ms))}
               />
               {settings.showTimecodes ? (
                 <span className="pill-time right tabular">{`-${timecode(remaining)}`}</span>

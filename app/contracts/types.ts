@@ -654,11 +654,76 @@ export type CiderActivityPayload = {
   externalUrl?: string | null;
 };
 
+// ── Cider: sessão de escuta compartilhada ("Ouvir junto") ─────
+/**
+ * Faixa no formato que a sessão de escuta troca.
+ *
+ * É um recorte deliberado do `CiderTrack` da interface: só o que o convidado
+ * precisa para **reproduzir e desenhar** a faixa. Nome de canal do YouTube,
+ * pontuação de busca e preferências ficam de fora — nada disso é compartilhado.
+ */
+export type CiderListenTrack = {
+  videoId: string;
+  title: string;
+  artist?: string | null;
+  channelName?: string | null;
+  artworkUrl?: string | null;
+  durationMs?: number;
+  url?: string | null;
+};
+
+export type CiderListenRole = "host" | "guest";
+
+export type CiderListenMember = {
+  userId: number;
+  name: string;
+  avatar?: string | null;
+  role: CiderListenRole;
+};
+
+/**
+ * O que o anfitrião publica — e o que o convidado usa para se alinhar.
+ *
+ * `positionMs` é a posição no momento do envio. Não há campo de horário aqui:
+ * quem recebe mede o próprio tempo de viagem (`receivedAt` local) em vez de
+ * comparar relógios, que é a única conta que não depende de os dois lados
+ * estarem com o horário certo.
+ */
+export type CiderListenState = {
+  track: CiderListenTrack | null;
+  playing: boolean;
+  positionMs: number;
+  index: number;
+  queue: CiderListenTrack[];
+};
+
+/**
+ * Pedidos que um convidado manda ao anfitrião.
+ *
+ * O convidado **não** comanda o próprio player: ele pede. Sem isso, apertar
+ * "próxima" na tela do convidado só o afastaria do grupo — o anfitrião é quem
+ * tem a fila verdadeira, então "pular", "voltar", "pausar" e "buscar posição"
+ * passam por ele.
+ */
+export type CiderListenRequestKind = "next" | "previous" | "toggle" | "seek";
+
 export type WSClientEvent =
   | { t: "ping" }
   | { t: "typing"; channelId?: number; conversationId?: number }
   | { t: "presence"; status: UserStatus }
   | { t: "cider:now-playing"; activity: CiderActivityPayload }
+  /** Abre uma sessão de escuta compartilhada e vira o anfitrião. */
+  | { t: "cider:listen:start" }
+  | { t: "cider:listen:join"; code: string }
+  | { t: "cider:listen:leave" }
+  /** O anfitrião encerra a sessão para todos. */
+  | { t: "cider:listen:end" }
+  | { t: "cider:listen:state"; state: CiderListenState }
+  | { t: "cider:listen:react"; emoji: string }
+  | { t: "cider:listen:request"; kind: CiderListenRequestKind; positionMs?: number }
+  /** Um convidado sugere uma faixa: quem decide o lugar na fila é o anfitrião. */
+  | { t: "cider:listen:add"; track: CiderListenTrack }
+  | { t: "cider:listen:invite"; toUserId: number }
   | { t: "group:update"; conversationId: number }
   | { t: "stage:hand"; channelId?: number; raised: boolean }
   | {
@@ -914,6 +979,46 @@ export type WSServerEvent =
       userId: number;
       activities: RichPresenceActivityDTO[];
     }
+  /**
+   * Resposta a `cider:listen:start`/`join`: dá ao cliente o código, o próprio
+   * membro (para ele não precisar saber seu id), o anfitrião, a lista completa
+   * e — no caso do convidado — o estado atual, para ele já entrar alinhado.
+   */
+  | {
+      t: "cider:listen:session";
+      code: string;
+      me: CiderListenMember;
+      hostId: number;
+      members: CiderListenMember[];
+      state: CiderListenState | null;
+    }
+  | { t: "cider:listen:members"; code: string; members: CiderListenMember[] }
+  | { t: "cider:listen:sync"; code: string; state: CiderListenState }
+  | {
+      t: "cider:listen:reaction";
+      code: string;
+      from: number;
+      name: string;
+      emoji: string;
+    }
+  | {
+      t: "cider:listen:request";
+      code: string;
+      from: number;
+      name: string;
+      kind: CiderListenRequestKind;
+      positionMs?: number;
+    }
+  | {
+      t: "cider:listen:add";
+      code: string;
+      from: number;
+      name: string;
+      track: CiderListenTrack;
+    }
+  | { t: "cider:listen:ended"; code: string; reason: "host-left" | "closed" }
+  | { t: "cider:listen:invited"; code: string; from: CiderListenMember }
+  | { t: "cider:listen:denied"; reason: string }
   | {
       t: "account:restriction_updated";
       accountStatus:

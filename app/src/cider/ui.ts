@@ -71,6 +71,14 @@ interface CiderUiStore {
    * mais de um lugar (o fim da fila e a pílula).
    */
   queueAddOpen: boolean;
+  /**
+   * Painel "Ouvir junto" (sessão de escuta compartilhada).
+   *
+   * Mora aqui pelo mesmo motivo da gaveta da fila: o painel abre de mais de um
+   * lugar — o menu da pílula e o próprio selo da sessão —, e nenhum deles é dono
+   * do estado.
+   */
+  listenOpen: boolean;
   onboarding: boolean;
   /**
    * O `<iframe>` do YouTube pode não reproduzir em navegadores sem DRM ou com
@@ -97,6 +105,7 @@ interface CiderUiStore {
   askQueuePrompt: (prompt: QueuePrompt) => void;
   dismissQueuePrompt: () => void;
   setQueueAddOpen: (value: boolean) => void;
+  setListenOpen: (value: boolean) => void;
   setOnboarding: (value: boolean) => void;
   markLimitationSeen: () => void;
 }
@@ -116,6 +125,7 @@ export const useCiderUi = create<CiderUiStore>((set, get) => ({
   toasts: [],
   queuePrompt: null,
   queueAddOpen: false,
+  listenOpen: false,
   onboarding: false,
   limitationSeen: false,
 
@@ -162,6 +172,8 @@ export const useCiderUi = create<CiderUiStore>((set, get) => ({
   dismissQueuePrompt: () => set({ queuePrompt: null }),
 
   setQueueAddOpen: (value) => set({ queueAddOpen: value }),
+
+  setListenOpen: (value) => set({ listenOpen: value }),
 
   setOnboarding: (value) => set({ onboarding: value }),
 
