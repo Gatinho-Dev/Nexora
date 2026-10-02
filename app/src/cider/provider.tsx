@@ -18,6 +18,7 @@ import { createCiderEngine, type CiderEngine, type PlayerSnapshot } from "./engi
 import { CiderContext } from "./context";
 import { publishNowPlaying, resetNowPlaying } from "./activity";
 import { CiderAudioDock } from "./components/AudioDock";
+import { CiderListenBridge } from "./ListenBridge";
 import { extractPalette } from "./color";
 import { recordPlay } from "./play";
 import { applyAccentFromCover } from "./settings/apply";
@@ -121,6 +122,12 @@ export function CiderProvider({ children }: { children: ReactNode }) {
   return (
     <CiderContext.Provider value={value}>
       {dockEnabled ? <CiderAudioDock /> : null}
+      {/*
+        * A ponte de "Ouvir junto" vive aqui — acima do roteador, junto do
+        * motor — porque a sessão precisa continuar valendo fora de `/cider`: o
+        * mini-player segue o anfitrião do mesmo jeito que o player da página.
+        */}
+      <CiderListenBridge />
       {children}
     </CiderContext.Provider>
   );

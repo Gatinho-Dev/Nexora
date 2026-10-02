@@ -4,7 +4,7 @@ import type { IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import * as cookie from "cookie";
 import { and, eq, inArray, ne, or } from "drizzle-orm";
-import { Session, type UserStatus } from "@contracts/constants";
+import { CiderListen, Session, type UserStatus } from "@contracts/constants";
 import type {
   VoiceParticipant,
   WSClientEvent,
@@ -42,6 +42,18 @@ import {
   CiderActivitySchema,
   normalizeCiderActivity,
 } from "./integrations/providers/cider";
+import {
+  checkInvite,
+  ListenRateLimiter,
+  ListenRegistry,
+  sanitizeListenEmoji,
+  sanitizeListenRequest,
+  sanitizeListenState,
+  sanitizeListenTrack,
+  type InviteCheck,
+  type ListenSession,
+  type ListenUser,
+} from "./ciderListen";
 import {
   clearActivity,
   persistActivity,
@@ -933,6 +945,105 @@ async function voiceStateUpdate(
  */
 const lastCiderPush = new Map<number, number>();
 
+// ── Cider: "Ouvir junto" (sessão de escuta compartilhada) ─────
+/**
+ * A sessão acompanha o desenho das salas de voz: registro em memória, sem
+ * banco, e o processo do realtime é a autoridade sobre quem está dentro.
+ *
+ * Diferente da presença de "tocando agora", aqui **um** usuário manda no que
+ * toca — o anfitrião. Os convidados recebem o estado e pedem mudanças; o
+ * servidor só entrega. É por isso que a autorização é toda do lado do anfitrião:
+ * `state` só sai de quem é host, `request`/`add` só chegam nele.
+ */
+const listenSessions = new ListenRegistry();
+const listenReactBudget = new ListenRateLimiter(CiderListen.REACT_INTERVAL_MS);
+const listenStateBudget = new ListenRateLimiter(CiderListen.STATE_INTERVAL_MS);
+
+/** Identidade mínima de quem entra numa sessão (vinda da sessão autenticada). */
+async function listenUser(client: Client): Promise<ListenUser | null> {
+  const user = await getDb().query.users.findFirst({
+    where: eq(schema.users.id, client.userId),
+  });
+  if (!user) return null;
+  return {
+    userId: user.id,
+    name: user.name ?? user.username ?? "Usuário",
+    avatar: user.avatar,
+  };
+}
+
+/** Entrega um evento a todos os membros da sessão, menos `exceptUserId`. */
+function sendToSession(
+  session: ListenSession,
+  event: WSServerEvent,
+  exceptUserId?: number
+): void {
+  for (const member of session.members.values()) {
+    if (member.userId === exceptUserId) continue;
+    sendToUsers([member.userId], event);
+  }
+}
+
+/**
+ * Sai da sessão (se estiver numa) avisando os outros.
+ *
+ * Um só caminho para as quatro saídas — sair, encerrar, trocar de sessão e
+ * cair a conexão —, porque esquecer um aviso deixaria a lista de participantes
+ * mentindo na tela de quem ficou.
+ */
+function leaveListen(userId: number): void {
+  const outcome = listenSessions.leave(userId);
+  if (!outcome.session) return;
+  listenReactBudget.forget(userId);
+  if (outcome.ended) {
+    sendToSession(
+      outcome.session,
+      { t: "cider:listen:ended", code: outcome.session.code, reason: "host-left" },
+      userId
+    );
+    return;
+  }
+  sendToSession(outcome.session, {
+    t: "cider:listen:members",
+    code: outcome.session.code,
+    members: [...outcome.session.members.values()],
+  });
+}
+
+/** Motivo legível de um convite recusado (quem lê é a pessoa que convidou). */
+function inviteDenial(verdict: Exclude<InviteCheck, "ok">): string {
+  switch (verdict) {
+    case "self":
+      return "Você não precisa convidar a si mesmo.";
+    case "not-friends":
+      return "Só dá para convidar amigos: o convite toca na tela deles.";
+    case "already-in-session":
+      return "Essa pessoa já está numa sessão de escuta.";
+    case "session-full":
+      return `A sessão está cheia (${CiderListen.MAX_MEMBERS} pessoas).`;
+  }
+}
+
+/** Amizade aceita entre dois usuários — a permissão do convite. */
+async function areFriends(a: number, b: number): Promise<boolean> {
+  const rows = await getDb()
+    .select({ status: schema.friendships.status })
+    .from(schema.friendships)
+    .where(
+      or(
+        and(
+          eq(schema.friendships.requesterId, a),
+          eq(schema.friendships.addresseeId, b)
+        ),
+        and(
+          eq(schema.friendships.requesterId, b),
+          eq(schema.friendships.addresseeId, a)
+        )
+      )
+    );
+  return rows.some(row => row.status === "ACCEPTED");
+}
+
 async function ciderNowPlaying(
   client: Client,
   raw: unknown
@@ -1015,6 +1126,181 @@ async function handleEvent(client: Client, event: WSClientEvent) {
     case "cider:now-playing":
       await ciderNowPlaying(client, event.activity);
       break;
+    /*
+     * "Ouvir junto": o anfitrião abre, publica o estado e recebe pedidos; o
+     * convidado entra pelo código, segue o estado e manda reações. Cada evento
+     * tem um dono só — a autorização está no registro, não na interface.
+     */
+    case "cider:listen:start": {
+      if (!env.ciderPlayerEnabled) return;
+      const me = await listenUser(client);
+      if (!me) return;
+      // Uma sessão por usuário: quem já estava em outra sai (os membros que
+      // ficam são avisados) antes de abrir esta.
+      if (listenSessions.codeOf(client.userId)) leaveListen(client.userId);
+      const created = listenSessions.create(me);
+      if (!created.ok) {
+        send(client, { t: "cider:listen:denied", reason: created.reason });
+        return;
+      }
+      send(client, {
+        t: "cider:listen:session",
+        code: created.session.code,
+        me: created.member,
+        hostId: created.session.hostId,
+        members: [...created.session.members.values()],
+        state: created.session.state,
+      });
+      break;
+    }
+    case "cider:listen:join": {
+      if (!env.ciderPlayerEnabled) return;
+      const me = await listenUser(client);
+      if (!me) return;
+      if (listenSessions.codeOf(client.userId)) leaveListen(client.userId);
+      const joined = listenSessions.join(event.code, me);
+      if (!joined.ok) {
+        send(client, { t: "cider:listen:denied", reason: joined.reason });
+        return;
+      }
+      // O convidado entra **já alinhado**: o payload leva o último estado do
+      // anfitrião, e é com ele que o player do convidado começa a tocar. Sem
+      // isso, entrar numa sessão só tocaria na próxima troca de faixa — e a
+      // pessoa ficaria na sala sem ouvir o que a sala está ouvindo.
+      send(client, {
+        t: "cider:listen:session",
+        code: joined.session.code,
+        me: joined.member,
+        hostId: joined.session.hostId,
+        members: [...joined.session.members.values()],
+        state: joined.session.state,
+      });
+      sendToSession(
+        joined.session,
+        {
+          t: "cider:listen:members",
+          code: joined.session.code,
+          members: [...joined.session.members.values()],
+        },
+        client.userId
+      );
+      break;
+    }
+    case "cider:listen:leave":
+      leaveListen(client.userId);
+      break;
+    case "cider:listen:end": {
+      const closed = listenSessions.close(client.userId);
+      if (!closed.session) return;
+      sendToSession(closed.session, {
+        t: "cider:listen:ended",
+        code: closed.session.code,
+        reason: "closed",
+      });
+      break;
+    }
+    case "cider:listen:state": {
+      if (!env.ciderPlayerEnabled) return;
+      const state = sanitizeListenState(event.state);
+      if (!state) return;
+      // O teto do servidor é contra rajada hostil: o cliente já publica
+      // espaçado, e o último estado publicado continua valendo na sessão.
+      if (!listenStateBudget.take(client.userId)) return;
+      const session = listenSessions.setState(client.userId, state);
+      if (!session) return;
+      sendToSession(
+        session,
+        { t: "cider:listen:sync", code: session.code, state },
+        client.userId
+      );
+      break;
+    }
+    case "cider:listen:react": {
+      const emoji = sanitizeListenEmoji(event.emoji);
+      if (!emoji) return;
+      const session = listenSessions.sessionOf(client.userId);
+      if (!session) return;
+      if (!listenReactBudget.take(client.userId)) return;
+      const me = session.members.get(client.userId);
+      sendToSession(
+        session,
+        {
+          t: "cider:listen:reaction",
+          code: session.code,
+          from: client.userId,
+          name: me?.name ?? "Alguém",
+          emoji,
+        },
+        client.userId
+      );
+      break;
+    }
+    case "cider:listen:request": {
+      const request = sanitizeListenRequest(event);
+      if (!request) return;
+      const session = listenSessions.sessionOf(client.userId);
+      // O anfitrião não pede a si mesmo: o transporte dele já é o verdadeiro.
+      if (!session || session.hostId === client.userId) return;
+      const me = session.members.get(client.userId);
+      sendToUsers([session.hostId], {
+        t: "cider:listen:request",
+        code: session.code,
+        from: client.userId,
+        name: me?.name ?? "Alguém",
+        ...request,
+      });
+      break;
+    }
+    case "cider:listen:add": {
+      const track = sanitizeListenTrack(event.track);
+      if (!track) return;
+      const session = listenSessions.sessionOf(client.userId);
+      if (!session || session.hostId === client.userId) return;
+      const me = session.members.get(client.userId);
+      sendToUsers([session.hostId], {
+        t: "cider:listen:add",
+        code: session.code,
+        from: client.userId,
+        name: me?.name ?? "Alguém",
+        track,
+      });
+      break;
+    }
+    case "cider:listen:invite": {
+      const me = await listenUser(client);
+      const session = listenSessions.sessionOf(client.userId);
+      if (!me || !session || session.hostId !== client.userId) return;
+      // A amizade é checada **antes** do "está online": a resposta errada aqui
+      // contaria a um estranho se um id arbitrário está conectado agora.
+      const verdict = checkInvite({
+        fromUserId: client.userId,
+        toUserId: event.toUserId,
+        areFriends: await areFriends(client.userId, event.toUserId),
+        targetInSession: !!listenSessions.codeOf(event.toUserId),
+        memberCount: session.members.size,
+      });
+      if (verdict !== "ok") {
+        send(client, { t: "cider:listen:denied", reason: inviteDenial(verdict) });
+        return;
+      }
+      // O convite toca na tela do outro **agora**: para quem está offline não há
+      // onde tocar, e dizer "enviado" seria mentira.
+      if (!isUserOnline(event.toUserId)) {
+        send(client, {
+          t: "cider:listen:denied",
+          reason: "Essa pessoa não está online agora — o convite precisa dela com o Nexora aberto.",
+        });
+        return;
+      }
+      const hostMember = session.members.get(client.userId);
+      if (!hostMember) return;
+      sendToUsers([event.toUserId], {
+        t: "cider:listen:invited",
+        code: session.code,
+        from: hostMember,
+      });
+      break;
+    }
     case "voice:join":
       await voiceJoin(client, event);
       break;
@@ -1321,6 +1607,9 @@ export function attachRealtime(server: HttpServer) {
         removeClient(client);
         voiceLeave(client).catch(() => {});
         if (wasLastConnection && !byUser.has(userId)) {
+          // A sessão de escuta vive enquanto a conexão vive: sem o aviso, o
+          // anfitrião que fechou a aba continuaria "tocando" para os convidados.
+          leaveListen(userId);
           broadcastPresence(userId).catch(() => {});
         }
       });

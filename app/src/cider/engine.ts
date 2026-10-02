@@ -71,6 +71,23 @@ export interface CiderEngine {
   /** Insere faixas logo depois da que está tocando ("Tocar depois"). */
   playAfter(tracks: CiderTrack[]): void;
   /**
+   * Toca **o que outra pessoa está tocando**, no ponto em que ela está.
+   *
+   * É o único caminho do motor que aceita a posição de fora, e existe por um
+   * motivo específico: numa sessão de escuta ("Ouvir junto") o convidado copia a
+   * fila do anfitrião e entra no meio dela. `playQueue` só sabe começar do zero,
+   * e `seekMs` depois de carregar tocaria alguns décimos da posição errada.
+   *
+   * `playing: false` carrega sem tocar — quem entrou numa sessão pausada não
+   * deve ouvir uma batida antes de o pause chegar.
+   */
+  followQueue(
+    tracks: CiderTrack[],
+    startIndex: number,
+    positionMs: number,
+    playing: boolean
+  ): void;
+  /**
    * Tira uma faixa da fila pela posição.
    *
    * A faixa que está tocando não pode ser removida: o player do YouTube já
@@ -229,6 +246,35 @@ export function createCiderEngine(): CiderEngine {
     entries = queueFrom(list).entries;
     order = null;
     playIndex(startIndex);
+  }
+
+  function followQueue(
+    list: CiderTrack[],
+    startIndex: number,
+    atMs: number,
+    playing: boolean
+  ) {
+    // Sem faixa no anfitrião não há o que seguir: o convidado para onde o
+    // anfitrião parou, em vez de continuar tocando a fila dele por conta.
+    if (list.length === 0) {
+      clearQueue();
+      return;
+    }
+    entries = queueFrom(list).entries;
+    order = null;
+    const bounded = Math.max(0, Math.min(entries.length - 1, startIndex));
+    index = bounded;
+    autoplayBlocked = false;
+    positionMs = Math.max(0, atMs);
+    durationMs = entries[bounded]?.track.durationMs || 0;
+    void player.playQueue(
+      entries.map(entry => entry.track.videoId),
+      bounded,
+      positionMs / 1000,
+      playing
+    );
+    announce();
+    publish();
   }
 
   function appendQueue(list: CiderTrack[]) {
@@ -394,6 +440,7 @@ export function createCiderEngine(): CiderEngine {
     playTrack,
     playIndex,
     playQueue,
+    followQueue,
     appendQueue,
     playAfter,
     removeFromQueue,

@@ -34,6 +34,7 @@ import { newIn, queueIds, queueSuggestions } from "../core/queueAdd";
 import { useCider } from "../useCider";
 import { useCiderLibrary } from "../library";
 import { currentSearchPreferences, runSearch } from "../play";
+import { useCiderListen } from "../listen";
 import { ciderToast, useCiderUi } from "../ui";
 import { Button, Modal } from "./primitives";
 
@@ -74,6 +75,8 @@ export function CiderQueueAddDialog() {
     restoreRef.current = null;
     previewPlayer.current?.pause();
     restore?.();
+    // A sessão volta a valer assim que a prévia sai da frente.
+    useCiderListen.getState().setHold(false);
   }, []);
 
   // O callback do player é criado uma vez; o `stop` do momento vive num ref para
@@ -124,6 +127,9 @@ export function CiderQueueAddDialog() {
           if (wasPlaying) engine.resume();
         };
       }
+      // Numa sessão de escuta, o batimento do anfitrião retomaria o áudio no
+      // meio da prévia: segurar a sessão é o que mantém um som por vez.
+      useCiderListen.getState().setHold(true);
       setPreview({ track, positionMs: 0 });
       void ensurePlayer().then((player) => {
         if (!player) return;

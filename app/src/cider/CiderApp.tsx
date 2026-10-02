@@ -20,6 +20,8 @@ import { CiderSidePanel } from "./components/SidePanel";
 import { CiderToasts } from "./components/Toasts";
 import { CiderQueuePrompt } from "./components/QueuePrompt";
 import { CiderQueueAddDialog } from "./components/QueueAdd";
+import { CiderListenPanel } from "./components/ListenPanel";
+import { CiderListenOverlay } from "./components/ListenReactions";
 import { CiderCommandPalette } from "./components/CommandPalette";
 import { CiderImmersive } from "./components/Immersive";
 import { CiderLyricsScreen } from "./components/LyricsScreen";
@@ -112,6 +114,7 @@ export function CiderApp() {
         // A pergunta é modal: ela é a primeira a sair.
         if (ui.queuePrompt) ui.dismissQueuePrompt();
         else if (ui.palette) ui.setPalette(false);
+        else if (ui.listenOpen) ui.setListenOpen(false);
         else if (ui.lyricsScreen) ui.setLyricsScreen(false);
         else if (ui.immersive) ui.setImmersive(false);
         else if (ui.panel) ui.setPanel(null);
@@ -175,6 +178,13 @@ export function CiderApp() {
       <CiderToasts />
       <CiderQueuePrompt />
       <CiderQueueAddDialog />
+      <CiderListenPanel />
+      {/*
+        * As reações ficam **fora** do painel: elas sobem sobre a capa, e não
+        * dentro de uma caixa de diálogo — reagir é gesto de quem está vendo o
+        * que toca, não de quem está configurando a sessão.
+        */}
+      <CiderListenOverlay />
       <CiderCommandPalette />
       <CiderLyricsScreen />
       <CiderImmersive />
