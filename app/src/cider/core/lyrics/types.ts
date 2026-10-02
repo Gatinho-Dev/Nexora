@@ -123,6 +123,13 @@ export interface LyricsLineView {
   state: WordState;
   /** Progresso da linha inteira (0..1) — usado no fallback sem palavras. */
   progress: number;
+  /**
+   * Progresso da **espera** por esta linha (0..1), quando ela é a próxima a ser
+   * cantada e a espera é longa o bastante para valer a contagem — é o que
+   * desenha as três bolinhas antes de a voz entrar (`sync.ts`). Ausente em todas
+   * as outras linhas.
+   */
+  countIn?: number;
   words: LyricsWordView[];
   instrumental: boolean;
 }

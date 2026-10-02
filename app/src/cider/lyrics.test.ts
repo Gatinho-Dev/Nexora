@@ -8,7 +8,7 @@ import { __testing as lyricsService, lyricsSearchUrl } from "./core/lyrics/servi
 /** `parseLrc` devolve o resultado completo; o motor quer as linhas. */
 const lines = (lrc: string) => parseLrc(lrc).lines;
 import { LyricsSyncEngine } from "./core/lyrics/sync";
-import { distributeWords, activeWordIndex } from "./core/lyrics/words";
+import { distributeWords, estimateWords, activeWordIndex } from "./core/lyrics/words";
 import {
   splitParenthetical,
   splitParentheticalText,
@@ -317,6 +317,74 @@ describe("subletra entre parênteses", () => {
     const parts = splitParentheticalText("But show me, can you keep it up? (It up)")!;
     expect(parts.main).toBe("But show me, can you keep it up?");
     expect(parts.backing).toBe("It up");
+  });
+});
+
+describe("contagem antes de a voz entrar (três bolinhas)", () => {
+  /** Linhas como a interface as recebe: o serviço já distribuiu as palavras. */
+  const engineLines = (lrc: string) => estimateWords(parseLrc(lrc).lines);
+  /** Índice da linha esperada e o progresso da espera naquele instante. */
+  const countInAt = (lrc: string, positionMs: number) => {
+    const engine = new LyricsSyncEngine();
+    engine.setLines(engineLines(lrc));
+    const frame = engine.update(positionMs);
+    const index = frame.lines.findIndex((line) => line.countIn !== undefined);
+    return { index, progress: index < 0 ? null : frame.lines[index]!.countIn };
+  };
+
+  /** Introdução de 12 s: dá tempo de sobra para a contagem aparecer. */
+  const INTRO = `[00:12.00]Primeira linha cantada aqui\n[00:16.00]Segunda linha depois`;
+
+  it("conta a espera até a primeira linha, desde o começo da faixa", () => {
+    expect(countInAt(INTRO, 3_000)).toEqual({ index: 0, progress: 0.25 });
+    expect(countInAt(INTRO, 6_000).progress).toBeCloseTo(0.5, 2);
+    // Só a linha esperada carrega a contagem.
+    const engine = new LyricsSyncEngine();
+    engine.setLines(engineLines(INTRO));
+    expect(engine.update(9_000).lines.filter((line) => line.countIn !== undefined)).toHaveLength(1);
+  });
+
+  it("some quando a voz entra e não volta depois", () => {
+    expect(countInAt(INTRO, 12_500).index).toBe(-1);
+    expect(countInAt(INTRO, 20_000).index).toBe(-1);
+  });
+
+  it("não conta o respiro normal entre dois versos", () => {
+    // O fim da última palavra de uma linha quase nunca é o começo da próxima: o
+    // tokenizador deixa ~5% de respiro. Contar esse resto acenderia as bolinhas
+    // entre **todas** as linhas da música.
+    const curtas = `[00:01.00]Primeira linha cantada\n[00:04.00]Segunda linha depois`;
+    expect(countInAt(curtas, 3_500).index).toBe(-1);
+    expect(countInAt(curtas, 3_990).index).toBe(-1);
+  });
+
+  it("conta o intervalo instrumental até a voz voltar", () => {
+    const intervalo = `[00:01.00]Primeira linha cantada\n[00:06.00]\n[00:14.00]A voz volta agora`;
+    // Quem espera o silêncio quer saber quando a voz **volta**: a linha esperada
+    // é a próxima com letra (a vazia é só o intervalo) e a espera vale desde o
+    // começo do intervalo.
+    expect(countInAt(intervalo, 6_000)).toEqual({ index: 2, progress: 0 });
+    expect(countInAt(intervalo, 10_000)).toEqual({ index: 2, progress: 0.5 });
+    // Antes do intervalo não há contagem: a voz ainda está na linha de cima.
+    expect(countInAt(intervalo, 5_000).index).toBe(-1);
+  });
+
+  it("não conta letra sem tempo: não há espera para medir", () => {
+    const engine = new LyricsSyncEngine();
+    engine.setLines(parseLrc("Primeira linha sem tempo\nSegunda linha sem tempo").lines);
+    expect(engine.update(0).lines.every((line) => line.countIn === undefined)).toBe(true);
+  });
+
+  it("as bolinhas ficam acima da linha, fora do fluxo", () => {
+    // Fora do fluxo é requisito, não estética: se elas entrassem na linha, o
+    // texto desceria ao aparecer e voltaria a subir quando a voz entrasse.
+    const lyrics = readFileSync(
+      fileURLToPath(new URL("./styles/lyrics.css", import.meta.url)),
+      "utf-8"
+    );
+    expect(lyrics).toMatch(/\.lyrics-countin\s*\{[^}]*position:\s*absolute/s);
+    expect(lyrics).toMatch(/\.lyrics-countin\s*\{[^}]*bottom:\s*calc\(100%/s);
+    expect(lyrics).toMatch(/\.lyrics-countin-dot\s*\{[^}]*border-radius/s);
   });
 });
 
