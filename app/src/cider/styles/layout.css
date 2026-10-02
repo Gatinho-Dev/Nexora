@@ -290,6 +290,58 @@
 
 .track-cell { display: flex; align-items: center; gap: var(--cider-space-3); min-width: 0; }
 .track-art { width: 36px; height: 36px; border-radius: var(--cider-radius-sm); object-fit: cover; flex: 0 0 auto; }
+
+/*
+ * Capa com play por cima.
+ *
+ * O botão cobre a arte inteira e só aparece no hover — ou sempre, na faixa que
+ * já está no ar (`data-current`), que é o que transforma a capa do que toca no
+ * seu próprio pause. O véu escuro existe porque metade das capas é clara: sem
+ * ele o triângulo branco sumiria em cima de um fundo branco.
+ */
+.cover-play {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  line-height: 0;
+  border-radius: var(--cider-radius-sm);
+}
+
+.cover-play-btn {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.cover-play:hover .cover-play-btn,
+.cover-play-btn:focus-visible,
+.cover-play[data-current="true"] .cover-play-btn {
+  opacity: 1;
+}
+
+/* O disco branco com o triângulo preto: é o botão do Apple Music, e é o que
+   mantém o ícone visível sobre qualquer capa. */
+.cover-play-disc {
+  display: grid;
+  place-items: center;
+  width: 62%;
+  height: 62%;
+  max-width: 34px;
+  max-height: 34px;
+  border-radius: var(--cider-radius-full);
+  background: rgba(255, 255, 255, 0.94);
+  color: #0b0a12;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
 .track-title { font-weight: var(--cider-weight-medium); }
 
 /* ------------------------------------------------------------------ *
@@ -299,44 +351,60 @@
  * Barra de reprodução em pílula.
  *
  * O rodapé ocupa a faixa reservada da grade (para a lista nunca ficar embaixo
- * do player sem saber), mas **a pílula é que é o player**: flutuante, de vidro,
- * com os controles à esquerda, a capa e o título no meio e as ações à direita —
- * o arranjo do Apple Music. A barra sólida de borda a borda saiu: o conteúdo
- * aparece atrás dela, com um degradê suave para não cortar a última linha.
+ * do player sem saber), mas **a pílula é que é o player**: uma cápsula única de
+ * vidro, com os controles à esquerda, a capa, o título e a barra de progresso
+ * no meio e as ações à direita — o arranjo do Apple Music. A barra sólida de
+ * borda a borda saiu, e também o degradê que a suavizava: ele ficava entre a
+ * página e o vidro e apagava o desfoque.
  */
 .playbar {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 4px var(--cider-space-5) 10px;
-  /* A faixa reservada precisa caber a pílula **e** a linha de progresso: com
-     só a altura antiga, o progresso ficava cortado no rodapé da janela. */
-  min-height: calc(var(--cider-playbar-height) + 14px);
-  background: linear-gradient(
-    to top,
-    var(--cider-bg) 42%,
-    color-mix(in srgb, var(--cider-bg) 55%, transparent) 78%,
-    transparent 100%
-  );
+  padding: 6px var(--cider-space-5) 8px;
+  min-height: var(--cider-playbar-height);
+  /* Sem degradê atrás da pílula. Ele existia para a última linha da lista não
+     encostar no player quando a barra era uma faixa sólida; agora ele seria uma
+     camada opaca entre a página e o vidro, e o desfoque que o usuário pediu
+     (cores passando por trás, todas borradas) simplesmente não apareceria. */
+  background: none;
   position: relative;
   z-index: 30;
 }
 
+/*
+ * A cápsula: **um** retângulo arredondado com tudo dentro.
+ *
+ * O vidro é o ponto aqui. O Apple Music deixa a cor do que passa atrás
+ * atravessar a barra bastante desfocada — então o fundo entra com pouca
+ * opacidade (`* 0.62`) e o `backdrop-filter` leva o desfoque bem além do que o
+ * resto da interface usa (`* 1.6 + 10px`): um degradê de cores da capa atrás
+ * vira manchas grandes em vez de detalhe. `saturate(180%)` é o que impede o
+ * resultado de parecer cinza sujo.
+ */
 .playbar-pill {
   display: flex;
   align-items: center;
   gap: var(--cider-space-3);
-  width: min(880px, 100%);
+  width: min(920px, 100%);
   padding: 7px 14px;
-  border: 1px solid color-mix(in srgb, var(--cider-border) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cider-text) 14%, transparent);
   border-radius: var(--cider-radius-full);
-  background: color-mix(in srgb, var(--cider-bg-elevated) calc(var(--cider-glass-opacity) * 100%), transparent);
-  backdrop-filter: blur(calc(var(--cider-blur) * 1.1)) saturate(180%);
-  -webkit-backdrop-filter: blur(calc(var(--cider-blur) * 1.1)) saturate(180%);
+  background: color-mix(in srgb, var(--cider-bg-elevated) calc(var(--cider-glass-opacity) * 62%), transparent);
+  backdrop-filter: blur(calc(var(--cider-blur) * 1.6 + 10px)) saturate(180%);
+  -webkit-backdrop-filter: blur(calc(var(--cider-blur) * 1.6 + 10px)) saturate(180%);
   box-shadow:
     var(--cider-shadow-lg),
-    inset 0 1px 0 color-mix(in srgb, var(--cider-text) 10%, transparent);
+    inset 0 1px 0 color-mix(in srgb, var(--cider-text) 12%, transparent);
+}
+
+/* Quando o vidro está desligado nas configurações, o fundo fica sólido: sem
+   `backdrop-filter` um preenchimento translúcido viraria uma barra suja. */
+:root[data-glass="off"] .playbar-pill {
+  background: var(--cider-bg-elevated);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .pill-transport,
@@ -347,10 +415,17 @@
   flex: 0 0 auto;
 }
 
+/*
+ * O bloco do meio é uma grade de duas linhas: capa, título e favorito em cima;
+ * a barra de progresso correndo por baixo dos três, na largura inteira do
+ * bloco — como no Apple Music.
+ */
 .pill-now {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--cider-space-3);
+  column-gap: var(--cider-space-3);
+  row-gap: 1px;
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -363,37 +438,124 @@
   cursor: pointer;
   line-height: 0;
   border-radius: var(--cider-radius-sm);
+  grid-row: 1;
 }
 
 .pill-cover .cover {
   display: block;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--cider-radius-sm);
   object-fit: cover;
   box-shadow: var(--cider-shadow-sm);
 }
 
-.pill-now .meta { min-width: 0; line-height: 1.25; }
+.pill-now .meta { min-width: 0; line-height: 1.25; grid-row: 1; }
 .pill-now .title { font-size: var(--cider-text-base); font-weight: var(--cider-weight-medium); }
 .pill-now .artist { font-size: var(--cider-text-xs); color: var(--cider-text-muted); }
 
-.playbar-progress {
+.pill-progress {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: var(--cider-space-3);
-  width: min(880px, 100%);
+  gap: var(--cider-space-2);
+  min-width: 0;
 }
 
-/* A linha de progresso do Apple Music é fina e discreta (e engorda no hover,
-   pelo próprio componente). */
-.playbar-progress .progress {
-  height: 16px;
+/* A linha do Apple Music é fina e discreta (e engorda no hover, pelo próprio
+   componente). */
+.pill-progress .progress {
+  height: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.playbar-progress .progress-track {
+.pill-progress .progress-track {
   height: 3px;
 }
+
+.pill-time {
+  font-size: 10px;
+  color: var(--cider-text-faint);
+  white-space: nowrap;
+}
+
+.pill-time.right { text-align: right; }
+
+/* O menu do "…" da pílula: abre para **cima**, porque a barra vive no rodapé. */
+.pill-more { position: relative; display: flex; align-items: center; }
+
+.pill-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  z-index: 40;
+  display: grid;
+  gap: 2px;
+  min-width: 232px;
+  padding: 6px;
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-lg);
+  background: color-mix(in srgb, var(--cider-bg-elevated) 96%, transparent);
+  backdrop-filter: blur(calc(var(--cider-blur) * 1.2)) saturate(170%);
+  -webkit-backdrop-filter: blur(calc(var(--cider-blur) * 1.2)) saturate(170%);
+  box-shadow: var(--cider-shadow-lg);
+  animation: pill-menu-in var(--cider-duration-fast) var(--cider-ease-out) both;
+}
+
+@keyframes pill-menu-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+.pill-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--cider-radius-sm);
+  background: none;
+  color: var(--cider-text);
+  font-size: var(--cider-text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pill-menu button:hover:not(:disabled) { background: var(--cider-surface-hover); }
+.pill-menu button:disabled { opacity: 0.45; cursor: default; }
+
+/*
+ * Capa expansível: as duas setas na diagonal aparecem no hover (e no foco por
+ * teclado) por cima de um véu escuro — é o gesto que o usuário descreveu, e o
+ * único caminho para a letra em tela cheia a partir do player.
+ */
+.playable-cover { position: relative; }
+
+.cover-expand {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.42);
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity var(--cider-duration-fast) var(--cider-ease-out),
+    transform var(--cider-duration-fast) var(--cider-ease-out);
+  pointer-events: none;
+}
+
+.playable-cover:hover .cover-expand,
+.playable-cover:focus-visible .cover-expand {
+  opacity: 1;
+  transform: none;
+}
+
+.playable-cover:disabled .cover-expand { display: none; }
 
 .playbar[data-position="floating"] {
   position: fixed;
@@ -404,6 +566,8 @@
   padding-bottom: 0;
   background: none;
 }
+
+
 
 .playbar[data-position="floating"] .playbar-pill {
   box-shadow:

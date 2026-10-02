@@ -46,6 +46,7 @@ import {
   clearActivity,
   persistActivity,
 } from "./integrations/presenceService";
+import { ensureSessionConnection } from "./integrations/connectionService";
 import { activeServerTimeout } from "./services/serverModeration";
 
 // ── Connection registry ───────────────────────────────────────
@@ -938,21 +939,30 @@ async function ciderNowPlaying(
 ): Promise<void> {
   if (!env.ciderPlayerEnabled) return;
 
-  const now = Date.now();
-  const previous = lastCiderPush.get(client.userId) ?? 0;
-  if (now - previous < env.ciderActivityIntervalMs) return;
-  lastCiderPush.set(client.userId, now);
-
   const parsed = CiderActivitySchema.safeParse(raw);
   if (!parsed.success) return;
 
   const { clear, activity } = normalizeCiderActivity(parsed.data);
+  const now = Date.now();
   if (clear) {
-    // Limpar apaga o registro, então vale a pena exigir o mesmo intervalo.
+    // A limpeza **não** entra no intervalo mínimo: quem manda `title: null`
+    // acabou de encerrar o Cider e espera a faixa sair do perfil na hora. Se o
+    // limite valesse aqui, os últimos 20 s de "tocando" ficariam pendurados no
+    // perfil de quem já parou.
+    lastCiderPush.set(client.userId, now);
     await clearActivity(client.userId, "cider");
     return;
   }
   if (!activity) return;
+
+  const previous = lastCiderPush.get(client.userId) ?? 0;
+  if (now - previous < env.ciderActivityIntervalMs) return;
+  lastCiderPush.set(client.userId, now);
+
+  // O Cider não tem OAuth: a identidade é a sessão. Sem a linha em
+  // `user_connections`, porém, toda a leitura de presença descarta a atividade
+  // (perfil e amigos filtram por ela) e ouvir não aparecia em lugar nenhum.
+  await ensureSessionConnection(client.userId, "cider");
   await persistActivity(client.userId, activity);
 }
 

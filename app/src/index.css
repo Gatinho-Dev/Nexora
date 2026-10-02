@@ -520,3 +520,44 @@ html.reduce-motion *::after {
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+
+/* ------------------------------------------------------------------ *
+ * Cider: esconder o dock do player em qualquer página                 *
+ * ------------------------------------------------------------------ *
+ * O `<iframe>` do player mora fora de `/cider` de propósito — é o que faz o
+ * áudio sobreviver à navegação (ver `src/cider/components/AudioDock.tsx`). O
+ * CSS que o esconde vive em `src/cider/styles/web.css`, que só é carregado
+ * quando a rota `/cider` é visitada. Em qualquer outra página o dock ficava sem
+ * estilo nenhum: `position: static`, opacidade 1 e um player do YouTube visível
+ * no meio da interface da Nexora. Estas cinco regras são o mínimo que precisa
+ * existir **sempre**; o resto do visual do dock continua no CSS do Cider.
+ */
+.cider-audio-dock {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 344px;
+  height: 56px;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cider-audio-dock .youtube-frame-host,
+.cider-audio-dock .youtube-frame-host iframe,
+.cider-audio-dock > iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+.cider-audio-veil {
+  position: absolute;
+  inset: 0;
+  background: #0b0a12;
+}

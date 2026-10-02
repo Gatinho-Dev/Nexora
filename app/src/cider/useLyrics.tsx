@@ -22,13 +22,24 @@ import { useCiderSettings } from "./settings/store";
 /**
  * Cores da letra, por modo.
  *
- * A palavra cantada fica no **tom do texto do tema** — quase branca no escuro,
- * quase preta no claro — e o acento do Cider entra só no halo em volta. É o que
- * dá a leitura do Apple Music (letra neutra, sem neon) sem perder a identidade
- * do Cider, e é o que mantém a letra legível nos dois temas.
+ * A letra começa **cinza** e vai sendo **pintada** conforme é cantada, sem
+ * voltar atrás: a palavra cantada fica no tom do texto do tema — quase branca no
+ * escuro, quase preta no claro — e o acento do Cider entra só no halo em volta.
+ * É o que dá a leitura do Apple Music (letra neutra, sem neon) sem perder a
+ * identidade do Cider, e é o que mantém a letra legível nos dois temas.
  */
 const ACTIVE_COLOR: Record<string, string> = { dark: "#f7f7fa", light: "#101014" };
 const INACTIVE_COLOR: Record<string, string> = { dark: "#9a9aa8", light: "#8e8e96" };
+
+/**
+ * Onde a letra está sendo desenhada sobre um fundo **sempre escuro**.
+ *
+ * A tela cheia e o modo imersivo põem a capa desfocada atrás da letra com um
+ * scrim escuro por cima (veja `lyrics.css`), independente do tema do app. Ali
+ * quem manda é a cor do fundo, não a do Nexora: a tinta vai a branco, senão a
+ * letra quase preta do tema claro sumiria no fundo.
+ */
+const DARK_SURFACES = new Set(["fullscreen", "immersive"]);
 
 /**
  * Preset de exibição.
@@ -151,8 +162,14 @@ export function useLyrics(
 ) {
   const { data, pending } = useLyricsDocument(track);
   const views = useLyricsTimeline(data?.lines ?? null, positionMs, isPlaying);
-  const mode = useCiderSettings((store) => store.appearance?.mode === "light" ? "light" : "dark");
+  const themeMode = useCiderSettings((store) =>
+    store.appearance?.mode === "light" ? "light" : "dark"
+  );
   const accent = useCiderSettings((store) => store.settings.accent);
+  // Fundo escuro manda na paleta: no escuro a letra é pintada de branco, no
+  // claro de preto — e os dois lugares que desenham sobre a capa desfocada são
+  // escuros mesmo com o tema claro ligado.
+  const mode = DARK_SURFACES.has(variant) ? "dark" : themeMode;
 
   const view = useMemo(() => {
     if (!data) return null;

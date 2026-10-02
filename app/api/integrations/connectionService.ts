@@ -30,6 +30,46 @@ export async function findConnection(
   return row ?? null;
 }
 
+/**
+ * Garante a linha de conexão de um provider **sem OAuth** — hoje só o Cider.
+ *
+ * Todo o resto da presença parte de `user_connections`: `visibleActivitiesFor`
+ * (o perfil) e `broadcastActivities` (os amigos) filtram a atividade pelo
+ * `showOnProfile`/`showActivity`/`activityVisibility` da linha daquele provider.
+ * Sem ela, o Cider gravava a faixa em `rich_presence_activities` e **nada**
+ * aparecia — nem no próprio perfil. Era por isso que ouvir no `/cider` não
+ * mostrava nada em lugar nenhum.
+ *
+ * A linha nasce com os padrões de quem quer ser visto (`true`, `true`,
+ * `everyone`); quem quiser esconder desliga na tela de conexões, e a escolha
+ * continua valendo porque esta função **cria se faltar** e nunca sobrescreve.
+ *
+ * `providerUserId` recebe o id da Nexora: não existe identidade externa aqui, e
+ * a coluna é `not null` com índice único por (provider, providerUserId).
+ */
+export async function ensureSessionConnection(
+  userId: number,
+  provider: IntegrationProviderId
+) {
+  const existing = await findConnection(userId, provider);
+  if (existing) return existing;
+  const dbProvider = providerDbId(provider);
+  await getDb()
+    .insert(schema.userConnections)
+    .values({
+      userId,
+      provider: dbProvider,
+      providerUserId: String(userId),
+      username: "Cider",
+      displayName: null,
+      scopes: [],
+    })
+    // Duas sessões do mesmo usuário podem publicar ao mesmo tempo: o segundo
+    // insert não pode derrubar nada, e não deve reescrever as preferências.
+    .onDuplicateKeyUpdate({ set: { provider: dbProvider } });
+  return await findConnection(userId, provider);
+}
+
 export async function upsertExternalConnection(input: {
   userId: number;
   provider: Exclude<IntegrationProviderId, "roblox">;

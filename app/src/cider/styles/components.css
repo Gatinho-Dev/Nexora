@@ -4,7 +4,10 @@
 /* ------------------------------------------------------------------ *
  * Escala da interface                                                *
  * ------------------------------------------------------------------ */
-#root {
+/* Escala da interface: era `#root` (global) e passou a ser `.cider-root` — o
+   `#root` da Nexora é o site inteiro, e aplicar zoom nele deformava todas as
+   telas do chat depois de visitar `/cider`. */
+.cider-root {
   zoom: var(--cider-ui-scale, 1);
 }
 
@@ -1224,24 +1227,26 @@
   color: var(--cider-text-faint);
 }
 
-.stack {
+/* `.stack` e `.inline` também são nomes de utilitários do Tailwind (e a Nexora
+   usa `inline` em ícones): escopados, valem só dentro do Cider. */
+.cider-root .stack {
   display: flex;
   flex-direction: column;
   gap: var(--cider-space-4);
 }
 
-.stack.tight {
+.cider-root .stack.tight {
   gap: var(--cider-space-2);
 }
 
-.inline {
+.cider-root .inline {
   display: flex;
   align-items: center;
   gap: var(--cider-space-3);
   flex-wrap: wrap;
 }
 
-.spread {
+.cider-root .spread {
   display: flex;
   align-items: center;
   justify-content: space-between;

@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useLocation } from "react-router";
 
 import { createCiderEngine, type CiderEngine, type PlayerSnapshot } from "./engine";
 import { CiderContext } from "./context";
@@ -39,10 +40,26 @@ const EMPTY: PlayerSnapshot = {
 
 export function CiderProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PlayerSnapshot>(EMPTY);
+  const location = useLocation();
   // O motor nasce no `useState` (e não em um `useRef` lido durante o render)
   // porque criar player durante o render é o que a regra de refs proíbe — e o
   // inicializador do `useState` roda uma vez só, que é o que queremos.
   const [engine] = useState<CiderEngine>(() => createCiderEngine());
+
+  // O dock — e portanto o `<iframe>` do player — só existe dentro de `/cider`
+  // ou quando há faixa carregada.
+  //
+  // Os dois lados disso importam. Criar o `<iframe>` em **toda** página da
+  // Nexora carregava um player à toa fora do Cider (era o "player flutuante"
+  // que aparecia no meio da interface). E desmontá-lo com música tocando
+  // destruiria exatamente o nó que mantém o áudio vivo: a IFrame Player API
+  // substitui o host pelo iframe, então o motor ficaria apontando para um
+  // elemento fora do documento. Com a faixa carregada o dock permanece, e ao
+  // sair de `/cider` o áudio continua — o `YouTubePlayer.mount` ainda detecta
+  // host desconectado e recria o player, para o caso de montar e desmontar sem
+  // faixa nenhuma.
+  const onCiderRoute = location.pathname.startsWith("/cider");
+  const dockEnabled = onCiderRoute || state.track !== null;
 
   // Tema aplicado ao `<html>` desde o primeiro render: vale também para o
   // mini-player, que vive fora de `/cider`.
@@ -102,7 +119,7 @@ export function CiderProvider({ children }: { children: ReactNode }) {
 
   return (
     <CiderContext.Provider value={value}>
-      <CiderAudioDock />
+      {dockEnabled ? <CiderAudioDock /> : null}
       {children}
     </CiderContext.Provider>
   );

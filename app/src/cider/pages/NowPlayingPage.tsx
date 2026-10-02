@@ -37,7 +37,7 @@ import { useLyrics } from "../useLyrics";
 import { useCiderUi } from "../ui";
 import { extendQueue, playFrom, toggleFavoriteWithToast } from "../play";
 import { AddToPlaylistButton } from "../components/AddToPlaylist";
-import { CoverArt } from "../components/CoverArt";
+import { PlayableCover } from "../components/PlayableCover";
 import { Button, IconButton, Notice, ProgressSlider, SectionHeader } from "../components/primitives";
 import { timecode } from "../format";
 import { TrackList } from "../components/TrackList";
@@ -49,6 +49,7 @@ export function CiderNowPlayingPage() {
   const favorites = useCiderLibrary((store) => store.favorites);
   const togglePanel = useCiderUi((store) => store.togglePanel);
   const setImmersive = useCiderUi((store) => store.setImmersive);
+  const setLyricsScreen = useCiderUi((store) => store.setLyricsScreen);
   const lyrics = useLyrics(state.track, state.positionMs, state.phase === "playing");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,7 +81,16 @@ export function CiderNowPlayingPage() {
   return (
     <div className="page now-playing-page">
       <header className="now-playing-head">
-        <CoverArt url={current.artworkUrl} title={current.title} className="now-playing-art" />
+        {/* A capa grande também é o caminho para a letra em tela cheia: passar o
+            mouse revela as duas setas, e o clique abre a tela — o mesmo gesto da
+            pílula e da referência do Apple Music. */}
+        <PlayableCover
+          className="now-playing-art playable-cover-block"
+          imageClassName="now-playing-art-img"
+          url={current.artworkUrl}
+          title={current.title}
+          onExpand={() => setLyricsScreen(true)}
+        />
 
         <div className="now-playing-info stack">
           <h1 className="now-playing-title">{current.title}</h1>

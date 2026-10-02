@@ -38,14 +38,35 @@ muda.
 /cider (navegador)
   └─ ws.send({ t: "cider:now-playing", activity })
        └─ api/realtime.ts → ciderNowPlaying()
-            ├─ rate limit por usuário (CIDER_ACTIVITY_INTERVAL_MS)
             ├─ CiderActivitySchema (zod estrito)
+            ├─ título nulo = "parei de ouvir" → clearActivity() (sem rate limit)
+            ├─ rate limit por usuário (CIDER_ACTIVITY_INTERVAL_MS)
+            ├─ ensureSessionConnection(userId, "cider")
             ├─ allowlist de host da capa (só YouTube, só https)
             └─ persistActivity() → rich_presence_activities
                  └─ broadcastActivities() → ws "rich-presence:update"
                       └─ useRealtime → useAppStore.richPresence
                            └─ RichPresenceCard / RichPresenceInline
 ```
+
+**A linha em `user_connections` é obrigatória**, e foi o defeito que fazia a
+faixa não aparecer em lugar nenhum: tanto `visibleActivitiesFor` (o perfil)
+quanto `broadcastActivities` (os amigos) filtram a atividade pelo
+`showOnProfile`/`showActivity`/`activityVisibility` da conexão daquele provider.
+O Cider não tem OAuth e ninguém cria essa linha ao "conectar" — então
+`ensureSessionConnection` a cria na primeira faixa, com os padrões de quem quer
+ser visto (`true`, `true`, `everyone`), sem nunca sobrescrever uma escolha do
+usuário.
+
+**A limpeza não entra no intervalo mínimo.** Quem manda `title: null` acabou de
+encerrar o Cider (pela janela flutuante ou pelo menu da playbar) e espera a faixa
+sair do perfil na hora; com o limite valendo para a limpeza, os últimos 20 s
+ficariam pendurados.
+
+**O dono também recebe o próprio push.** `contactIds` devolve só os contatos, e
+o card "Agora" do perfil é alimentado pelo mesmo `rich-presence:update`: sem
+incluir o usuário na audiência, o próprio perfil só mostrava a faixa depois de
+recarregar.
 
 A partir do `persistActivity` é o código de presença que já existia: audiência,
 visibilidade (`everyone`/`friends`/`private`), redaction, bloqueio e modo
@@ -114,11 +135,29 @@ A tela do `/cider` replica o **Cider 2 desktop**: mesma paleta e tokens
 (`src/cider/styles/tokens.css`, copiado do desktop), mesma casca — sidebar,
 topbar com busca, coluna principal, playbar fixa e painel de letras.
 
-A playbar é uma **pílula** no estilo do Apple Music: controles de transporte à
-esquerda, capa e faixa no meio, ações (letras, fila, volume) à direita, com o
-progresso numa linha logo abaixo mostrando o tempo **restante** (`-2:18`). A
-ordem personalizada do usuário vale dentro de cada bloco, não como fila única —
-sem isso, mover a capa para a esquerda empurraria os botões para o meio.
+A playbar é **uma cápsula só**, no estilo do Apple Music: controles de
+transporte à esquerda, capa, título e a barra de progresso no meio (a linha
+corre por baixo da capa e do texto, dentro do mesmo retângulo) e as ações
+(`…`, letras, fila, volume) à direita. A ordem personalizada do usuário vale
+dentro de cada bloco, não como fila única — sem isso, mover a capa para a
+esquerda empurraria os botões para o meio.
+
+O vidro da cápsula é mais transparente e muito mais desfocado que o resto da
+interface (`blur(var(--cider-blur) * 1.6 + 10px)` com o fundo a ~62% de
+opacidade): é o que faz a cor do que passa atrás virar mancha, em vez de
+detalhe. O rodapé também perdeu o degradê que tinha — ele era uma camada opaca
+entre a página e o vidro.
+
+**A capa do que está tocando é o caminho para a letra em tela cheia.** Passar o
+mouse revela duas setas na diagonal e o clique abre a tela cheia (mesmo gesto na
+capa grande de "Tocando agora"); o `…` da pílula faz o mesmo por teclado. A tela
+cheia traz a capa e os controles à esquerda, a letra grande à direita, o ✕ no
+canto e o fundo sendo a própria capa muito desfocada (`blur(90px)`).
+
+Nas listas de faixas, **a capa é o botão de tocar**: o play circular só aparece
+no hover (ou sempre, na faixa atual, quando ele vira pause). O resto da linha não
+toca mais nada — foi um pedido explícito e também evita começar música sem
+querer ao selecionar a linha.
 
 O painel de letras ocupa a altura da janela (não a altura útil acima da
 playbar) e alinha as linhas grandes e esmaecidas do Apple Music, com o acento do
@@ -151,8 +190,19 @@ novo: um segundo provider criaria um segundo motor tocando a mesma faixa.
 O `<iframe>` mora no `CiderAudioDock`, também acima do roteador. Ele precisa de
 área real (`display: none` e 0×0 impedem a inicialização) mas o vídeo nunca pode
 aparecer, então o dock é uma faixa de 344×56 px com `opacity: 0` — invisível e
-fora do empilhamento da página da Nexora. O mini-player divide o canto com ele e
-é onde os controles aparecem fora de `/cider`.
+fora do empilhamento da página da Nexora. Duas travas garantem isso: o dock só
+**existe** dentro de `/cider` ou quando há faixa carregada (fora disso o
+`<iframe>` nem é criado), e as regras mínimas que o escondem vivem no
+`src/index.css` — se ficassem só em `styles/web.css`, que carrega com a rota,
+uma página da Nexora mostraria o player do YouTube em tamanho natural no meio da
+interface. O `YouTubePlayer.mount` detecta host fora do documento e recria o
+player, então montar e desmontar o dock não deixa o motor apontando para um nó
+que não existe mais.
+
+O mini-player é a **janela flutuante** de fora de `/cider`: arrastável (a posição
+fica no `localStorage`), com pause, anterior/próxima, favorito, fila, volume,
+link para o original e **"Encerrar o Cider"** — que para a música, limpa a fila
+e tira a faixa do perfil (`releaseNowPlaying`).
 
 Os arquivos de CSS são **cópias** do desktop (mesmos nomes de classe, para a
 aparência não divergir). O que só existe no site — dock, mini-player, portão de
@@ -194,11 +244,30 @@ O mesmo motor do desktop, portado sem alteração de comportamento:
   congela, seek recalcula, mudança de velocidade não afeta;
 - **destaque por palavra** com cor interpolada, `text-shadow` em halo duplo,
   escala e blur — a palavra "acende" conforme é cantada em vez de piscar;
+- **a letra começa cinza e fica pintada**: quem manda é a cor do fundo — no fundo
+  escuro a tinta é branca, no claro é preta — e o cinza é só o que **ainda vem**.
+  A palavra cantada não volta ao cinza depois de passar (`past` mantém a cor
+  cheia, sem opacidade nem blur), então a música vai "preenchendo" a letra de
+  cima para baixo, como no Apple Music. A tela cheia e o modo imersivo usam a
+  paleta escura mesmo no tema claro, porque a capa desfocada com scrim atrás
+  deles é escura;
+- **preenchimento progressivo**: a palavra cantada é um degradê duro recortado
+  pelas letras (`background-clip: text`), então ela **se enche** da esquerda
+  para a direita acompanhando a voz — não é troca de cor, é varredura, e ela
+  anda com a posição real do player (pausa congela, seek move);
+- **a palavra cantada sobe um pouco**: 1,6 px, proporcionais ao progresso (2,4 px
+  quando a palavra é esticada). Mais que isso o texto dança;
+- **palavras esticadas ganham halo extra**, sem lista de palavras escolhidas a
+  dedo: a marcação é o **tempo** — se uma palavra dura mais de 1,7× a média das
+  vizinhas da mesma linha (e mais de 600 ms), ela é tratada como nota segurada e
+  o halo continua aceso depois de passar. É o que faz o "relate" da Sabrina
+  Carpenter brilhar enquanto é cantado devagar;
 - **tempo por palavra estimado** quando a fonte só manda o tempo da linha (o
   caso do LRCLIB), pesando palavras curtas, longas e pontuação. A interface
   avisa que a estimativa é do Cider 2, e não da fonte;
 - **preset `karaoke`**, o mais próximo do efeito do Apple Music: brilho 0.8 e
-  decaimento de 1.2 s, para a palavra cantada continuar acesa depois de passar.
+  decaimento de 1.2 s, para a palavra esticada continuar acesa depois de passar
+  (só o halo decai; a tinta, não).
 
 A letra vem de uma **cadeia de fontes**, e a interface diz de onde veio:
 
@@ -238,7 +307,14 @@ por segundo, e sem interpolar o destaque daria saltos visíveis de 250 ms.
 
 ```bash
 npm run test      # inclui src/cider/core/core.test.ts, src/cider/settings/settings.test.ts
-                  # e src/cider/{library,radio,lyrics}.test.ts
+                  # e src/cider/{library,radio,lyrics,cssScope}.test.ts
 npm run check
 npm run lint
 ```
+
+`cssScope.test.ts` é a guarda contra a classe de defeito mais cara deste porte:
+as folhas de `/cider` **não saem do documento** quando o usuário volta para a
+Nexora, e um seletor global aqui passa a valer no site inteiro. O teste exige que
+todo seletor de primeiro nível tenha uma classe ou um atributo (blocos de
+`:root` são a exceção, porque entregam os tokens `--cider-*` para o que vive fora
+da rota) e que as regras mínimas que escondem o dock estejam no CSS global.

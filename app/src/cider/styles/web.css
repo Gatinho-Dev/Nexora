@@ -75,8 +75,10 @@
 /* ------------------------------------------------------------------ *
  * Mini-player (fora de /cider)                                        *
  * ------------------------------------------------------------------ *
- * Existe para haver como pausar o que continua tocando depois que o usuário
- * saiu do player. Fica no mesmo canto do dock, opaco e por cima.
+ * É a janela flutuante que continua controlando a música depois que o usuário
+ * volta para a Nexora: nasce no canto inferior direito, pode ser arrastada para
+ * qualquer lugar (a posição fica salva) e tem o botão que encerra o Cider de
+ * vez. Mesmo vidro da pílula, porque é o mesmo player visto de outro canto.
  */
 .cider-minibar {
   position: fixed;
@@ -84,24 +86,51 @@
   bottom: 16px;
   z-index: 45;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--cider-space-3);
-  /* Largo o bastante para o título respirar: são sete ações à direita, e uma
+  gap: var(--cider-space-2) var(--cider-space-3);
+  /* Largo o bastante para o título respirar: são oito ações à direita, e uma
      faixa estreita deixaria o nome da faixa em duas letras. */
-  width: min(540px, calc(100vw - 32px));
-  min-height: 72px;
+  width: min(560px, calc(100vw - 24px));
   padding: var(--cider-space-3) var(--cider-space-4);
-  border: 1px solid var(--cider-border);
+  border: 1px solid color-mix(in srgb, var(--cider-text) 14%, transparent);
   border-radius: var(--cider-radius-xl);
-  background: color-mix(in srgb, var(--cider-bg-elevated) 94%, transparent);
-  backdrop-filter: blur(var(--cider-blur)) saturate(170%);
-  box-shadow: var(--cider-shadow-lg);
+  background: color-mix(in srgb, var(--cider-bg-elevated) calc(var(--cider-glass-opacity) * 66%), transparent);
+  backdrop-filter: blur(calc(var(--cider-blur) * 1.6 + 10px)) saturate(180%);
+  -webkit-backdrop-filter: blur(calc(var(--cider-blur) * 1.6 + 10px)) saturate(180%);
+  box-shadow: var(--cider-shadow-lg), inset 0 1px 0 color-mix(in srgb, var(--cider-text) 12%, transparent);
   color: var(--cider-text);
-  font-family: var(--cider-font);
   font-size: var(--cider-text-base);
+  /* A moldura é a alça: `touch-action: none` impede o navegador de rolar a
+     página enquanto a janela está sendo arrastada. */
+  touch-action: none;
   animation: minibar-in var(--cider-duration-base) var(--cider-ease-out) both;
 }
+
+/* Posição vinda do arrasto: sai do canto inferior direito e passa a ser
+   posicionada pelo `left`/`top` definidos no componente. */
+.cider-minibar[data-placed="true"] {
+  right: auto;
+  bottom: auto;
+}
+
+.cider-minibar[data-dragging="true"] {
+  cursor: grabbing;
+  box-shadow: var(--cider-shadow-xl), inset 0 1px 0 color-mix(in srgb, var(--cider-text) 12%, transparent);
+}
+
+/* A alça é só um convite visual ao arrasto; quem arrasta é a moldura toda. */
+.cider-minibar-grip {
+  display: grid;
+  place-items: center;
+  grid-row: 1 / -1;
+  align-self: stretch;
+  padding: 0 2px;
+  color: var(--cider-text-faint);
+  cursor: grab;
+}
+
+.cider-minibar[data-dragging="true"] .cider-minibar-grip { cursor: grabbing; }
 
 @keyframes minibar-in {
   from { opacity: 0; transform: translate3d(0, 12px, 0); }
@@ -109,15 +138,19 @@
 }
 
 .cider-minibar-art {
+  grid-row: 1 / -1;
   width: 44px;
   height: 44px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
+  padding: 0;
+  border: 0;
   overflow: hidden;
   border-radius: var(--cider-radius-sm);
   background: var(--cider-surface);
   color: var(--cider-text-muted);
+  cursor: pointer;
 }
 
 .cider-minibar-art img {
@@ -132,6 +165,7 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  grid-row: 1 / -1;
 }
 
 /* O título é um botão porque leva de volta ao player. */
@@ -160,6 +194,28 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Botões da janela: sem depender de `.btn` (que é global e pertence ao Cider). */
+.cider-minibar-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cider-radius-full);
+  background: none;
+  color: var(--cider-text-muted);
+  cursor: pointer;
+  transition: background var(--cider-duration-fast) var(--cider-ease-out), color var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.cider-minibar-btn:hover { background: var(--cider-surface-hover); color: var(--cider-text); }
+.cider-minibar-btn.play { background: var(--cider-accent); color: var(--cider-on-accent); }
+.cider-minibar-btn.play:hover { color: var(--cider-on-accent); filter: brightness(1.06); }
+.cider-minibar-btn[data-on="true"],
+.cider-minibar-btn[aria-pressed="true"] { color: var(--cider-accent); }
+.cider-minibar-btn.danger:hover { background: color-mix(in srgb, var(--cider-danger) 22%, transparent); color: var(--cider-danger); }
 
 .cider-minibar-progress {
   height: 3px;
@@ -193,6 +249,7 @@
   align-items: center;
   gap: 2px;
   flex: 0 0 auto;
+  grid-row: 1 / -1;
 }
 
 /* O selo de origem (topbar) é um rótulo curto que nunca pode quebrar em duas

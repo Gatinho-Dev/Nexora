@@ -7,6 +7,13 @@
  *   álbum, duração, ações) para biblioteca, fila e resultados curados;
  * - `YoutubeRow` usa `.yt-row` para os resultados crus do YouTube, com a
  *   duração e o selo de versão que a busca detectou.
+ *
+ * Nas duas, **a capa é o botão**: passar o mouse sobre a linha revela um play
+ * circular sobre a arte, e é esse botão que toca a faixa (o resto da linha não
+ * toca mais nada). É o gesto do Apple Music e evita o acidente clássico de
+ * começar uma música sem querer quando o clique era para selecionar a linha.
+ * A linha do que está tocando deixa o botão visível o tempo todo — a capa vira
+ * o "pause" do que já está no ar.
  */
 
 import { ExternalLink, Heart, ListPlus, Pause, Play, Trash2 } from "lucide-react";
@@ -14,6 +21,52 @@ import { ExternalLink, Heart, ListPlus, Pause, Play, Trash2 } from "lucide-react
 import type { CiderTrack } from "../api/query";
 import { timecode } from "../format";
 import { Badge, IconButton } from "./primitives";
+
+/**
+ * Capa com o play por cima.
+ *
+ * O botão só existe na capa — a linha em volta é só layout. `aria-label`
+ * leva o nome da faixa porque "Reproduzir" repetido em vinte linhas não diz
+ * nada a quem usa leitor de tela.
+ */
+export function CoverPlayButton({
+  url,
+  title,
+  current,
+  playing,
+  className,
+  onPlay,
+}: {
+  url: string;
+  title: string;
+  current?: boolean;
+  playing?: boolean;
+  className?: string;
+  onPlay: () => void;
+}) {
+  const label = current && playing ? `Pausar ${title}` : `Reproduzir ${title}`;
+  return (
+    <span className={["cover-play", className].filter(Boolean).join(" ")} data-current={current ? "true" : undefined}>
+      <img className="track-art" src={url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+      <button
+        type="button"
+        className="cover-play-btn"
+        aria-label={label}
+        title={label}
+        onClick={(event) => {
+          event.stopPropagation();
+          onPlay();
+        }}
+      >
+        {/* O disco branco é o do Apple Music: sobre a capa escurecida, o
+            triângulo sozinho sumiria numa arte clara. */}
+        <span className="cover-play-disc">
+          {current && playing ? <Pause size={15} /> : <Play size={15} />}
+        </span>
+      </button>
+    </span>
+  );
+}
 
 /** Rótulo curto da versão quando ela não é a gravação de estúdio. */
 function versionLabel(track: CiderTrack): string | null {
@@ -83,28 +136,15 @@ export function TrackRow({
 }) {
   const version = versionLabel(track);
   return (
-    <div
-      className="track-row"
-      role="button"
-      tabIndex={0}
-      aria-current={current ? "true" : undefined}
-      onDoubleClick={onPlay}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onPlay();
-        }
-      }}
-      onClick={onPlay}
-    >
+    <div className="track-row" aria-current={current ? "true" : undefined}>
       <span className="index">{current && playing ? <Play size={12} /> : index + 1}</span>
       <span className="track-cell">
-        <img
-          className="track-art"
-          src={track.artworkUrl}
-          alt=""
-          loading="lazy"
-          referrerPolicy="no-referrer"
+        <CoverPlayButton
+          url={track.artworkUrl}
+          title={track.title}
+          current={current}
+          playing={playing}
+          onPlay={onPlay}
         />
         <span className="stack tight" style={{ minWidth: 0 }}>
           <span className="track-title truncate" title={track.youtubeTitle}>
@@ -228,15 +268,14 @@ export function YoutubeRow({
 }) {
   return (
     <div className="track-row yt-row" aria-current={current ? "true" : undefined}>
-      <button type="button" className="yt-row-main" onClick={onPlay}>
-        <img
-          className="cover"
-          src={track.artworkUrl}
-          alt=""
-          width={56}
-          height={56}
-          loading="lazy"
-          referrerPolicy="no-referrer"
+      <div className="yt-row-main">
+        <CoverPlayButton
+          className="yt-row-cover"
+          url={track.artworkUrl}
+          title={track.title}
+          current={current}
+          playing={playing}
+          onPlay={onPlay}
         />
         <span className="yt-row-text grow">
           <span className="title truncate" title={track.youtubeTitle}>
@@ -247,7 +286,7 @@ export function YoutubeRow({
             {track.albumHint ? ` · ${track.albumHint}` : ""}
           </span>
         </span>
-      </button>
+      </div>
       <TrackBadges track={track} />
       <span className="yt-row-duration tabular">{timecode(track.durationMs)}</span>
       <span className="yt-row-actions">

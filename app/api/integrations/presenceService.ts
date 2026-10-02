@@ -64,7 +64,11 @@ async function broadcastActivities(userId: number) {
     .limit(1);
   if (!user || user.status === "invisible") return;
   const audience = await contactIds(userId);
-  if (!audience.size) return;
+  // O próprio dono entra na audiência. O card "Agora" do perfil dele é
+  // alimentado por este mesmo push (`rich-presence:update`), e `contactIds`
+  // devolve só os contatos: sem esta linha, quem abrisse o próprio perfil
+  // enquanto ouve só veria a faixa depois de recarregar a página.
+  audience.add(userId);
   const [rows, connections, relationships] = await Promise.all([
     db
       .select()
