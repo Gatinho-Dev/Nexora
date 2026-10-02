@@ -149,29 +149,37 @@ function AnimatedWord({
       }
       case "past":
       default: {
+        // A palavra cantada **fica pintada**: a letra vai do cinza à cor de
+        // leitura conforme a música anda (branco no fundo escuro, preto no
+        // claro) e o que já passou permanece pintado — nunca volta ao cinza.
+        //
+        // O fim do `active` já entrega a palavra com 100% de tinta (o degradê
+        // fecha em `activeColor`), então aqui basta manter a mesma cor: sem
+        // salto de cor e sem piscada. O `WebkitTextFillColor` explícito é o que
+        // faz a troca do degradê pela cor cheia ser instantânea, inclusive
+        // depois de um seek que caia direto numa palavra já cantada.
+        //
         // A duração da transição desta palavra vem do `transition` definido uma
         // única vez no `<span>` abaixo. Um `transitionDuration` aqui seria
         // sobrescrito pelo atalho (e faria o React avisar sobre misturar
         // atalho com longhand no mesmo objeto de estilo).
-        //
-        // A palavra esticada continua com o halo aceso depois de passar: é o
-        // que faz o brilho do "relate" durar o tempo da nota e não o do
-        // quadro em que ela foi cantada.
+        const haloSize = glow * (emphasis ? 9 : 5);
         return {
           ...base,
-          opacity: Math.max(style.inactiveOpacity + 0.12, 0.5),
-          color: interpolateHex(inactiveColor, activeColor, glow * (emphasis ? 0.5 : 0.35)),
+          opacity: 1,
+          color: activeColor,
+          WebkitTextFillColor: activeColor,
+          // Quem decai é só o halo: o brilho é do momento, a tinta não. A
+          // palavra esticada guarda um resto dele para o "relate" continuar
+          // aceso depois de passar.
           textShadow:
             glow > 0.3
-              ? `0 0 ${(glow * (emphasis ? 9 : 5)).toFixed(1)}px ${withAlpha(
+              ? `0 0 ${haloSize.toFixed(1)}px ${withAlpha(
                   halo,
                   glow * (emphasis ? 0.24 : 0.14)
                 )}`
               : "none",
-          filter:
-            style.blurInactivePx > 0
-              ? `blur(${(style.blurInactivePx * 0.2).toFixed(1)}px)`
-              : "none",
+          filter: "none",
         };
       }
     }
@@ -335,12 +343,21 @@ export function LyricsView({
                     />
                   ))
                 : (
-                    <span className="lyrics-plainline">
+                    // Linha sem palavra marcada (instrumental ou letra sem
+                    // tempo): ela segue a mesma regra das palavras — cinza até
+                    // ser cantada, pintada depois.
+                    <span
+                      className="lyrics-plainline"
+                      style={state === "past" ? { color: activeColor } : undefined}
+                    >
                       {line.text || "♪"}
                       {state === "active" && (view?.progress ?? 0) > 0 ? (
                         <span
                           className="progress-mask"
-                          style={{ width: `${(view?.progress ?? 0) * 100}%` }}
+                          style={{
+                            width: `${(view?.progress ?? 0) * 100}%`,
+                            color: activeColor,
+                          }}
                           aria-hidden="true"
                         >
                           {line.text || "♪"}

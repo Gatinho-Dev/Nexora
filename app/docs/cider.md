@@ -244,6 +244,13 @@ O mesmo motor do desktop, portado sem alteração de comportamento:
   congela, seek recalcula, mudança de velocidade não afeta;
 - **destaque por palavra** com cor interpolada, `text-shadow` em halo duplo,
   escala e blur — a palavra "acende" conforme é cantada em vez de piscar;
+- **a letra começa cinza e fica pintada**: quem manda é a cor do fundo — no fundo
+  escuro a tinta é branca, no claro é preta — e o cinza é só o que **ainda vem**.
+  A palavra cantada não volta ao cinza depois de passar (`past` mantém a cor
+  cheia, sem opacidade nem blur), então a música vai "preenchendo" a letra de
+  cima para baixo, como no Apple Music. A tela cheia e o modo imersivo usam a
+  paleta escura mesmo no tema claro, porque a capa desfocada com scrim atrás
+  deles é escura;
 - **preenchimento progressivo**: a palavra cantada é um degradê duro recortado
   pelas letras (`background-clip: text`), então ela **se enche** da esquerda
   para a direita acompanhando a voz — não é troca de cor, é varredura, e ela
@@ -259,7 +266,8 @@ O mesmo motor do desktop, portado sem alteração de comportamento:
   caso do LRCLIB), pesando palavras curtas, longas e pontuação. A interface
   avisa que a estimativa é do Cider 2, e não da fonte;
 - **preset `karaoke`**, o mais próximo do efeito do Apple Music: brilho 0.8 e
-  decaimento de 1.2 s, para a palavra cantada continuar acesa depois de passar.
+  decaimento de 1.2 s, para a palavra esticada continuar acesa depois de passar
+  (só o halo decai; a tinta, não).
 
 A letra vem de uma **cadeia de fontes**, e a interface diz de onde veio:
 

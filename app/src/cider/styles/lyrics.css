@@ -70,14 +70,17 @@
 }
 
 /* Na tela cheia as duas direções são distinguíveis, como no Apple Music: o
-   trecho já cantado continua legível (é para onde o olho volta) e o que ainda
-   vem é uma sombra mais apagada. */
+   trecho já cantado continua aceso (veja a regra de `past` mais abaixo) e o que
+   ainda vem é uma sombra mais apagada. */
 .cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-state="upcoming"] {
   opacity: 0.3;
 }
 
+/* A linha cantada segue pintada na tela cheia, mas ganha de volta um resto da
+   sombra da linha ativa: aqui o fundo é a capa desfocada, e a sombra é o que
+   separa a letra clara de um trecho claro da capa. */
 .cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-state="past"] {
-  opacity: 0.58;
+  text-shadow: 0 2px calc(var(--lyrics-shadow, 0.35) * 10px) rgba(0, 0, 0, 0.34);
 }
 
 .cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-footer {
@@ -236,9 +239,18 @@
   text-shadow: 0 2px calc(var(--lyrics-shadow, 0.35) * 14px) rgba(0, 0, 0, 0.42);
 }
 
+/*
+ * Linha já cantada: continua **pintada**.
+ *
+ * Depois de passar, a linha não volta ao cinza nem desbota: o trecho cantado
+ * permanece na cor de leitura (branco no fundo escuro, preto no claro) e só o
+ * que ainda vem é que está apagado — é a leitura da referência do Apple Music.
+ * Por isso `opacity` cheio e sem desfoque: qualquer resto de transparência ou
+ * blur aqui desfaria a tinta da palavra (veja `AnimatedWord`).
+ */
 .lyrics-line[data-state="past"] {
-  opacity: calc(var(--lyrics-inactive-opacity, 0.4) + 0.22);
-  filter: blur(calc(var(--lyrics-blur, 1px) * 0.2));
+  opacity: 1;
+  filter: none;
 }
 
 .lyrics-line[data-instrumental="true"] {
@@ -286,13 +298,13 @@
 }
 
 /* Máscara de progresso para letras sem tempo por palavra: o texto “acende” da
-   esquerda para a direita conforme a linha é cantada. */
+   esquerda para a direita conforme a linha é cantada, na mesma cor de leitura
+   das palavras (a cor vem inline, porque depende do fundo). */
 .progress-mask {
   position: absolute;
   inset: 0 auto 0 0;
   overflow: hidden;
   white-space: pre;
-  color: var(--cider-accent);
   pointer-events: none;
   transition: width 120ms linear;
 }
