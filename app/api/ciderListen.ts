@@ -18,6 +18,8 @@
  * saída, sanitização do estado) sem subir WebSocket nenhum.
  */
 
+import { randomUUID } from "node:crypto";
+
 import { CIDER_LISTEN_EMOJIS, CiderListen } from "@contracts/constants";
 import type {
   CiderListenMember,
@@ -33,19 +35,51 @@ export interface ListenUser {
   avatar?: string | null;
 }
 
+/**
+ * Membro com o **segredo de retomada** — nunca sai daqui para outro cliente.
+ *
+ * Só o próprio dono recebe o seu token (no payload da sessão): é ele que
+ * permite voltar para a mesma sessão depois de um recarregamento, sem que
+ * ninguém possa se passar por outro membro para "retomar" a vaga dele.
+ */
+interface ListenMemberRecord {
+  member: CiderListenMember;
+  token: string;
+}
+
 export interface ListenSession {
   code: string;
   hostId: number;
-  /** Ordem de entrada preservada: a lista de participantes não dança sozinha. */
-  members: Map<number, CiderListenMember>;
+  /** Quem está **presente** agora, na ordem de entrada. */
+  members: Map<number, ListenMemberRecord>;
+  /**
+   * Quem já entrou alguma vez, com o token de cada um.
+   *
+   * É a diferença entre "saiu do socket" e "nunca esteve aqui": o assento fica
+   * reservado, e é por ele que o convidado que recarregou a página (ou perdeu a
+   * rede por um instante) volta para a própria vaga em vez de virar uma segunda
+   * pessoa na lista. Os tokens **não** saem daqui na lista de participantes.
+   */
+  seats: Map<number, ListenMemberRecord>;
   /** Último estado publicado pelo anfitrião — o que um convidado recebe ao entrar. */
   state: CiderListenState | null;
   createdAt: number;
+  /**
+   * Quando o anfitrião ficou ausente (epoch ms) e `null` enquanto ele está aqui.
+   *
+   * É o que permite recarregar a página sem derrubar a sessão: o anfitrião sai
+   * do socket, a sessão **espera** por ele por `CiderListen.HOST_GRACE_MS`, e os
+   * convidados são avisados em vez de ficarem seguindo um player que não existe
+   * mais. Passada a carência, a sessão acaba como sempre acabou.
+   */
+  hostAwayAt: number | null;
 }
 
 export interface ListenJoin {
   session: ListenSession;
   member: CiderListenMember;
+  /** Token do próprio solicitante (retomada). */
+  token: string;
 }
 
 export type ListenFail = { ok: false; reason: string };
@@ -55,8 +89,13 @@ export type ListenEnter = ({ ok: true } & ListenJoin) | ListenFail;
 /** `null` = não estava em sessão nenhuma. */
 export interface ListenLeave {
   session: ListenSession | null;
-  /** `true` quando quem saiu era o anfitrião: a sessão inteira acabou. */
+  /** `true` quando a sessão inteira acabou. */
   ended: boolean;
+  /**
+   * `true` quando o anfitrião saiu mas a sessão **segue viva**, esperando ele
+   * voltar dentro da janela de carência.
+   */
+  waiting: boolean;
 }
 
 function member(
@@ -71,6 +110,22 @@ function member(
   };
 }
 
+/** Sessão que acabou de expirar, com quem ainda estava dentro. */
+export interface ListenExpire {
+  session: ListenSession;
+  members: CiderListenMember[];
+}
+
+/**
+ * Membros públicos da sessão, na ordem de entrada.
+ *
+ * É o formato que sai pela rede: os tokens de retomada ficam **dentro** do
+ * registro e nunca acompanham a lista de participantes.
+ */
+export function listenMembers(session: ListenSession): CiderListenMember[] {
+  return [...session.members.values()].map((record) => record.member);
+}
+
 /**
  * Uma sessão por usuário — a mesma regra das salas de voz.
  *
@@ -82,9 +137,17 @@ export class ListenRegistry {
   private byCode = new Map<string, ListenSession>();
   private byUser = new Map<number, string>();
   private random: () => number;
+  private token: () => string;
+  private graceMs: number;
 
-  constructor(random: () => number = Math.random) {
+  constructor(
+    random: () => number = Math.random,
+    token: () => string = () => randomUUID(),
+    graceMs: number = CiderListen.HOST_GRACE_MS
+  ) {
     this.random = random;
+    this.token = token;
+    this.graceMs = graceMs;
   }
 
   /** A sessão em que o usuário está, seja como anfitrião ou convidado. */
@@ -98,7 +161,13 @@ export class ListenRegistry {
   }
 
   members(code: string): CiderListenMember[] {
-    return [...(this.byCode.get(code)?.members.values() ?? [])];
+    const session = this.byCode.get(code);
+    return session ? listenMembers(session) : [];
+  }
+
+  /** `true` enquanto o anfitrião está ausente dentro da janela de carência. */
+  hostAway(code: string): boolean {
+    return this.byCode.get(code)?.hostAwayAt != null;
   }
 
   /** Abre a sessão com `host` de anfitrião. */
@@ -111,16 +180,20 @@ export class ListenRegistry {
       return { ok: false, reason: "Não consegui gerar um código de sessão. Tente de novo." };
     }
     const hostMember = member(host, "host");
+    const token = this.token();
+    const hostRecord: ListenMemberRecord = { member: hostMember, token };
     const session: ListenSession = {
       code,
       hostId: host.userId,
-      members: new Map([[host.userId, hostMember]]),
+      members: new Map([[host.userId, hostRecord]]),
+      seats: new Map([[host.userId, hostRecord]]),
       state: null,
       createdAt: now,
+      hostAwayAt: null,
     };
     this.byCode.set(code, session);
     this.byUser.set(host.userId, code);
-    return { ok: true, session, member: hostMember };
+    return { ok: true, session, member: hostMember, token };
   }
 
   /**
@@ -149,9 +222,48 @@ export class ListenRegistry {
       };
     }
     const guest = member(user, "guest");
-    session.members.set(user.userId, guest);
+    const token = this.token();
+    const record: ListenMemberRecord = { member: guest, token };
+    session.members.set(user.userId, record);
+    session.seats.set(user.userId, record);
     this.byUser.set(user.userId, code);
-    return { ok: true, session, member: guest };
+    return { ok: true, session, member: guest, token };
+  }
+
+  /**
+   * Volta para uma sessão já conhecida usando o **segredo de retomada**.
+   *
+   * É o caminho de quem recarregou a página ou perdeu a conexão por um instante.
+   * O token diz quem a pessoa era — o servidor não precisa adivinhar pelo id,
+   * e um membro não pode retomar a vaga de outro. O anfitrião que voltar dentro
+   * da carência reaparece como anfitrião (a sessão nunca deixou de ser dele).
+   */
+  resume(code: string, rawToken: unknown, now = Date.now()): ListenEnter {
+    const normalized = normalizeListenCode(code);
+    if (!normalized) {
+      return { ok: false, reason: "Esse código não existe. Confira as letras e tente de novo." };
+    }
+    const session = this.byCode.get(normalized);
+    if (!session) {
+      return { ok: false, reason: "Essa sessão já terminou." };
+    }
+    if (session.hostAwayAt != null && now - session.hostAwayAt >= this.graceMs) {
+      this.closeSession(session);
+      return { ok: false, reason: "Essa sessão já terminou." };
+    }
+    if (typeof rawToken !== "string" || !rawToken) {
+      return { ok: false, reason: "Essa sessão já terminou." };
+    }
+    const record = [...session.seats.values()].find((entry) => entry.token === rawToken);
+    if (!record) {
+      return { ok: false, reason: "Essa sessão já terminou." };
+    }
+    // Reentra: a vaga pode ter ficado vazia (socket caiu) ou ainda existir.
+    const userId = record.member.userId;
+    session.members.set(userId, record);
+    this.byUser.set(userId, session.code);
+    if (userId === session.hostId) session.hostAwayAt = null;
+    return { ok: true, session, member: record.member, token: record.token };
   }
 
   /**
@@ -161,30 +273,61 @@ export class ListenRegistry {
    * manter os convidados numa sala vazia só os deixaria olhando uns para os
    * outros esperando alguém que não volta.
    */
-  leave(userId: number): ListenLeave {
+  leave(userId: number, options: { keepHost?: boolean; now?: number } = {}): ListenLeave {
     const code = this.byUser.get(userId);
-    if (!code) return { session: null, ended: false };
+    if (!code) return { session: null, ended: false, waiting: false };
     const session = this.byCode.get(code);
     if (!session) {
       this.byUser.delete(userId);
-      return { session: null, ended: false };
+      return { session: null, ended: false, waiting: false };
     }
-    const host = session.hostId === userId;
+    if (session.hostId === userId) {
+      this.byUser.delete(userId);
+      // Carência: o anfitrião que sumiu por alguns segundos volta para a mesma
+      // sessão, e os convidados continuam aonde estavam. Só quem pediu para
+      // sair de verdade (`keepHost` falso) encerra a sessão na hora.
+      if (options.keepHost) {
+        session.hostAwayAt = options.now ?? Date.now();
+        return { session, ended: false, waiting: true };
+      }
+      this.closeSession(session);
+      return { session, ended: true, waiting: false };
+    }
+    // O convidado sai da lista de presentes, mas o assento dele fica: é para
+    // lá que ele volta se a queda foi de rede, e não uma escolha.
     session.members.delete(userId);
     this.byUser.delete(userId);
-    if (host) {
-      for (const id of session.members.keys()) this.byUser.delete(id);
-      this.byCode.delete(code);
-      return { session, ended: true };
+    return { session, ended: false, waiting: false };
+  }
+
+  /**
+   * Fecha a sessão porque a carência do anfitrião acabou.
+   *
+   * Devolve quem estava dentro (para o realtime avisá-los) ou `null` quando não
+   * havia nada para fechar — assim o temporizador da carência não avisa duas
+   * vezes o mesmo fim de sessão.
+   */
+  expireHostAway(code: string, now = Date.now()): ListenExpire | null {
+    const session = this.byCode.get(code);
+    if (!session || session.hostAwayAt == null) return null;
+    if (now - session.hostAwayAt < this.graceMs) return null;
+    const members = listenMembers(session);
+    this.closeSession(session);
+    return { session, members };
+  }
+
+  private closeSession(session: ListenSession): void {
+    for (const record of session.seats.values()) {
+      this.byUser.delete(record.member.userId);
     }
-    return { session, ended: false };
+    this.byCode.delete(session.code);
   }
 
   /** O anfitrião encerra a sessão para todos. */
   close(userId: number): ListenLeave {
     const session = this.sessionOf(userId);
     if (!session || session.hostId !== userId) {
-      return { session: null, ended: false };
+      return { session: null, ended: false, waiting: false };
     }
     return this.leave(userId);
   }

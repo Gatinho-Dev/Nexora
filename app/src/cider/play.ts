@@ -18,6 +18,7 @@ import { useCiderLibrary } from "./library";
 import { useCiderSettings } from "./settings/store";
 import { searchPreferencesOf, type CiderSettings } from "./settings/types";
 import { assembleStation, radioQueries, type RadioSeed } from "./radio";
+import { mixIsPersonalized, mixQueries, type MixDefinition, type MixSources } from "./core/mixes";
 import { manualLosses } from "./core/queue";
 import { suggestToListen, useCiderListen } from "./listen";
 import { ciderToast, useCiderUi } from "./ui";
@@ -290,6 +291,40 @@ export async function extendQueue(engine: CiderEngine): Promise<StationResult> {
   });
   const added = addToQueue(engine, fresh);
   return { added, queries, error: added === 0 ? (error ?? "Nada novo encontrado para esta faixa.") : null };
+}
+
+export interface MixResult {
+  added: number;
+  queries: string[];
+  personalized: boolean;
+  error: string | null;
+}
+
+/**
+ * Toca uma mistura: o humor cruzado com quem a pessoa ouve.
+ *
+ * As consultas saem de `core/mixes.ts` — parte pura e testada — e são
+ * executadas pelo mesmo `collect` das estações. O resultado diz **de onde** a
+ * mistura veio (`personalized`) para a interface poder dizer isso, em vez de
+ * chamar de "recomendada" uma busca de tema fixo.
+ */
+export async function startMix(mix: MixDefinition, engine: CiderEngine): Promise<MixResult> {
+  const library = useCiderLibrary.getState();
+  const sources: MixSources = { history: library.history, favorites: library.favorites };
+  const queries = mixQueries(mix, sources);
+  const personalized = mixIsPersonalized(sources);
+  const { batches, error } = await collect(queries);
+  const tracks = assembleStation(batches, { limit: 40, maxPerArtist: 3 });
+  if (tracks.length === 0) {
+    return {
+      added: 0,
+      queries,
+      personalized,
+      error: error ?? "Nenhuma faixa utilizável para esta mistura.",
+    };
+  }
+  requestPlay(engine, tracks, 0);
+  return { added: tracks.length, queries, personalized, error: null };
 }
 
 /** Lembra a busca recente (sem duplicar). */

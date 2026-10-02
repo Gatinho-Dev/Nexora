@@ -185,6 +185,21 @@ recebe o mesmo vídeo duas vezes: a resposta aparece antes do clique, não como 
 botão que não faz nada. Com nada tocando, o que for adicionado **começa a tocar** e
 fica marcado como à mão — foi a pessoa que o pediu, então o "Limpar" alcança.
 
+O Início abre com as **misturas** — Energia, Relaxamento, Foco, Boa Disposição e
+Melancolia — como as mixes geradas por algoritmo da referência. A diferença é
+que aqui não existe algoritmo: as consultas saem de `src/cider/core/mixes.ts` e
+cruzam o humor com quem a pessoa **ouve de verdade** (artistas mais presentes no
+histórico e nos favoritos deste navegador). Sem biblioteca, sobra a consulta do
+tema — e a seção diz **"Pelo tema"**, em vez de chamar de "recomendada" uma
+busca fixa. Os dois casos rodam pelo mesmo caminho de busca da Pesquisa, e o
+aviso do clique informa quantas faixas entraram e de onde a mistura veio.
+
+A **Pesquisa sem consulta** mostra os blocos de género, humor e atividade
+(Energia, Festa, Fitness, Estudo, Dormir, Dirigir…). Cada bloco imprime a
+consulta que executa e o clique a leva para o campo de busca, onde ainda pode
+ser editada antes de confirmar — o oposto de um rótulo de marketing que esconde
+o que vai ser procurado.
+
 O ▶ de cada linha é **prévia de 30 segundos**, não reprodução: o motor é pausado
 (`engine.pause()`) e a prévia sobe num player próprio, montado num canto invisível
 do diálogo — o `<iframe>` precisa de área real, mas a cara dele é de outra origem,
@@ -196,6 +211,14 @@ segunda reprodução.
 O painel de letras ocupa a altura da janela (não a altura útil acima da
 playbar) e alinha as linhas grandes e esmaecidas do Apple Music, com o acento do
 tema só no halo da palavra cantada.
+
+"Tocando agora" ganha o fundo da referência: as duas cores dominantes da capa
+viram gradientes que derivam devagar atrás da tela. A paleta é extraída **no
+navegador**, por `<canvas>` (`extractPalette`, o mesmo caminho do tema "cores da
+capa" do provider): nada é enviado para análise, e uma capa sem CORS ou sem cor
+devolve `null` — o fundo simplesmente não aparece, em vez de receber um tom
+inventado. Quem pediu menos movimento recebe o gradiente parado
+(`prefers-reduced-motion` ou as configurações de animação).
 
 Os textos da interface **não nomeiam a plataforma de origem**: falam de "fonte",
 "player" e "publicação". O motor continua sendo o mesmo `iframe` descrito abaixo —
@@ -393,6 +416,32 @@ Quem entra numa sessão **pausada** não ouve uma batida antes do pause: o motor
 usa `cueVideoById` em vez de `loadVideoById` (`engine.followQueue`), e a intenção
 de tocar ou não é preservada mesmo quando o `<iframe>` ainda está inicializando.
 
+### Quedas e recarregamento
+
+A sessão **sobrevive ao recarregamento**. Cada participante recebe um **token de
+retomada** ao entrar (no `cider:listen:session`) e o guarda no `sessionStorage`
+desta aba — não no `localStorage`, porque ouvir junto é da aba, não do navegador
+para sempre. Ao recarregar ou reconectar, a aba apresenta o token
+(`cider:listen:resume`) e volta para a **própria vaga**: o registro do realtime
+guarda um assento com token por pessoa, e a lista pública de membros não expõe
+nenhum deles.
+
+A queda de conexão deixou de encerrar a sessão:
+
+- **convidado** — a retomada é imediata quando o realtime volta; o chip mostra
+  "Reconectando a sessão…" enquanto a resposta não chega, e um "não" definitivo
+  (sessão encerrada) limpa o que estava guardado;
+- **anfitrião** — o assento dele fica reservado por **2 minutos**
+  (`CiderListen.HOST_GRACE_MS`). Nesse intervalo os convidados veem "O anfitrião
+  caiu da sessão", o player deles **pausa** para não irem ficando para trás, e
+  quem estiver na tela vê a espera no painel. Se ele voltar, o estado guardado é
+  readotado (`adoptRemoteState`) e a fila continua de onde estava; passado o
+  prazo, a sessão encerra para todos, como antes.
+
+O que continua valendo: a sessão é do **processo do realtime** e não vai para o
+banco — reiniciar o servidor encerra as sessões, e nenhuma delas é reaberta
+amanhã.
+
 ### Reações
 
 A lista de emojis é **fechada** (`CIDER_LISTEN_EMOJIS`, em `contracts/constants`)
@@ -412,8 +461,9 @@ Nada de banco: a sessão é do **processo do realtime**, como as salas de voz
 (`api/ciderListen.ts` + as mensagens `cider:listen:*` em `api/realtime.ts`).
 
 - **uma sessão por usuário** e teto de **12 pessoas**;
-- **o anfitrião é a sessão**: quando ele sai (ou fecha a conexão), ela acaba e os
-  convidados são avisados — não existe sala sem áudio para acompanhar;
+- **o anfitrião é a sessão**: quando ele **sai de verdade** (encerra), ela acaba
+  na hora; quando ele **cai** (fecha a aba, perde a conexão), a vaga fica
+  reservada por 2 minutos e os convidados são avisados da espera;
 - **convites** só para **amigos aceitos** e **online** (o convite toca na tela do
   outro agora; para quem está offline não há onde tocar);
 - o estado publicado é revalidado no servidor (`sanitizeListenState`): a faixa que
@@ -431,12 +481,12 @@ anfitrião do mesmo jeito.
 
 ## Limitações conhecidas
 
-- **A sessão de escuta não sobrevive a um recarregamento.** O registro é em
-  memória e a identidade é o socket: fechar a aba, cair a conexão ou reiniciar o
-  servidor termina a sessão (os convidados são avisados e voltam para as próprias
-  filas). Escutar junto é uma atividade ao vivo, não um objeto para reabrir
-  amanhã — persistir isso exigiria escolher um lugar no banco para uma sala de
-  minutos.
+- **A sessão de escuta guarda apenas um token no navegador.** O registro
+  continua em memória, no processo do realtime: recarregar a página ou cair a
+  conexão volta para a própria vaga (com carência de 2 minutos para o
+  anfitrião), mas reiniciar o servidor encerra as sessões e nenhuma delas é
+  reaberta amanhã — persistir isso exigiria escolher um lugar no banco para uma
+  sala de minutos.
 - **O áudio não passa pelo equalizador.** O navegador não dá acesso ao buffer do
   iframe. A DSP só valeria para arquivos locais, que esta versão não carrega.
 - **Sem histórico local nem biblioteca sincronizada.** O Cider 2 desktop tinha
@@ -450,7 +500,7 @@ anfitrião do mesmo jeito.
 
 ```bash
 npm run test      # inclui src/cider/core/core.test.ts, src/cider/settings/settings.test.ts
-                  # e src/cider/{library,radio,lyrics,cssScope,queue,queueAdd,listen}.test.ts
+                  # e src/cider/{library,radio,lyrics,cssScope,queue,queueAdd,listen,mixes}.test.ts
                   # e api/ciderListen.test.ts (regras da sessão de escuta, no servidor)
 npm run check
 npm run lint

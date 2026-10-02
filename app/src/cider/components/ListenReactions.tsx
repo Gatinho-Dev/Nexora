@@ -12,7 +12,7 @@
  * fileira de emojis decorativa seria só ruído sobre a música.
  */
 
-import { Users } from "lucide-react";
+import { Users, WifiOff } from "lucide-react";
 
 import { CIDER_LISTEN_EMOJIS } from "@contracts/constants";
 import { reactToListen, useCiderListen } from "../listen";
@@ -21,15 +21,26 @@ import { useCiderUi } from "../ui";
 export function CiderListenOverlay() {
   const session = useCiderListen((store) => store.session);
   const reactions = useCiderListen((store) => store.reactions);
+  const hostPresent = useCiderListen((store) => store.hostPresent);
+  const offline = useCiderListen((store) => store.offline);
   const setOpen = useCiderUi((store) => store.setListenOpen);
 
   if (!session) return null;
 
   const host = session.members.find((member) => member.userId === session.hostId);
-  const label =
-    session.me.role === "host"
-      ? `Sessão ${session.code}`
-      : `Ouvindo com ${host?.name ?? "o anfitrião"}`;
+  /*
+   * "Reconectando" a partir de dois motivos diferentes, e ambos importam para
+   * quem está ouvindo: o anfitrião caiu (a música fica parada no ponto em que
+   * ele estava) ou a **própria** conexão caiu (a sessão volta quando ela subir).
+   */
+  const away = !hostPresent || offline;
+  const label = offline
+    ? "Reconectando a sessão…"
+    : !hostPresent
+      ? "Anfitrião reconectando…"
+      : session.me.role === "host"
+        ? `Sessão ${session.code}`
+        : `Ouvindo com ${host?.name ?? "o anfitrião"}`;
 
   return (
     <>
@@ -37,10 +48,11 @@ export function CiderListenOverlay() {
         <button
           type="button"
           className="listen-chip"
+          data-state={away ? "away" : "live"}
           onClick={() => setOpen(true)}
           title="Abrir o painel de Ouvir junto"
         >
-          <Users size={14} />
+          {away ? <WifiOff size={14} /> : <Users size={14} />}
           <span className="truncate">{label}</span>
         </button>
         <div className="listen-dock-emojis" role="group" aria-label="Reagir">

@@ -8,7 +8,7 @@
  * de DSP que não faria nada.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router";
 import {
   Activity,
@@ -36,6 +36,7 @@ import { useCiderSettings } from "../settings/store";
 import { useLyrics } from "../useLyrics";
 import { useCiderUi } from "../ui";
 import { extendQueue, playAfter, playFrom, toggleFavoriteWithToast } from "../play";
+import { extractPalette, type Palette } from "../color";
 import { AddToPlaylistButton } from "../components/AddToPlaylist";
 import { PlayableCover } from "../components/PlayableCover";
 import { Button, IconButton, Notice, ProgressSlider, SectionHeader } from "../components/primitives";
@@ -61,6 +62,29 @@ export function CiderNowPlayingPage() {
   const upcoming = useMemo(() => state.queue.slice(state.index + 1), [state.index, state.queue]);
   const isFavorite = current ? favorites.some((track) => track.videoId === current.videoId) : false;
 
+  // --- Fundo com as cores da capa -------------------------------------
+  // A paleta é lida no canvas (`extractPalette`), da mesma forma que o tema
+  // "cores da capa" do provider: nada sai da máquina, e capa sem CORS ou sem
+  // cor devolve `null` — aí o fundo simplesmente não aparece, em vez de ganhar
+  // um tom inventado. O par `url → paleta` evita que a cor da faixa anterior
+  // fique na tela enquanto a nova capa é lida.
+  const mode = useCiderSettings((store) => store.appearance?.mode ?? "dark");
+  const [extracted, setExtracted] = useState<{ url: string; palette: Palette | null } | null>(null);
+  const coverUrl = current?.artworkUrl ?? "";
+
+  useEffect(() => {
+    let alive = true;
+    if (!coverUrl) return undefined;
+    void extractPalette(coverUrl, mode).then((result) => {
+      if (alive) setExtracted({ url: coverUrl, palette: result });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [coverUrl, mode]);
+
+  const palette = extracted?.url === coverUrl ? extracted.palette : null;
+
   if (!current) {
     return (
       <div className="page stack gap-4">
@@ -80,6 +104,16 @@ export function CiderNowPlayingPage() {
 
   return (
     <div className="page now-playing-page">
+      <div
+        className="now-playing-glow"
+        aria-hidden="true"
+        data-active={palette ? "true" : "false"}
+        style={
+          palette
+            ? ({ "--np-accent": palette.accent, "--np-secondary": palette.secondary } as CSSProperties)
+            : undefined
+        }
+      />
       <header className="now-playing-head">
         {/* A capa grande também é o caminho para a letra em tela cheia: passar o
             mouse revela as duas setas, e o clique abre a tela — o mesmo gesto da

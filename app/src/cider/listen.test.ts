@@ -13,6 +13,8 @@ import type { CiderListenState } from "@contracts/types";
 import {
   followPlan,
   inviteMessage,
+  parseListenSession,
+  serializeListenSession,
   trackFromListen,
   listenStateFrom,
   listenStateSignature,
@@ -189,6 +191,27 @@ describe("listenStateFrom", () => {
       durationMs: 200_000,
       url: "https://youtu.be/aaaaaaaaaa",
     });
+  });
+});
+
+describe("sessão guardada (sobrevive ao reload)", () => {
+  const stored = { code: "ABCDEF", role: "host", token: "segredo-1" } as const;
+
+  it("guarda código, papel e segredo, e devolve tudo de volta", () => {
+    expect(parseListenSession(serializeListenSession(stored))).toEqual({ ...stored });
+  });
+
+  it("normaliza o código ao ler: o que estava guardado em minúsculas ainda vale", () => {
+    const raw = serializeListenSession({ ...stored, code: "ab-cd ef" });
+    expect(parseListenSession(raw)?.code).toBe("ABCDEF");
+  });
+
+  it("recusa lixo, código torto, papel inventado e segredo vazio", () => {
+    expect(parseListenSession(null)).toBeNull();
+    expect(parseListenSession("não é json")).toBeNull();
+    expect(parseListenSession(JSON.stringify({ ...stored, code: "ABC" }))).toBeNull();
+    expect(parseListenSession(JSON.stringify({ ...stored, role: "chefe" }))).toBeNull();
+    expect(parseListenSession(JSON.stringify({ ...stored, token: "" }))).toBeNull();
   });
 });
 

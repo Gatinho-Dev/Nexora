@@ -690,6 +690,40 @@
   transform: translateY(-1px);
 }
 
+/* Anfitrião (ou a própria conexão) fora do ar: a cor avisa antes do texto. */
+.listen-chip[data-state="away"] {
+  border-color: color-mix(in srgb, var(--cider-warning) 55%, transparent);
+  color: var(--cider-warning);
+}
+
+.listen-chip[data-state="away"]::after {
+  content: "";
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: var(--cider-radius-full);
+  background: var(--cider-warning);
+  animation: listen-pulse 1.4s var(--cider-ease-in-out) infinite;
+}
+
+@keyframes listen-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .listen-chip[data-state="away"]::after {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 .listen-dock-emojis {
   display: flex;
   gap: 2px;
@@ -787,4 +821,168 @@
     opacity: 0;
     transform: translateX(-50%) translateY(-40px) scale(0.95);
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Misturas, blocos de humor e o fundo de "Tocando agora"              *
+ * ------------------------------------------------------------------ *
+ * Três peças da referência do Apple Music, com uma regra comum: a cor vem do
+ * dado (`tone` do catálogo, paleta da capa), nunca inventada pelo CSS. O tom
+ * do cartão chega como variável inline e a folha só o compõe com os tokens.
+ */
+
+.mix-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(184px, 1fr));
+  gap: var(--cider-space-3);
+}
+
+.mix-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-2);
+  min-height: 96px;
+  padding: var(--cider-space-4);
+  border: 1px solid color-mix(in srgb, var(--mix-tone, var(--cider-accent)) 44%, transparent);
+  border-radius: var(--cider-radius-lg);
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--mix-tone, var(--cider-accent)) 32%, transparent), transparent 68%),
+    var(--cider-bg-elevated);
+  color: var(--cider-text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform var(--cider-duration-fast) var(--cider-ease-out),
+    border-color var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.mix-card:hover:not(:disabled),
+.mix-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--mix-tone, var(--cider-accent));
+}
+
+.mix-card:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+.mix-card:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.mix-card-top {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cider-space-2);
+  color: var(--mix-tone, var(--cider-accent));
+}
+
+.mix-card-label {
+  color: var(--cider-text);
+  font-weight: var(--cider-weight-semibold);
+}
+
+.mix-card-hint {
+  color: var(--cider-text-muted);
+  font-size: var(--cider-text-xs);
+}
+
+/* Blocos da Pesquisa: mesma ideia dos cartões, em escala menor — e mostrando
+   a consulta real, que é o que os separa de um rótulo de marketing. */
+.mood-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
+  gap: var(--cider-space-2);
+}
+
+.mood-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-1);
+  min-height: 76px;
+  padding: var(--cider-space-3);
+  border: 1px solid color-mix(in srgb, var(--mood-tone, var(--cider-accent)) 40%, transparent);
+  border-radius: var(--cider-radius-md);
+  background: color-mix(in srgb, var(--mood-tone, var(--cider-accent)) 15%, var(--cider-bg-elevated));
+  color: var(--cider-text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform var(--cider-duration-fast) var(--cider-ease-out),
+    border-color var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.mood-tile:hover,
+.mood-tile:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--mood-tone, var(--cider-accent));
+}
+
+.mood-tile-label {
+  font-weight: var(--cider-weight-semibold);
+}
+
+.mood-tile-query {
+  color: var(--cider-text-faint);
+  font-family: var(--cider-font-mono);
+  font-size: var(--cider-text-xs);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Fundo de "Tocando agora": as duas cores da capa em gradientes que derivam
+ * devagar. As variáveis chegam do componente (paleta extraída no canvas); sem
+ * paleta o elemento fica com `data-active="false"` e invisível — nenhum tom é
+ * inventado para preencher o vazio. O `isolation` prende o `z-index: -1` neste
+ * contexto, para o brilho ficar atrás do conteúdo sem escapar da página.
+ */
+.now-playing-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.now-playing-glow {
+  position: absolute;
+  inset: -120px 0 auto;
+  height: min(560px, 80vh);
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(42% 58% at 18% 32%, var(--np-accent, transparent) 0%, transparent 72%),
+    radial-gradient(46% 62% at 82% 24%, var(--np-secondary, transparent) 0%, transparent 72%);
+  filter: blur(70px) saturate(135%);
+  transform: scale(1.05);
+  transition: opacity var(--cider-duration-slow) var(--cider-ease-out);
+}
+
+.now-playing-glow[data-active="true"] {
+  opacity: 0.5;
+  animation: now-playing-drift 26s var(--cider-ease-in-out) infinite alternate;
+}
+
+@keyframes now-playing-drift {
+  0% {
+    transform: translate3d(-3%, -2%, 0) scale(1.05) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(3%, 2%, 0) scale(1.12) rotate(3deg);
+  }
+  100% {
+    transform: translate3d(-1%, 3%, 0) scale(1.08) rotate(-2deg);
+  }
+}
+
+/* Menos movimento: o gradiente continua, mas parado — a cor não é a animação. */
+@media (prefers-reduced-motion: reduce) {
+  .now-playing-glow[data-active="true"] {
+    animation: none;
+  }
+}
+
+:root[data-reduce-motion="true"] .now-playing-glow[data-active="true"],
+:root[data-animations="off"] .now-playing-glow[data-active="true"],
+:root[data-performance="economy"] .now-playing-glow[data-active="true"] {
+  animation: none;
 }

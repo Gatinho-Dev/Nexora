@@ -159,6 +159,15 @@ export const CiderListen = {
    * engasgar; fora dela, o convidado busca a posição do anfitrião.
    */
   DRIFT_TOLERANCE_MS: 3_000,
+  /**
+   * Quanto a sessão **espera** por um anfitrião que sumiu, em ms.
+   *
+   * Um recarregamento de página, uma troca de rede ou um sono do notebook não
+   * podem encerrar a sessão de ouvintes que estão no meio de uma música: o
+   * anfitrião volta com o mesmo token e reaparece como anfitrião. Passado esse
+   * tempo, a sala fecha como sempre fechou — ninguém fica esperando para sempre.
+   */
+  HOST_GRACE_MS: 120_000,
   /** Quanto tempo uma reação vive na tela, em ms. */
   REACTION_LIFETIME_MS: 2_600,
   /** Reações simultâneas na tela (as mais antigas saem primeiro). */

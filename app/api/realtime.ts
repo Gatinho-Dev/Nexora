@@ -46,10 +46,12 @@ import {
   checkInvite,
   ListenRateLimiter,
   ListenRegistry,
+  normalizeListenCode,
   sanitizeListenEmoji,
   sanitizeListenRequest,
   sanitizeListenState,
   sanitizeListenTrack,
+  listenMembers,
   type InviteCheck,
   type ListenSession,
   type ListenUser,
@@ -972,30 +974,74 @@ async function listenUser(client: Client): Promise<ListenUser | null> {
   };
 }
 
+/**
+ * Carência do anfitrião ausente, um temporizador por sessão.
+ *
+ * Vive num mapa (e não no objeto da sessão) porque quem tem temporizador é o
+ * processo que entrega os avisos — o registro só sabe quando o anfitrião saiu.
+ */
+const hostGraceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearHostGrace(code: string): void {
+  const timer = hostGraceTimers.get(code);
+  if (timer) clearTimeout(timer);
+  hostGraceTimers.delete(code);
+}
+
+/** Agenda o fim da sessão para quando a carência do anfitrião acabar. */
+function scheduleHostGrace(code: string): void {
+  clearHostGrace(code);
+  const timer = setTimeout(() => {
+    hostGraceTimers.delete(code);
+    const expired = listenSessions.expireHostAway(code);
+    if (!expired) return;
+    const audience = expired.members
+      .filter((member) => member.userId !== expired.session.hostId)
+      .map((member) => member.userId);
+    sendToUsers(audience, { t: "cider:listen:ended", code, reason: "host-left" });
+  }, CiderListen.HOST_GRACE_MS);
+  timer.unref?.();
+  hostGraceTimers.set(code, timer);
+}
+
 /** Entrega um evento a todos os membros da sessão, menos `exceptUserId`. */
 function sendToSession(
   session: ListenSession,
   event: WSServerEvent,
   exceptUserId?: number
 ): void {
-  for (const member of session.members.values()) {
-    if (member.userId === exceptUserId) continue;
-    sendToUsers([member.userId], event);
+  for (const userId of session.members.keys()) {
+    if (userId === exceptUserId) continue;
+    sendToUsers([userId], event);
   }
+}
+
+/** A lista de participantes mudou: todo mundo recebe a mesma versão dela. */
+function emitMembers(session: ListenSession, exceptUserId?: number): void {
+  sendToSession(
+    session,
+    { t: "cider:listen:members", code: session.code, members: listenMembers(session) },
+    exceptUserId
+  );
 }
 
 /**
  * Sai da sessão (se estiver numa) avisando os outros.
  *
- * Um só caminho para as quatro saídas — sair, encerrar, trocar de sessão e
- * cair a conexão —, porque esquecer um aviso deixaria a lista de participantes
- * mentindo na tela de quem ficou.
+ * Um só caminho para as cinco saídas — sair, encerrar, trocar de sessão, perder
+ * a conexão e a carência que vence —, porque esquecer um aviso deixaria a lista
+ * de participantes mentindo na tela de quem ficou.
+ *
+ * `keepHost` é a diferença entre "a conexão caiu" (a sessão **espera** o
+ * anfitrião voltar) e "eu saí" (a sessão acaba). Sem essa distinção, um
+ * recarregamento de página encerraria a sessão de todo mundo.
  */
-function leaveListen(userId: number): void {
-  const outcome = listenSessions.leave(userId);
+function leaveListen(userId: number, options: { keepHost?: boolean } = {}): void {
+  const outcome = listenSessions.leave(userId, options);
   if (!outcome.session) return;
   listenReactBudget.forget(userId);
   if (outcome.ended) {
+    clearHostGrace(outcome.session.code);
     sendToSession(
       outcome.session,
       { t: "cider:listen:ended", code: outcome.session.code, reason: "host-left" },
@@ -1003,11 +1049,16 @@ function leaveListen(userId: number): void {
     );
     return;
   }
-  sendToSession(outcome.session, {
-    t: "cider:listen:members",
-    code: outcome.session.code,
-    members: [...outcome.session.members.values()],
-  });
+  if (outcome.waiting) {
+    sendToSession(
+      outcome.session,
+      { t: "cider:listen:host-presence", code: outcome.session.code, present: false },
+      userId
+    );
+    scheduleHostGrace(outcome.session.code);
+    return;
+  }
+  emitMembers(outcome.session);
 }
 
 /** Motivo legível de um convite recusado (quem lê é a pessoa que convidou). */
@@ -1148,8 +1199,9 @@ async function handleEvent(client: Client, event: WSClientEvent) {
         code: created.session.code,
         me: created.member,
         hostId: created.session.hostId,
-        members: [...created.session.members.values()],
+        members: listenMembers(created.session),
         state: created.session.state,
+        token: created.token,
       });
       break;
     }
@@ -1172,18 +1224,49 @@ async function handleEvent(client: Client, event: WSClientEvent) {
         code: joined.session.code,
         me: joined.member,
         hostId: joined.session.hostId,
-        members: [...joined.session.members.values()],
+        members: listenMembers(joined.session),
         state: joined.session.state,
+        token: joined.token,
       });
-      sendToSession(
-        joined.session,
-        {
-          t: "cider:listen:members",
-          code: joined.session.code,
-          members: [...joined.session.members.values()],
-        },
-        client.userId
-      );
+      emitMembers(joined.session, client.userId);
+      break;
+    }
+    case "cider:listen:resume": {
+      if (!env.ciderPlayerEnabled) return;
+      // Uma sessão por usuário, também na volta: quem estava em outra saiu dela
+      // (os membros de lá são avisados) antes de retomar esta.
+      const target = normalizeListenCode(event.code);
+      const current = listenSessions.codeOf(client.userId);
+      if (target && current && current !== target) leaveListen(client.userId);
+      const resumed = listenSessions.resume(event.code, event.token);
+      if (!resumed.ok) {
+        send(client, { t: "cider:listen:denied", reason: resumed.reason });
+        return;
+      }
+      // Ele voltou: a carência não precisa mais correr, e quem ficou na sala
+      // precisa saber que o anfitrião está de novo no comando.
+      clearHostGrace(resumed.session.code);
+      send(client, {
+        t: "cider:listen:session",
+        code: resumed.session.code,
+        me: resumed.member,
+        hostId: resumed.session.hostId,
+        members: listenMembers(resumed.session),
+        state: resumed.session.state,
+        token: resumed.token,
+      });
+      if (resumed.member.role === "host") {
+        sendToSession(
+          resumed.session,
+          {
+            t: "cider:listen:host-presence",
+            code: resumed.session.code,
+            present: true,
+          },
+          client.userId
+        );
+      }
+      emitMembers(resumed.session, client.userId);
       break;
     }
     case "cider:listen:leave":
@@ -1192,6 +1275,7 @@ async function handleEvent(client: Client, event: WSClientEvent) {
     case "cider:listen:end": {
       const closed = listenSessions.close(client.userId);
       if (!closed.session) return;
+      clearHostGrace(closed.session.code);
       sendToSession(closed.session, {
         t: "cider:listen:ended",
         code: closed.session.code,
@@ -1221,7 +1305,7 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       const session = listenSessions.sessionOf(client.userId);
       if (!session) return;
       if (!listenReactBudget.take(client.userId)) return;
-      const me = session.members.get(client.userId);
+      const me = session.members.get(client.userId)?.member;
       sendToSession(
         session,
         {
@@ -1241,7 +1325,7 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       const session = listenSessions.sessionOf(client.userId);
       // O anfitrião não pede a si mesmo: o transporte dele já é o verdadeiro.
       if (!session || session.hostId === client.userId) return;
-      const me = session.members.get(client.userId);
+      const me = session.members.get(client.userId)?.member;
       sendToUsers([session.hostId], {
         t: "cider:listen:request",
         code: session.code,
@@ -1256,7 +1340,7 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       if (!track) return;
       const session = listenSessions.sessionOf(client.userId);
       if (!session || session.hostId === client.userId) return;
-      const me = session.members.get(client.userId);
+      const me = session.members.get(client.userId)?.member;
       sendToUsers([session.hostId], {
         t: "cider:listen:add",
         code: session.code,
@@ -1292,7 +1376,7 @@ async function handleEvent(client: Client, event: WSClientEvent) {
         });
         return;
       }
-      const hostMember = session.members.get(client.userId);
+      const hostMember = session.members.get(client.userId)?.member;
       if (!hostMember) return;
       sendToUsers([event.toUserId], {
         t: "cider:listen:invited",
@@ -1607,9 +1691,11 @@ export function attachRealtime(server: HttpServer) {
         removeClient(client);
         voiceLeave(client).catch(() => {});
         if (wasLastConnection && !byUser.has(userId)) {
-          // A sessão de escuta vive enquanto a conexão vive: sem o aviso, o
-          // anfitrião que fechou a aba continuaria "tocando" para os convidados.
-          leaveListen(userId);
+          // A conexão caiu — e cair não é sair: a sessão espera o anfitrião
+          // voltar dentro da carência (recarregar a página não pode encerrar a
+          // sala de quem ficou ouvindo). Quem saiu de verdade manda
+          // `cider:listen:leave`/`end`, e aí a sessão acaba na hora.
+          leaveListen(userId, { keepHost: true });
           broadcastPresence(userId).catch(() => {});
         }
       });

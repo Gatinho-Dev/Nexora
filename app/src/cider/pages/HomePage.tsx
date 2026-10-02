@@ -7,12 +7,15 @@
  * feita do que o próprio usuário tocou, e a página diz exatamente isso.
  */
 
+import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router";
-import { Compass, Heart, Info, Play, Search, Sparkles } from "lucide-react";
+import { Compass, Heart, Info, Loader2, Play, Search, Sparkles } from "lucide-react";
 
 import { useCider } from "../useCider";
 import { useCiderLibrary } from "../library";
-import { playAfter, playFrom } from "../play";
+import { playAfter, playFrom, startMix } from "../play";
+import { MIXES, mixIsPersonalized, mixSourceLabel, type MixDefinition } from "../core/mixes";
+import { ciderToast } from "../ui";
 import { CoverArt } from "../components/CoverArt";
 import { MediaCard, Button, EmptyState, SectionHeader } from "../components/primitives";
 import { timecode } from "../format";
@@ -28,6 +31,33 @@ export function CiderHomePage() {
 
   const recent = history.slice(0, 12).map((entry) => entry.track);
   const current = state.track;
+  const mixSources = { history, favorites };
+  const mixPersonalized = mixIsPersonalized(mixSources);
+  const [startingMix, setStartingMix] = useState<string | null>(null);
+
+  /**
+   * Tocar uma mistura é buscar de verdade: os lotes vêm das consultas de
+   * `core/mixes.ts` e o resultado entra na fila como qualquer outra lista.
+   */
+  const playMix = (mix: MixDefinition) => {
+    if (startingMix) return;
+    setStartingMix(mix.id);
+    void startMix(mix, engine)
+      .then((result) => {
+        if (result.added === 0) {
+          ciderToast("warning", "A mistura não achou nada", result.error ?? mix.label);
+          return;
+        }
+        ciderToast(
+          "success",
+          mix.label,
+          `${result.added} faixas · ${
+            result.personalized ? "a partir do seu histórico" : "pelo tema"
+          }`,
+        );
+      })
+      .finally(() => setStartingMix(null));
+  };
 
   return (
     <div className="page stack gap-6">
@@ -85,6 +115,47 @@ export function CiderHomePage() {
           </div>
         ) : null}
       </header>
+
+      {/*
+        * Misturas no topo, como as mixes do Apple Music — mas com uma diferença
+        * de honestidade: quando não há biblioteca, a mistura é o **tema** dela e
+        * a interface diz isso em vez de fingir personalização.
+        */}
+      <section className="section">
+        <SectionHeader title="Misturas" kicker={mixSourceLabel(mixSources)} />
+        <div className="mix-grid">
+          {MIXES.map((mix) => {
+            const loading = startingMix === mix.id;
+            return (
+              <button
+                key={mix.id}
+                type="button"
+                className="mix-card"
+                data-loading={loading ? "true" : "false"}
+                disabled={startingMix !== null}
+                style={{ "--mix-tone": mix.tone } as CSSProperties}
+                onClick={() => playMix(mix)}
+                title={
+                  mixPersonalized
+                    ? `${mix.label} — com os artistas do seu histórico e favoritos`
+                    : `${mix.label} — busca “${mix.query}”`
+                }
+              >
+                <span className="mix-card-top">
+                  {loading ? <Loader2 size={15} className="cider-spin" /> : <Sparkles size={15} />}
+                  <span className="mix-card-label">{mix.label}</span>
+                </span>
+                <span className="mix-card-hint">{mix.hint}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="xsmall faint" style={{ marginTop: 8 }}>
+          {mixPersonalized
+            ? "Cada mistura cruza um humor com os artistas mais presentes no seu histórico e nos seus favoritos deste navegador."
+            : "Sem histórico nem favoritos ainda: cada mistura busca o tema dela. O que você ouvir passa a semear as próximas."}
+        </p>
+      </section>
 
       {recent.length === 0 && favorites.length === 0 && playlists.length === 0 ? (
         <EmptyState
