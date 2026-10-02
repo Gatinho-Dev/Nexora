@@ -257,6 +257,16 @@ O mesmo motor do desktop, portado sem alteração de comportamento:
   anda com a posição real do player (pausa congela, seek move);
 - **a palavra cantada sobe um pouco**: 1,6 px, proporcionais ao progresso (2,4 px
   quando a palavra é esticada). Mais que isso o texto dança;
+- **três bolinhas contam a espera até a voz entrar**: quando há espera de
+  verdade antes da próxima linha cantada — a introdução e os intervalos
+  instrumentais —, a linha esperada ganha três bolinhas acima do texto, uma
+  acendendo dentro de cada terço da espera (a mesma paleta da letra: cinza até
+  a tinta, branco no escuro e preto no claro). O piso de 2,5 s é o que impede a
+  contagem de piscar entre **todas** as linhas: o fim da última palavra de um
+  verso quase nunca é o começo do próximo. A linha esperada abre exceção ao
+  esmaecimento porque a opacidade de um pai não tem como ser desfeita no filho —
+  e as bolinhas ficam fora do fluxo, para o texto não pular quando a contagem
+  aparece;
 - **a subletra entre parênteses vai para baixo**: muita fonte escreve o canto
   de apoio na mesma linha ("... can you keep it up? (It up)"). O apoio vira um
   bloco menor **embaixo** da letra, sem os parênteses, como no Apple Music — e

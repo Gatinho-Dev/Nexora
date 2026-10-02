@@ -8,11 +8,48 @@ import {
 } from "react";
 import { splitParenthetical, splitParentheticalText } from "./parenthetical";
 import { estimateWords } from "./words";
-import type { LyricsLine, LyricsWordView, WordState } from "./types";
+import type { LyricsLine, LyricsLineView, LyricsWordView } from "./types";
 import type { LyricsStyle } from "./presets";
 
 /** Conjunto vazio reaproveitado: a maioria das linhas não tem palavra esticada. */
 const NO_EMPHASIS: ReadonlySet<number> = new Set<number>();
+
+/** Quantas bolinhas contam a espera até a voz entrar. */
+const COUNT_IN_DOTS = 3;
+
+/**
+ * As três bolinhas da espera, acima da linha que está para ser cantada.
+ *
+ * Elas **se completam** uma a uma: cada bolinha preenche dentro do seu terço da
+ * espera (`progress` vem do motor, na posição real do player — pausa congela,
+ * seek move). A cor sai da mesma paleta da letra, então elas vão do cinza à
+ * tinta da vez: branco no fundo escuro, preto no claro.
+ */
+function CountInDots({
+  progress,
+  activeColor,
+  inactiveColor,
+}: {
+  progress: number;
+  activeColor: string;
+  inactiveColor: string;
+}) {
+  return (
+    <span className="lyrics-countin" aria-hidden="true">
+      {Array.from({ length: COUNT_IN_DOTS }, (_, index) => {
+        // O quanto **esta** bolinha já foi preenchida: 0 no seu terço, 1 no fim.
+        const fill = Math.max(0, Math.min(1, progress * COUNT_IN_DOTS - index));
+        return (
+          <span
+            key={index}
+            className="lyrics-countin-dot"
+            style={{ backgroundColor: interpolateHex(inactiveColor, activeColor, fill) }}
+          />
+        );
+      })}
+    </span>
+  );
+}
 
 /**
  * Palavras "esticadas" de uma linha — as que merecem o halo extra.
@@ -260,7 +297,8 @@ export function LyricsView({
   variant = "inline",
 }: {
   lines: LyricsLine[];
-  views?: Array<{ state: WordState; progress: number; words: LyricsWordView[] }>;
+  /** Quadros das linhas vindos do motor (`LyricsSyncEngine`). */
+  views?: LyricsLineView[];
   style: LyricsStyle;
   activeColor: string;
   inactiveColor: string;
@@ -354,6 +392,7 @@ export function LyricsView({
               ref={element => registerLine(index, element)}
               className="lyrics-line"
               data-state={state}
+              data-count-in={view?.countIn === undefined ? undefined : "true"}
               data-instrumental={
                 line.instrumental || !line.text.trim() ? "true" : undefined
               }
@@ -371,6 +410,13 @@ export function LyricsView({
                   : undefined
               }
             >
+              {view?.countIn === undefined ? null : (
+                <CountInDots
+                  progress={view.countIn}
+                  activeColor={activeColor}
+                  inactiveColor={inactiveColor}
+                />
+              )}
               {line.words && line.words.length > 0 && view
                 ? parts
                   ? // Com subletra a linha vira dois blocos: a letra principal na

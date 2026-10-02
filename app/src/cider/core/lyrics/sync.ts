@@ -30,6 +30,17 @@ export const DEFAULT_SYNC_CONFIG: SyncConfig = {
   lineApproachingLeadMs: 1_400,
 };
 
+/**
+ * Espera mínima (ms) para a **contagem** aparecer.
+ *
+ * O fim da última palavra de uma linha quase nunca é o começo da próxima: o
+ * tokenizador deixa um respiro de ~5% no fim de cada verso. Sem este piso, o
+ * motor acenderia as bolinhas entre **todas** as linhas da música, o que viraria
+ * piscada. Com ele, a contagem aparece só quando há espera de verdade: a
+ * introdução antes da primeira linha e os intervalos instrumentais.
+ */
+export const COUNT_IN_MIN_MS = 2_500;
+
 export interface LyricsTransition {
   from: number;
   to: number;
@@ -114,9 +125,10 @@ export class LyricsSyncEngine {
       this.lastIndex = activeIndex;
     }
 
+    const countIn = this.countIn(lines, positionMs);
     const activeWord = activeWordIndex(lines[activeIndex]?.words, positionMs);
     const views: LyricsLineView[] = lines.map((line, index) =>
-      this.viewOf(line, index, positionMs, activeIndex),
+      this.viewOf(line, index, positionMs, activeIndex, countIn),
     );
 
     return {
@@ -128,11 +140,39 @@ export class LyricsSyncEngine {
     };
   }
 
+  /**
+   * A espera pela próxima linha **cantada** — as três bolinhas.
+   *
+   * Quem espera o intervalo não quer saber quando o silêncio começa, e sim
+   * quando a voz volta: por isso a linha esperada é a próxima com palavras (as
+   * instrumentais ficam de fora) e a espera começa no fim do último trecho
+   * cantado, não no fim da linha anterior.
+   *
+   * Devolve `null` fora da espera, quando ela é curta demais para valer uma
+   * contagem (`COUNT_IN_MIN_MS`), quando não há próxima linha a cantar ou quando
+   * a letra não tem tempo (nesse caso não há espera para medir).
+   */
+  private countIn(
+    lines: LyricsLine[],
+    positionMs: number,
+  ): { index: number; progress: number } | null {
+    const index = findPendingLine(lines, positionMs);
+    if (index < 0) return null;
+    const start = lines[index]!.startTimeMs;
+    if (start === null) return null;
+    const from = waitStartBefore(lines, index);
+    if (positionMs < from) return null;
+    const waitMs = start - from;
+    if (waitMs < COUNT_IN_MIN_MS) return null;
+    return { index, progress: progressWithin(waitMs, positionMs, from) };
+  }
+
   private viewOf(
     line: LyricsLine,
     index: number,
     positionMs: number,
     activeIndex: number,
+    countIn: { index: number; progress: number } | null,
   ): LyricsLineView {
     const start = line.startTimeMs;
     const end = line.endTimeMs ?? null;
@@ -175,10 +215,51 @@ export class LyricsSyncEngine {
           : state === "past"
             ? 1
             : 0,
+      countIn: countIn?.index === index ? countIn.progress : undefined,
       words,
       instrumental: Boolean(line.instrumental) || line.text.trim().length === 0,
     };
   }
+}
+
+/**
+ * Próxima linha **com palavra** a ser cantada (a que está sendo esperada).
+ *
+ * As linhas instrumentais (`♪`) são puladas de propósito: durante um intervalo,
+ * a contagem vai até a **voz voltar**, e não até o silêncio começar.
+ */
+export function findPendingLine(lines: LyricsLine[], positionMs: number): number {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const start = line.startTimeMs;
+    if (start === null || start <= positionMs) continue;
+    if (!line.words || line.words.length === 0) continue;
+    return index;
+  }
+  return -1;
+}
+
+/**
+ * Quando a espera pela linha começou.
+ *
+ * É o fim da última palavra **cantada** antes dela (o respiro depois do último
+ * verso), nunca antes do começo da linha anterior: quem espera a voz voltar
+ * depois de um intervalo instrumental está esperando desde que o intervalo
+ * começou, não desde a faixa começar.
+ *
+ * Devolve `0` quando nada foi cantado antes — é a introdução, e a espera vale
+ * desde o início da faixa.
+ */
+function waitStartBefore(lines: LyricsLine[], index: number): number {
+  const previousStart = lines[index - 1]?.startTimeMs ?? 0;
+  let sungEnd = 0;
+  for (let previous = index - 1; previous >= 0; previous -= 1) {
+    const words = lines[previous]?.words;
+    if (!words || words.length === 0) continue;
+    sungEnd = words.reduce((end, word) => Math.max(end, word.endTimeMs), 0);
+    break;
+  }
+  return Math.max(sungEnd, previousStart);
 }
 
 function lineDuration(lines: LyricsLine[], index: number): number | null {

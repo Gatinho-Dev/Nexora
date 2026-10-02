@@ -200,6 +200,8 @@
 }
 
 .lyrics-line {
+  /* Referência das bolinhas da contagem, que ficam acima do texto. */
+  position: relative;
   margin: 0;
   font-family: var(--lyrics-family, var(--cider-font));
   font-size: var(--lyrics-size, 34px);
@@ -251,6 +253,57 @@
 .lyrics-line[data-state="past"] {
   opacity: 1;
   filter: none;
+}
+
+/*
+ * Contagem da espera: as três bolinhas antes de a voz entrar.
+ *
+ * Elas ficam **acima** da linha esperada e fora do fluxo: se entrassem no fluxo,
+ * a linha inteira desceria toda vez que a contagem aparecesse (e subiria de
+ * volta no fim), o que faria a letra pular justamente no momento em que a pessoa
+ * está esperando a voz chegar. O tamanho é em `em`, então as bolinhas acompanham
+ * o preset e o lugar onde a letra está sendo desenhada.
+ */
+.lyrics-countin {
+  position: absolute;
+  bottom: calc(100% + 0.1em);
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.26em;
+  line-height: 0;
+}
+
+.lyrics-countin-dot {
+  width: 0.26em;
+  height: 0.26em;
+  border-radius: var(--cider-radius-full);
+}
+
+/* A contagem acompanha o alinhamento da letra (o preset pode centrar ou alinhar
+   à direita). */
+.lyrics-lines[data-align="center"] .lyrics-countin {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.lyrics-lines[data-align="right"] .lyrics-countin {
+  left: auto;
+  right: 0;
+}
+
+/*
+ * A linha que está sendo esperada fica com a opacidade cheia.
+ *
+ * As bolinhas vivem dentro dela, e a opacidade de um pai vale para toda a
+ * subárvore — não há como "desfazer" isso no filho. Como o esmaecimento das
+ * linhas que ainda vêm é justo onde a contagem aparece, a linha esperada abre
+ * exceção: o **texto** continua apagado pelo próprio estado de cada palavra
+ * (`AnimatedWord`), mas as bolinhas aparecem de verdade.
+ */
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-count-in="true"],
+.cider-root .lyrics-line[data-count-in="true"] {
+  opacity: 1;
 }
 
 .lyrics-line[data-instrumental="true"] {
