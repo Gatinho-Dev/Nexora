@@ -176,6 +176,23 @@ nunca sai — nem quando foi ela mesma colocada à mão, porque o áudio já est
 carregado e a interface passaria a dizer que nada toca enquanto a música segue.
 As entradas à mão aparecem marcadas no painel da fila.
 
+No fim da lista há **"Adicionar músicas à fila"**: a busca acontece dentro do
+lugar onde a fila é vista, em vez de obrigar a sair dela e voltar. Antes de
+digitar, ele sugere a sua **biblioteca deste navegador** — histórico primeiro,
+favoritos depois, e nada que já esteja na fila. Cada resultado traz o rótulo
+"na fila" e o botão desabilitado quando a faixa já está lá, porque a fila não
+recebe o mesmo vídeo duas vezes: a resposta aparece antes do clique, não como um
+botão que não faz nada. Com nada tocando, o que for adicionado **começa a tocar** e
+fica marcado como à mão — foi a pessoa que o pediu, então o "Limpar" alcança.
+
+O ▶ de cada linha é **prévia de 30 segundos**, não reprodução: o motor é pausado
+(`engine.pause()`) e a prévia sobe num player próprio, montado num canto invisível
+do diálogo — o `<iframe>` precisa de área real, mas a cara dele é de outra origem,
+então o que se vê é a capa e uma barra de tempo. Ao terminar (ou ao apertar
+Parar), a reprodução volta **como estava**: se a música tocava, volta tocando; se
+estava pausada, não começa. O teto de 30 s é o que impede a gaveta de virar uma
+segunda reprodução.
+
 O painel de letras ocupa a altura da janela (não a altura útil acima da
 playbar) e alinha as linhas grandes e esmaecidas do Apple Music, com o acento do
 tema só no halo da palavra cantada.
@@ -203,6 +220,12 @@ o Nexora: trocar de rota desmontaria o `<iframe>` junto. O `CiderMiniBar` é só
 uma janela para o mesmo motor — aparece fora de `/cider`, não cria um segundo
 player e não tem fila própria. Por isso `CiderPage` **não** monta o provider de
 novo: um segundo provider criaria um segundo motor tocando a mesma faixa.
+
+Os comandos do player (`pause`, `resume`, `seekToMs`, `setVolume`) só são enviados
+depois que a API entrega um objeto **utilizável** (`readyFor`): o objeto de
+`new YT.Player` não responde a nada antes do `onReady`, e uma prévia cancelada no
+mesmo segundo em que começou estourava uma exceção no meio da limpeza da
+interface — que ficava com a prévia presa na tela.
 
 O `<iframe>` mora no `CiderAudioDock`, também acima do roteador. Ele precisa de
 área real (`display: none` e 0×0 impedem a inicialização) mas o vídeo nunca pode
@@ -342,7 +365,7 @@ por segundo, e sem interpolar o destaque daria saltos visíveis de 250 ms.
 
 ```bash
 npm run test      # inclui src/cider/core/core.test.ts, src/cider/settings/settings.test.ts
-                  # e src/cider/{library,radio,lyrics,cssScope}.test.ts
+                  # e src/cider/{library,radio,lyrics,cssScope,queue,queueAdd}.test.ts
 npm run check
 npm run lint
 ```

@@ -19,6 +19,7 @@ import { CiderSidebar, CiderTopbar, CiderPlaybar, CiderAmbient } from "./compone
 import { CiderSidePanel } from "./components/SidePanel";
 import { CiderToasts } from "./components/Toasts";
 import { CiderQueuePrompt } from "./components/QueuePrompt";
+import { CiderQueueAddDialog } from "./components/QueueAdd";
 import { CiderCommandPalette } from "./components/CommandPalette";
 import { CiderImmersive } from "./components/Immersive";
 import { CiderLyricsScreen } from "./components/LyricsScreen";
@@ -173,6 +174,7 @@ export function CiderApp() {
       <CiderPlaybar />
       <CiderToasts />
       <CiderQueuePrompt />
+      <CiderQueueAddDialog />
       <CiderCommandPalette />
       <CiderLyricsScreen />
       <CiderImmersive />

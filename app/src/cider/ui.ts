@@ -63,6 +63,14 @@ interface CiderUiStore {
   toasts: Toast[];
   /** Pergunta pendente de confirmação (ver `QueuePrompt`). */
   queuePrompt: QueuePrompt | null;
+  /**
+   * Gaveta "Adicionar músicas à fila".
+   *
+   * Fica na store, e não no painel, porque o painel lateral **fecha** quando se
+   * navega enquanto a gaveta continua útil — e porque o botão que a abre vive em
+   * mais de um lugar (o fim da fila e a pílula).
+   */
+  queueAddOpen: boolean;
   onboarding: boolean;
   /**
    * O `<iframe>` do YouTube pode não reproduzir em navegadores sem DRM ou com
@@ -88,6 +96,7 @@ interface CiderUiStore {
   dismissToast: (id: number) => void;
   askQueuePrompt: (prompt: QueuePrompt) => void;
   dismissQueuePrompt: () => void;
+  setQueueAddOpen: (value: boolean) => void;
   setOnboarding: (value: boolean) => void;
   markLimitationSeen: () => void;
 }
@@ -106,6 +115,7 @@ export const useCiderUi = create<CiderUiStore>((set, get) => ({
   lastSearchError: null,
   toasts: [],
   queuePrompt: null,
+  queueAddOpen: false,
   onboarding: false,
   limitationSeen: false,
 
@@ -150,6 +160,8 @@ export const useCiderUi = create<CiderUiStore>((set, get) => ({
   askQueuePrompt: (prompt) => set({ queuePrompt: prompt }),
 
   dismissQueuePrompt: () => set({ queuePrompt: null }),
+
+  setQueueAddOpen: (value) => set({ queueAddOpen: value }),
 
   setOnboarding: (value) => set({ onboarding: value }),
 
