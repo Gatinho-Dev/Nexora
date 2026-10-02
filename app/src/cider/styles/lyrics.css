@@ -288,6 +288,27 @@
   text-underline-offset: 6px;
 }
 
+/*
+ * Subletra: o canto de apoio que a fonte escreve entre parênteses.
+ *
+ * "... can you keep it up? (It up)" não vira uma fila de texto: o apoio ganha
+ * um bloco próprio **embaixo** da letra, bem menor, que é como o Apple Music
+ * desenha e como a música soa — voz principal na frente, resposta atrás.
+ *
+ * O bloco vive dentro da própria linha (e não numa linha separada do
+ * documento), então ele rola, esmaece e acende junto com ela, e a palavra do
+ * apoio continua com o seu tempo. O tamanho é relativo à linha, para a subletra
+ * acompanhar o preset escolhido.
+ */
+.lyrics-backing {
+  display: block;
+  margin-top: 0.14em;
+  font-size: 0.42em;
+  line-height: 1.3;
+  /* A letra grande usa `-0.02em`; num corpo pequeno isso é ilegível. */
+  letter-spacing: 0;
+}
+
 .lyrics-punctuation {
   opacity: 0.85;
 }
