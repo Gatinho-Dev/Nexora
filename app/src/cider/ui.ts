@@ -15,6 +15,21 @@ export type PanelKind = "queue" | "lyrics";
 export type ImmersiveLayout = "cover" | "lyrics";
 export type ToastKind = "info" | "success" | "warning" | "error";
 
+/**
+ * Pergunta que a interface faz **antes** de fazer algo destrutivo.
+ *
+ * Hoje só existe uma: trocar a fila quando isso jogaria fora faixas colocadas à
+ * mão ("Reproduzir isto limpará a sua fila", na referência do iOS 18). Ela mora
+ * aqui, e não dentro da tela que disparou a ação, porque quem pergunta é a
+ * interface inteira — a mesma caixa serve para a busca, a estação e a biblioteca.
+ */
+export interface QueuePrompt {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
 export interface Toast {
   id: number;
   kind: ToastKind;
@@ -46,6 +61,8 @@ interface CiderUiStore {
   searchAttempts: Array<{ instance: string; error: string }>;
   lastSearchError: string | null;
   toasts: Toast[];
+  /** Pergunta pendente de confirmação (ver `QueuePrompt`). */
+  queuePrompt: QueuePrompt | null;
   onboarding: boolean;
   /**
    * O `<iframe>` do YouTube pode não reproduzir em navegadores sem DRM ou com
@@ -69,6 +86,8 @@ interface CiderUiStore {
   }) => void;
   toast: (toast: Omit<Toast, "id" | "timeoutMs"> & { timeoutMs?: number }) => void;
   dismissToast: (id: number) => void;
+  askQueuePrompt: (prompt: QueuePrompt) => void;
+  dismissQueuePrompt: () => void;
   setOnboarding: (value: boolean) => void;
   markLimitationSeen: () => void;
 }
@@ -86,6 +105,7 @@ export const useCiderUi = create<CiderUiStore>((set, get) => ({
   searchAttempts: [],
   lastSearchError: null,
   toasts: [],
+  queuePrompt: null,
   onboarding: false,
   limitationSeen: false,
 
@@ -126,6 +146,10 @@ export const useCiderUi = create<CiderUiStore>((set, get) => ({
   },
 
   dismissToast: (id) => set((state) => ({ toasts: state.toasts.filter((item) => item.id !== id) })),
+
+  askQueuePrompt: (prompt) => set({ queuePrompt: prompt }),
+
+  dismissQueuePrompt: () => set({ queuePrompt: null }),
 
   setOnboarding: (value) => set({ onboarding: value }),
 

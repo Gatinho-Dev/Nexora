@@ -13,6 +13,7 @@ import { useCider } from "../useCider";
 import { useLyrics } from "../useLyrics";
 import { useCiderUi } from "../ui";
 import { timecode } from "../format";
+import { clearManualQueue } from "../play";
 import { Button, EmptyState, IconButton } from "./primitives";
 
 export function CiderSidePanel() {
@@ -64,16 +65,37 @@ function QueuePanel() {
   }
 
   const upcoming = state.queue.slice(state.index + 1);
+  const manual = new Set(state.manual);
 
   return (
     <div className="stack">
+      {/*
+        * Dois botões, duas coisas diferentes:
+        *
+        * - **Limpar** tira só o que foi adicionado à mão (o desenho do iOS 18) e
+        *   deixa o contexto — o álbum, a lista, a estação — seguindo;
+        * - o segundo **para tudo** e esvazia a fila, que é o que a lixeira fazia
+        *   sozinha. Sem separar os dois, "limpar" seria sempre o gesto destrutivo
+        *   e o contexto que a pessoa estava ouvindo iria junto.
+        */}
       <div className="spread">
         <span className="xsmall faint uppercase">
           {state.index + 1} de {state.queue.length}
         </span>
-        <Button size="sm" variant="ghost" icon={<Trash2 size={14} />} onClick={engine.clearQueue}>
-          Limpar fila
-        </Button>
+        <div className="inline">
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={manual.size === 0}
+            title="Tira da fila só o que você adicionou à mão"
+            onClick={() => clearManualQueue(engine)}
+          >
+            Limpar{manual.size > 0 ? ` (${manual.size})` : ""}
+          </Button>
+          <IconButton label="Parar e limpar tudo" onClick={engine.clearQueue}>
+            <Trash2 size={14} />
+          </IconButton>
+        </div>
       </div>
 
       <div className="queue-section-label">Tocando agora</div>
@@ -97,6 +119,7 @@ function QueuePanel() {
           <div className="queue-section-label">A seguir</div>
           {upcoming.map((track, offset) => {
             const position = state.index + 1 + offset;
+            const byHand = manual.has(position);
             return (
               <div className="queue-item" key={`${track.videoId}-${position}`}>
                 <button
@@ -116,7 +139,16 @@ function QueuePanel() {
                   onClick={() => engine.playIndex(position)}
                   title={track.title}
                 >
-                  <span className="queue-title truncate">{track.title}</span>
+                  {/* A marca vem antes do título: depois dele o truncamento
+                      comeria justamente a informação nova. */}
+                  <span className="queue-title truncate">
+                    {byHand ? (
+                      <span className="queue-tag" title="Adicionada à mão — sai com “Limpar”">
+                        à mão
+                      </span>
+                    ) : null}
+                    {track.title}
+                  </span>
                   <span className="queue-artist truncate">{track.artist || track.channelName}</span>
                 </button>
                 <span className="queue-actions">

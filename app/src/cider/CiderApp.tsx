@@ -18,6 +18,7 @@ import { useCiderUi } from "./ui";
 import { CiderSidebar, CiderTopbar, CiderPlaybar, CiderAmbient } from "./components/Shell";
 import { CiderSidePanel } from "./components/SidePanel";
 import { CiderToasts } from "./components/Toasts";
+import { CiderQueuePrompt } from "./components/QueuePrompt";
 import { CiderCommandPalette } from "./components/CommandPalette";
 import { CiderImmersive } from "./components/Immersive";
 import { CiderLyricsScreen } from "./components/LyricsScreen";
@@ -107,7 +108,9 @@ export function CiderApp() {
         return;
       }
       if (event.key === "Escape") {
-        if (ui.palette) ui.setPalette(false);
+        // A pergunta é modal: ela é a primeira a sair.
+        if (ui.queuePrompt) ui.dismissQueuePrompt();
+        else if (ui.palette) ui.setPalette(false);
         else if (ui.lyricsScreen) ui.setLyricsScreen(false);
         else if (ui.immersive) ui.setImmersive(false);
         else if (ui.panel) ui.setPanel(null);
@@ -169,6 +172,7 @@ export function CiderApp() {
       <CiderSidePanel />
       <CiderPlaybar />
       <CiderToasts />
+      <CiderQueuePrompt />
       <CiderCommandPalette />
       <CiderLyricsScreen />
       <CiderImmersive />

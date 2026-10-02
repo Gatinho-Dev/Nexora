@@ -14,9 +14,15 @@
  * começar uma música sem querer quando o clique era para selecionar a linha.
  * A linha do que está tocando deixa o botão visível o tempo todo — a capa vira
  * o "pause" do que já está no ar.
+ *
+ * As ações de fila são **dois botões separados**, e não um menu escondido: o
+ * iOS 18 separou "Reproduzir Depois" de "Adicionar à Fila" justamente porque as
+ * duas eram ambíguas, e num site há espaço para os dois nomes à vista (com
+ * `aria-label`, que é o que um leitor de tela lê). Esconder a diferença atrás de
+ * um "…" repetiria o problema que a mudança veio corrigir.
  */
 
-import { ExternalLink, Heart, ListPlus, Pause, Play, Trash2 } from "lucide-react";
+import { ExternalLink, Heart, ListEnd, ListStart, Pause, Play, Trash2 } from "lucide-react";
 
 import type { CiderTrack } from "../api/query";
 import { timecode } from "../format";
@@ -119,6 +125,7 @@ export function TrackRow({
   favorite,
   showAlbum = true,
   onPlay,
+  onPlayAfter,
   onAddToQueue,
   onToggleFavorite,
   onRemove,
@@ -130,6 +137,9 @@ export function TrackRow({
   favorite?: boolean;
   showAlbum?: boolean;
   onPlay: () => void;
+  /** "Tocar depois": entra logo depois da faixa atual. */
+  onPlayAfter?: () => void;
+  /** "Adicionar à fila": entra no fim da fila. */
   onAddToQueue?: () => void;
   onToggleFavorite?: () => void;
   onRemove?: () => void;
@@ -177,6 +187,17 @@ export function TrackRow({
             <Heart size={15} />
           </IconButton>
         ) : null}
+        {onPlayAfter ? (
+          <IconButton
+            label="Tocar depois"
+            onClick={(event) => {
+              event.stopPropagation();
+              onPlayAfter();
+            }}
+          >
+            <ListStart size={15} />
+          </IconButton>
+        ) : null}
         {onAddToQueue ? (
           <IconButton
             label="Adicionar à fila"
@@ -185,7 +206,7 @@ export function TrackRow({
               onAddToQueue();
             }}
           >
-            <ListPlus size={15} />
+            <ListEnd size={15} />
           </IconButton>
         ) : null}
         {onRemove ? (
@@ -211,6 +232,7 @@ export function TrackList({
   favorites,
   showAlbum = true,
   onPlay,
+  onPlayAfter,
   onAddToQueue,
   onToggleFavorite,
   onRemove,
@@ -221,6 +243,7 @@ export function TrackList({
   favorites?: string[];
   showAlbum?: boolean;
   onPlay: (index: number) => void;
+  onPlayAfter?: (track: CiderTrack) => void;
   onAddToQueue?: (track: CiderTrack) => void;
   onToggleFavorite?: (track: CiderTrack) => void;
   onRemove?: (track: CiderTrack) => void;
@@ -239,6 +262,7 @@ export function TrackList({
           favorite={favoriteSet.has(track.videoId)}
           showAlbum={showAlbum}
           onPlay={() => onPlay(index)}
+          onPlayAfter={onPlayAfter ? () => onPlayAfter(track) : undefined}
           onAddToQueue={onAddToQueue ? () => onAddToQueue(track) : undefined}
           onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(track) : undefined}
           onRemove={onRemove ? () => onRemove(track) : undefined}
@@ -255,6 +279,7 @@ export function YoutubeRow({
   playing,
   favorite,
   onPlay,
+  onPlayAfter,
   onAddToQueue,
   onToggleFavorite,
 }: {
@@ -263,6 +288,7 @@ export function YoutubeRow({
   playing?: boolean;
   favorite?: boolean;
   onPlay: () => void;
+  onPlayAfter?: () => void;
   onAddToQueue?: () => void;
   onToggleFavorite?: () => void;
 }) {
@@ -299,9 +325,14 @@ export function YoutubeRow({
             <Heart size={15} />
           </IconButton>
         ) : null}
+        {onPlayAfter ? (
+          <IconButton label="Tocar depois" onClick={onPlayAfter}>
+            <ListStart size={15} />
+          </IconButton>
+        ) : null}
         {onAddToQueue ? (
           <IconButton label="Adicionar à fila" onClick={onAddToQueue}>
-            <ListPlus size={15} />
+            <ListEnd size={15} />
           </IconButton>
         ) : null}
         <a

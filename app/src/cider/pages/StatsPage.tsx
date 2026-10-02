@@ -14,7 +14,7 @@ import { useCiderLibrary } from "../library";
 import { deriveStats, formatDuration, shortDayLabel } from "../stats";
 import { EmptyState, SectionHeader, StatTile } from "../components/primitives";
 import { TrackList } from "../components/TrackList";
-import { playFrom } from "../play";
+import { playAfter, playFrom } from "../play";
 import { useNavigate } from "react-router";
 
 export function CiderStatsPage() {
@@ -144,6 +144,7 @@ export function CiderStatsPage() {
               favorites={favorites.map((track) => track.videoId)}
               showAlbum={false}
               onPlay={(index) => playFrom(engine, stats.topSongs.map((entry) => entry.track), index)}
+              onPlayAfter={(track) => playAfter(engine, [track])}
               onAddToQueue={(track) => engine.appendQueue([track])}
             />
           </div>

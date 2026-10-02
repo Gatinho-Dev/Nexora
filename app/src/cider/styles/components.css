@@ -754,6 +754,27 @@
   opacity: 1;
 }
 
+/*
+ * Marca da faixa que foi para a fila **à mão**.
+ *
+ * A fila tem duas origens — o contexto (álbum, lista, estação) e o que a pessoa
+ * colocou ali de propósito — e só a segunda sai no "Limpar". Sem a marca, o
+ * botão parecia escolher faixas por conta própria.
+ */
+.queue-item .queue-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-full);
+  font-size: 9px;
+  font-weight: var(--cider-weight-semibold);
+  letter-spacing: var(--cider-tracking-wide);
+  text-transform: uppercase;
+  color: var(--cider-text-faint);
+  vertical-align: 1px;
+}
+
 .queue-section-label {
   font-size: var(--cider-text-xs);
   text-transform: uppercase;

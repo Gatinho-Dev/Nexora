@@ -18,6 +18,16 @@
  */
 
 import { YouTubePlayer, type PlayerPhase } from "./core/player";
+import {
+  appendToQueue,
+  clearManual,
+  insertAfterCurrent,
+  manualIndexes,
+  queueFrom,
+  removeAt,
+  type QueueEntry,
+  type QueueState,
+} from "./core/queue";
 import type { CiderTrack } from "./api/query";
 
 export type RepeatMode = "off" | "all" | "one";
@@ -29,6 +39,13 @@ export interface PlayerSnapshot {
   durationMs: number;
   track: CiderTrack | null;
   queue: CiderTrack[];
+  /**
+   * Posições da fila colocadas **à mão** ("Tocar depois"/"Adicionar à fila").
+   *
+   * É o que o "Limpar" tira e o que a interface preserva quando pergunta antes
+   * de trocar a fila — o contexto (o álbum, a lista, a estação) não entra aqui.
+   */
+  manual: number[];
   index: number;
   volume: number;
   muted: boolean;
@@ -44,13 +61,15 @@ export interface CiderEngine {
   playIndex(index: number): void;
   playQueue(queue: CiderTrack[], startIndex?: number): void;
   /**
-   * Acrescenta faixas ao fim da fila atual.
+   * Acrescenta faixas ao fim da fila atual ("Adicionar à fila").
    *
    * Não há "mover para a fila" no player do YouTube: o engine é quem entrega a
    * lista completa ao player a cada troca de índice, então crescer a fila aqui
    * é suficiente e **não interrompe** a faixa que está tocando.
    */
   appendQueue(tracks: CiderTrack[]): void;
+  /** Insere faixas logo depois da que está tocando ("Tocar depois"). */
+  playAfter(tracks: CiderTrack[]): void;
   /**
    * Tira uma faixa da fila pela posição.
    *
@@ -59,7 +78,14 @@ export interface CiderEngine {
    * deixaria a interface dizendo que nada toca enquanto o áudio continua.
    */
   removeFromQueue(index: number): void;
-  /** Limpa a fila e para a reprodução. */
+  /**
+   * "Limpar": tira só o que foi adicionado à mão e devolve quantas saíram.
+   *
+   * O contexto (o álbum, a lista, a estação que começou a tocar) fica — é o
+   * desenho do iOS 18, e o oposto de `clearQueue`. A faixa atual nunca sai.
+   */
+  clearManualQueue(): number;
+  /** Limpa a fila inteira e para a reprodução. */
   clearQueue(): void;
   toggle(): void;
   next(): void;
@@ -83,7 +109,7 @@ export function createCiderEngine(): CiderEngine {
   const listeners = new Set<(snapshot: PlayerSnapshot) => void>();
   let onActivity: (track: CiderTrack | null, playing: boolean) => void = () => undefined;
 
-  let queue: CiderTrack[] = [];
+  let entries: QueueEntry[] = [];
   let index = -1;
   let volume = 0.8;
   let muted = false;
@@ -97,14 +123,31 @@ export function createCiderEngine(): CiderEngine {
   /** Fila resultante do último embaralhamento, para não re-sortear a cada skip. */
   let order: number[] | null = null;
 
+  /** A lista que o player recebe: a fila em ordem, sem a marcação de origem. */
+  function tracks(): CiderTrack[] {
+    return entries.map((entry) => entry.track);
+  }
+
+  /** Aplica uma mudança da fila pura (`core/queue.ts`) ao estado do motor. */
+  function apply(next: QueueState) {
+    if (next.entries === entries && next.index === index) return false;
+    entries = next.entries;
+    index = next.index;
+    // O embaralhamento vale para a fila de antes; a próxima troca de índice
+    // recalcula a ordem.
+    order = null;
+    return true;
+  }
+
   function snapshot(): PlayerSnapshot {
     return {
       phase,
       error,
       positionMs,
       durationMs,
-      track: index >= 0 ? (queue[index] ?? null) : null,
-      queue,
+      track: index >= 0 ? (entries[index]?.track ?? null) : null,
+      queue: tracks(),
+      manual: manualIndexes(entries),
       index,
       volume,
       muted,
@@ -120,7 +163,7 @@ export function createCiderEngine(): CiderEngine {
   }
 
   function announce() {
-    onActivity(index >= 0 ? (queue[index] ?? null) : null, phase === "playing");
+    onActivity(index >= 0 ? (entries[index]?.track ?? null) : null, phase === "playing");
   }
 
   /**
@@ -129,8 +172,8 @@ export function createCiderEngine(): CiderEngine {
    * fila não se reordena sozinha enquanto ela ouve.
    */
   function buildOrder(): number[] {
-    const result = queue.map((_, position) => position);
-    let seed = queue[index]?.videoId.length ?? 7;
+    const result = entries.map((_entry, position) => position);
+    let seed = entries[index]?.track.videoId.length ?? 7;
     for (let position = result.length - 1; position > 0; position--) {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff;
       const swap = seed % (position + 1);
@@ -140,20 +183,21 @@ export function createCiderEngine(): CiderEngine {
   }
 
   function currentOrder(): number[] {
-    if (!shuffle || queue.length < 2) {
+    const length = entries.length;
+    if (!shuffle || length < 2) {
       order = null;
-      return queue.map((_, position) => position);
+      return entries.map((_entry, position) => position);
     }
-    if (!order || order.length !== queue.length) order = buildOrder();
+    if (!order || order.length !== length) order = buildOrder();
     return order;
   }
 
   function playIndex(next: number) {
-    if (queue.length === 0) return;
-    const bounded = ((next % queue.length) + queue.length) % queue.length;
+    if (entries.length === 0) return;
+    const bounded = ((next % entries.length) + entries.length) % entries.length;
     index = bounded;
     void player.playQueue(
-      queue.map(item => item.videoId),
+      entries.map(entry => entry.track.videoId),
       bounded
     );
     announce();
@@ -161,7 +205,7 @@ export function createCiderEngine(): CiderEngine {
   }
 
   function playTrack(track: CiderTrack, list: CiderTrack[]) {
-    queue = list;
+    entries = queueFrom(list).entries;
     order = null;
     playIndex(
       Math.max(
@@ -172,30 +216,36 @@ export function createCiderEngine(): CiderEngine {
   }
 
   function playQueue(list: CiderTrack[], startIndex = 0) {
-    queue = list;
+    entries = queueFrom(list).entries;
     order = null;
     playIndex(startIndex);
   }
 
-  function appendQueue(tracks: CiderTrack[]) {
-    if (tracks.length === 0) return;
+  function appendQueue(list: CiderTrack[]) {
+    if (list.length === 0) return;
     // Um embaralhamento antigo não pode esconder as faixas novas: a ordem é
     // recalculada na próxima troca de índice.
-    const known = new Set(queue.map((item) => item.videoId));
-    const fresh = tracks.filter((item) => item.videoId && !known.has(item.videoId));
-    if (fresh.length === 0) return;
-    queue = [...queue, ...fresh];
-    order = null;
+    if (!apply(appendToQueue({ entries, index }, list))) return;
     publish();
   }
 
+  function playAfter(list: CiderTrack[]) {
+    if (list.length === 0) return;
+    const idle = index < 0 || entries.length === 0;
+    if (!apply(insertAfterCurrent({ entries, index }, list))) return;
+    // Sem nada tocando não existe "depois": elas são a fila nova, e precisam
+    // começar a tocar — a fila pura não conhece o player.
+    if (idle) playIndex(index);
+    else publish();
+  }
+
   function next() {
-    if (queue.length === 0) return;
+    if (entries.length === 0) return;
     if (repeat === "one") {
       playIndex(index);
       return;
     }
-    if (repeat === "off" && index + 1 >= queue.length) {
+    if (repeat === "off" && index + 1 >= entries.length) {
       // Fim da fila sem repetição: para, como todo player faz.
       player.pause();
       return;
@@ -206,7 +256,7 @@ export function createCiderEngine(): CiderEngine {
   }
 
   function previous() {
-    if (queue.length === 0) return;
+    if (entries.length === 0) return;
     // Como em qualquer player: voltar nos primeiros 3s recomeça a faixa.
     if (positionMs > 3000) {
       player.seekToMs(0);
@@ -220,17 +270,26 @@ export function createCiderEngine(): CiderEngine {
   }
 
   function removeFromQueue(position: number) {
-    if (position < 0 || position >= queue.length) return;
-    if (position === index) return;
-    queue = queue.filter((_item, at) => at !== position);
-    if (position < index) index -= 1;
-    order = null;
+    if (!apply(removeAt({ entries, index }, position))) return;
     publish();
+  }
+
+  /**
+   * "Limpar": o contexto fica, o que foi adicionado à mão sai.
+   *
+   * Devolve quantas faixas saíram — a interface usa o número no aviso ("3
+   * faixas removidas"), e zero significa que não havia nada à mão.
+   */
+  function clearManualQueue(): number {
+    const before = entries.length;
+    if (!apply(clearManual({ entries, index }))) return 0;
+    publish();
+    return before - entries.length;
   }
 
   function clearQueue() {
     player.pause();
-    queue = [];
+    entries = [];
     index = -1;
     order = null;
     durationMs = 0;
@@ -315,7 +374,9 @@ export function createCiderEngine(): CiderEngine {
     playIndex,
     playQueue,
     appendQueue,
+    playAfter,
     removeFromQueue,
+    clearManualQueue,
     clearQueue,
     toggle,
     next,

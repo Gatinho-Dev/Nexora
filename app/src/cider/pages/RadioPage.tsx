@@ -13,7 +13,7 @@ import { Info, Loader2, Play, Radio, Sparkles } from "lucide-react";
 
 import { useCider } from "../useCider";
 import { knownTracks, useCiderLibrary } from "../library";
-import { extendQueue, lastRadioSeed, playFrom, rememberSeed, startStation } from "../play";
+import { extendQueue, lastRadioSeed, playAfter, playFrom, rememberSeed, startStation } from "../play";
 import type { RadioSeed } from "../radio";
 import { radioQueries, suggestedSeeds } from "../radio";
 import { Button, EmptyState, Notice, SectionHeader } from "../components/primitives";
@@ -178,6 +178,7 @@ export function CiderRadioPage() {
                 playing={state.phase === "playing"}
                 favorites={favoriteIds}
                 onPlay={(index) => playFrom(engine, seedTracks, index)}
+                onPlayAfter={(track) => playAfter(engine, [track])}
                 onAddToQueue={(track) => engine.appendQueue([track])}
               />
             ) : (

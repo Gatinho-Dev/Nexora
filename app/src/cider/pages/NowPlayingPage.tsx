@@ -35,7 +35,7 @@ import { useCiderLibrary } from "../library";
 import { useCiderSettings } from "../settings/store";
 import { useLyrics } from "../useLyrics";
 import { useCiderUi } from "../ui";
-import { extendQueue, playFrom, toggleFavoriteWithToast } from "../play";
+import { extendQueue, playAfter, playFrom, toggleFavoriteWithToast } from "../play";
 import { AddToPlaylistButton } from "../components/AddToPlaylist";
 import { PlayableCover } from "../components/PlayableCover";
 import { Button, IconButton, Notice, ProgressSlider, SectionHeader } from "../components/primitives";
@@ -258,6 +258,7 @@ export function CiderNowPlayingPage() {
             favorites={favorites.map((track) => track.videoId)}
             showAlbum={false}
             onPlay={(index) => engine.playIndex(state.index + 1 + index)}
+            onPlayAfter={(track) => playAfter(engine, [track])}
             onAddToQueue={(track) => engine.appendQueue([track])}
           />
           <div className="inline mt-2">
