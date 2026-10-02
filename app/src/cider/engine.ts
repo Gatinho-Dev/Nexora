@@ -88,6 +88,16 @@ export interface CiderEngine {
   /** Limpa a fila inteira e para a reprodução. */
   clearQueue(): void;
   toggle(): void;
+  /**
+   * Pausa e retoma **sem alternar**.
+   *
+   * Existem separadas do `toggle` porque uma prévia precisa exatamente disso:
+   * calar o que toca e depois devolver a reprodução **como estava**. Com o
+   * `toggle`, uma prévia aberta com a música já pausada a faria começar a tocar
+   * ao terminar — o gesto de ouvir um trecho viraria um play.
+   */
+  pause(): void;
+  resume(): void;
   next(): void;
   previous(): void;
   seekMs(ms: number): void;
@@ -308,6 +318,17 @@ export function createCiderEngine(): CiderEngine {
     publish();
   }
 
+  function pause() {
+    player.pause();
+  }
+
+  /** Volta a tocar o que já estava carregado; sem faixa, não há o que retomar. */
+  function resume() {
+    if (index < 0) return;
+    autoplayBlocked = false;
+    player.resume();
+  }
+
   function seekMs(ms: number) {
     player.seekToMs(ms);
     positionMs = ms;
@@ -379,6 +400,8 @@ export function createCiderEngine(): CiderEngine {
     clearManualQueue,
     clearQueue,
     toggle,
+    pause,
+    resume,
     next,
     previous,
     seekMs,

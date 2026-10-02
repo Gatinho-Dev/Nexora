@@ -192,6 +192,21 @@ export class YouTubePlayer {
   /** `true` depois do primeiro gesto: a partir daí o autoplay é permitido. */
   private unlocked = false;
 
+  /**
+   * `true` quando a API já entregou um player que responde ao comando.
+   *
+   * O objeto de `new YT.Player` **não** aceita comandos antes do `onReady` (e o
+   * `mount` recria o player ao trocar de host). Sem esta trava, uma prévia
+   * cancelada no mesmo segundo em que começou chamava `pauseVideo` num objeto
+   * sem os métodos: a exceção estourava no meio da limpeza da interface, que
+   * ficava com a prévia presa na tela e a música pausada.
+   */
+  private readyFor(command: "pauseVideo" | "playVideo" | "seekTo" | "setVolume"): boolean {
+    if (!this.ready || !this.player) return false;
+    const methods = this.player as unknown as Record<string, unknown>;
+    return typeof methods[command] === "function";
+  }
+
   constructor(hooks: PlayerHooks = {}) {
     this.hooks = hooks;
   }
@@ -260,7 +275,7 @@ export class YouTubePlayer {
           events: {
             onReady: () => {
               this.ready = true;
-              this.player?.setVolume(Math.round(this.volume * 100));
+              this.setVolume(this.volume);
               if (this.pending) {
                 const pending = this.pending;
                 this.pending = null;
@@ -359,7 +374,8 @@ export class YouTubePlayer {
   }
 
   pause(): void {
-    this.player?.pauseVideo();
+    if (!this.readyFor("pauseVideo")) return;
+    this.player!.pauseVideo();
   }
 
   resume(): void {
@@ -367,17 +383,19 @@ export class YouTubePlayer {
       this.hooks.onAutoplayBlocked?.();
       return;
     }
-    this.player?.playVideo();
+    if (!this.readyFor("playVideo")) return;
+    this.player!.playVideo();
   }
 
   seekToMs(ms: number): void {
-    if (!this.player) return;
-    this.player.seekTo(Math.max(0, ms / 1000), true);
+    if (!this.readyFor("seekTo")) return;
+    this.player!.seekTo(Math.max(0, ms / 1000), true);
   }
 
   setVolume(volume: number): void {
     this.volume = Math.max(0, Math.min(1, volume));
-    this.player?.setVolume(Math.round(this.volume * 100));
+    if (!this.readyFor("setVolume")) return;
+    this.player!.setVolume(Math.round(this.volume * 100));
   }
 
   /** Posição considerando um `startSeconds` inicial (evita a barra em 0). */

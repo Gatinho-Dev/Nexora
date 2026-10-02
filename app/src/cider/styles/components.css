@@ -761,7 +761,8 @@
  * colocou ali de propósito — e só a segunda sai no "Limpar". Sem a marca, o
  * botão parecia escolher faixas por conta própria.
  */
-.queue-item .queue-tag {
+.queue-item .queue-tag,
+.queue-add-row .queue-tag {
   display: inline-block;
   margin-right: 6px;
   padding: 1px 6px;
@@ -1343,4 +1344,208 @@
     transparent 70%
   );
   pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ *
+ * "Adicionar músicas à fila" (a gaveta de busca dentro da fila)      *
+ * ------------------------------------------------------------------ */
+
+/*
+ * O botão mora no fim da lista, ocupando a largura inteira: o lugar de pedir
+ * mais música é onde a fila acaba. A altura mínima de 44px é a mesma das
+ * diretrizes que o resto da referência segue — alvo de toque, não um detalhe.
+ */
+.queue-add-open {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+  border: 1px dashed var(--cider-border-strong);
+  background: transparent;
+}
+
+.queue-add-open:hover {
+  border-style: solid;
+  background: var(--cider-surface);
+}
+
+.queue-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-3);
+  min-height: 0;
+}
+
+.queue-add .search-field {
+  width: 100%;
+}
+
+.queue-add-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.queue-add-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--cider-space-3);
+  padding: 4px var(--cider-space-2);
+  border-radius: var(--cider-radius-sm);
+  transition: background var(--cider-duration-fast);
+}
+
+.queue-add-row:hover {
+  background: var(--cider-surface);
+}
+
+.queue-add-row[data-in-queue="true"] {
+  opacity: 0.62;
+}
+
+.queue-add-art {
+  display: block;
+  inline-size: 40px;
+  block-size: 40px;
+}
+
+.queue-add-art img,
+.queue-add-art-fallback {
+  inline-size: 40px;
+  block-size: 40px;
+  border-radius: var(--cider-radius-sm);
+  object-fit: cover;
+  background: var(--cider-surface-strong);
+}
+
+.queue-add-art-fallback {
+  display: grid;
+  place-items: center;
+  color: var(--cider-text-faint);
+  font-weight: var(--cider-weight-semibold);
+}
+
+.queue-add-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.queue-add-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cider-space-1);
+}
+
+/* Alvo de toque de 44px, como os controles da fila na referência. */
+.queue-add-actions .btn.icon,
+.queue-add-row .queue-add-actions .btn.icon {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.queue-add-all {
+  margin-top: var(--cider-space-2);
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+}
+
+/* ------------------------------------------------------------------ *
+ * Prévia de 30 segundos                                              *
+ * ------------------------------------------------------------------ */
+
+/*
+ * A área é fixa porque o `<iframe>` do player precisa de área real para
+ * inicializar — e porque um bloco que aparece e some faria o diálogo inteiro
+ * pular a cada prévia. O vídeo em si fica invisível (`preview-dock`): ele é
+ * áudio de vitrine, não uma segunda tela de reprodução.
+ */
+.preview-area {
+  position: relative;
+  display: grid;
+  align-items: center;
+  min-height: 64px;
+  padding: var(--cider-space-2);
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-md);
+  background: var(--cider-surface);
+  overflow: hidden;
+}
+
+.preview-dock {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.preview-hint {
+  margin: 0;
+}
+
+.preview-tile {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--cider-space-3);
+}
+
+.preview-tile img {
+  inline-size: 48px;
+  block-size: 48px;
+  border-radius: var(--cider-radius-sm);
+  object-fit: cover;
+  background: var(--cider-surface-strong);
+}
+
+.preview-art-fallback {
+  display: grid;
+  place-items: center;
+  inline-size: 48px;
+  block-size: 48px;
+  border-radius: var(--cider-radius-sm);
+  background: var(--cider-surface-strong);
+  color: var(--cider-text-faint);
+  font-weight: var(--cider-weight-semibold);
+}
+
+.preview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.preview-label {
+  font-size: var(--cider-text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--cider-tracking-wide);
+  color: var(--cider-text-faint);
+}
+
+.preview-title {
+  font-size: var(--cider-text-sm);
+  font-weight: var(--cider-weight-medium);
+}
+
+.preview-progress {
+  position: relative;
+  block-size: 3px;
+  border-radius: var(--cider-radius-full);
+  background: var(--cider-surface-strong);
+  overflow: hidden;
+}
+
+.preview-progress > span {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--cider-accent);
+  transition: width 240ms linear;
 }

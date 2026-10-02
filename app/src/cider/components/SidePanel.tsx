@@ -7,7 +7,7 @@
  * saída para escolher, e um painel vazio seria pior que a ausência dele.
  */
 
-import { ExternalLink, ListMusic, Loader2, MicVocal, Trash2, X } from "lucide-react";
+import { ExternalLink, ListMusic, Loader2, MicVocal, Plus, Trash2, X } from "lucide-react";
 
 import { useCider } from "../useCider";
 import { useLyrics } from "../useLyrics";
@@ -52,7 +52,14 @@ export function CiderSidePanel() {
 
 function QueuePanel() {
   const { state, engine } = useCider();
+  const openAdd = useCiderUi((store) => store.setQueueAddOpen);
   const current = state.track;
+
+  const addButton = (
+    <Button className="queue-add-open" icon={<Plus size={15} />} onClick={() => openAdd(true)}>
+      Adicionar músicas à fila
+    </Button>
+  );
 
   if (!current) {
     return (
@@ -60,6 +67,7 @@ function QueuePanel() {
         icon={<ListMusic size={22} />}
         title="Fila vazia"
         message="Pesquise uma música ou abra um tema em Explorar para começar uma fila."
+        action={addButton}
       />
     );
   }
@@ -164,6 +172,12 @@ function QueuePanel() {
           })}
         </>
       )}
+
+      {/*
+        * No fim da lista, como na referência: o lugar de pedir mais música é
+        * onde a fila acaba, não uma barra de ferramentas no topo.
+        */}
+      {addButton}
     </div>
   );
 }
