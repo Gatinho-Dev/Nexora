@@ -145,7 +145,103 @@ describe("entrada e saída da sessão", () => {
 
   it("sair sem estar em sessão não inventa nada", () => {
     const registry = new ListenRegistry(firstChar);
-    expect(registry.leave(99)).toEqual({ session: null, ended: false });
+    expect(registry.leave(99)).toEqual({ session: null, ended: false, waiting: false });
+  });
+});
+
+describe("retomada e carência do anfitrião", () => {
+  /** Token previsível: o que importa é ser único e estável por membro. */
+  function tokens() {
+    let count = 0;
+    return () => `tok-${(count += 1)}`;
+  }
+
+  function session(graceMs = 120_000) {
+    const registry = new ListenRegistry(firstChar, tokens(), graceMs);
+    const created = registry.create(user(1, "Ana"));
+    if (!created.ok) throw new Error("a sessão não abriu");
+    const joined = registry.join("AAAAAA", user(2, "Bia"));
+    if (!joined.ok) throw new Error("a convidada não entrou");
+    return { registry, host: created.token, guest: joined.token };
+  }
+
+  it("cada membro recebe um segredo só dele", () => {
+    const { host, guest } = session();
+    expect(host).toBeTruthy();
+    expect(guest).toBeTruthy();
+    expect(host).not.toBe(guest);
+  });
+
+  it("queda de conexão do anfitrião deixa a sessão esperando, não a encerra", () => {
+    const { registry } = session();
+    const left = registry.leave(1, { keepHost: true, now: 5_000 });
+    expect(left).toMatchObject({ ended: false, waiting: true });
+    expect(registry.hostAway("AAAAAA")).toBe(true);
+    // Os convidados continuam na sala, e o anfitrião segue na lista (é para onde
+    // ele volta).
+    expect(registry.members("AAAAAA").map((m) => m.userId)).toEqual([1, 2]);
+    expect(registry.sessionOf(2)?.code).toBe("AAAAAA");
+  });
+
+  it("quem saiu de verdade encerra a sessão na hora", () => {
+    const { registry } = session();
+    expect(registry.leave(1)).toMatchObject({ ended: true, waiting: false });
+    expect(registry.sessionOf(2)).toBeNull();
+  });
+
+  it("o anfitrião volta com o token e retoma o comando", () => {
+    const { registry, host } = session();
+    registry.leave(1, { keepHost: true, now: 1_000 });
+    const resumed = registry.resume("AAAAAA", host, 2_000);
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) return;
+    expect(resumed.member.role).toBe("host");
+    expect(resumed.session.hostAwayAt).toBeNull();
+    expect(registry.hostAway("AAAAAA")).toBe(false);
+    // O anfitrião volta a estar "dentro": a sessão é dele de novo.
+    expect(registry.codeOf(1)).toBe("AAAAAA");
+    expect(registry.codeOf(2)).toBe("AAAAAA");
+  });
+
+  it("o convidado volta com o token e recupera a própria vaga", () => {
+    const { registry, guest } = session();
+    registry.leave(2);
+    expect(registry.members("AAAAAA").map((m) => m.userId)).toEqual([1]);
+    const resumed = registry.resume("AAAAAA", guest, 3_000);
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) return;
+    expect(resumed.member.userId).toBe(2);
+    expect(resumed.member.role).toBe("guest");
+    expect(registry.members("AAAAAA").map((m) => m.userId)).toEqual([1, 2]);
+  });
+
+  it("token desconhecido ou de sessão que já acabou não retoma nada", () => {
+    const { registry, host } = session();
+    expect(registry.resume("AAAAAA", "palpite").ok).toBe(false);
+    expect(registry.resume("AAAAAA", null).ok).toBe(false);
+    expect(registry.resume("BBBBBB", host).ok).toBe(false);
+    expect(registry.resume("AAAAAA", host).ok).toBe(true);
+  });
+
+  it("acabou a carência, a sessão fecha e devolve quem ficou", () => {
+    const { registry, host } = session(1_000);
+    registry.leave(1, { keepHost: true, now: 10_000 });
+    expect(registry.expireHostAway("AAAAAA", 10_500)).toBeNull();
+    const expired = registry.expireHostAway("AAAAAA", 11_000);
+    expect(expired?.members.map((m) => m.userId)).toEqual([1, 2]);
+    expect(registry.sessionOf(2)).toBeNull();
+    expect(registry.codeOf(2)).toBeNull();
+    // O token não ressuscita uma sessão encerrada.
+    expect(registry.resume("AAAAAA", host, 11_500).ok).toBe(false);
+  });
+
+  it("retomar depois da carência também encerra, em vez de aceitar a volta", () => {
+    const { registry, host } = session(1_000);
+    registry.leave(1, { keepHost: true, now: 10_000 });
+    const late = registry.resume("AAAAAA", host, 12_000);
+    expect(late.ok).toBe(false);
+    if (!late.ok) expect(late.reason).toContain("terminou");
+    expect(registry.sessionOf(2)).toBeNull();
   });
 });
 

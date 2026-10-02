@@ -36,11 +36,14 @@ import {
   listenStateFrom,
   listenStateSignature,
   makeReaction,
+  parseListenSession,
   pruneReactions,
   publishPlan,
   readListenCode,
+  serializeListenSession,
   trackFromListen,
   type FloatingReaction,
+  type StoredListenSession,
 } from "./core/listen";
 
 export interface ListenSessionView {
@@ -53,6 +56,14 @@ export interface ListenSessionView {
   sync: CiderListenState | null;
   /** Quando esse estado chegou, no relógio local. */
   receivedAt: number;
+  /**
+   * Segredo de retomada **do próprio usuário**.
+   *
+   * É o que o servidor devolveu ao entrar e o que permite voltar para a mesma
+   * vaga (e para a mesma função — anfitrião ou convidado) depois de recarregar
+   * a página. Nunca sai deste cliente.
+   */
+  token: string;
 }
 
 export interface ListenInvite {
@@ -75,6 +86,10 @@ interface ListenStore {
    * exatamente o acidente que a prévia do "Adicionar músicas à fila" evita.
    */
   hold: boolean;
+  /** `false` quando o anfitrião está ausente (a sessão está esperando ele). */
+  hostPresent: boolean;
+  /** `true` quando o WebSocket caiu — a sessão pode voltar; o aviso é honesto. */
+  offline: boolean;
 
   reset: () => void;
   setSession: (session: ListenSessionView) => void;
@@ -83,6 +98,8 @@ interface ListenStore {
   setInvite: (invite: ListenInvite | null) => void;
   setError: (error: string | null) => void;
   setHold: (hold: boolean) => void;
+  setHostPresent: (present: boolean) => void;
+  setOffline: (offline: boolean) => void;
   pushReaction: (reaction: FloatingReaction) => void;
   pruneReactions: (now: number) => void;
 }
@@ -93,10 +110,20 @@ export const useCiderListen = create<ListenStore>((set) => ({
   reactions: [],
   error: null,
   hold: false,
+  hostPresent: true,
+  offline: false,
 
   reset: () =>
-    set({ session: null, invite: null, reactions: [], error: null, hold: false }),
-  setSession: (session) => set({ session, error: null }),
+    set({
+      session: null,
+      invite: null,
+      reactions: [],
+      error: null,
+      hold: false,
+      hostPresent: true,
+      offline: false,
+    }),
+  setSession: (session) => set({ session, error: null, hostPresent: true, offline: false }),
   setMembers: (members) =>
     set((store) => (store.session ? { session: { ...store.session, members } } : {})),
   setSync: (sync) =>
@@ -106,6 +133,8 @@ export const useCiderListen = create<ListenStore>((set) => ({
   setInvite: (invite) => set({ invite }),
   setError: (error) => set({ error }),
   setHold: (hold) => set({ hold }),
+  setHostPresent: (hostPresent) => set({ hostPresent }),
+  setOffline: (offline) => set({ offline }),
   pushReaction: (reaction) =>
     set((store) => ({
       reactions: pruneReactions([...store.reactions, reaction], reaction.at),
@@ -122,6 +151,52 @@ let engine: CiderEngine | null = null;
 let lastSignature: string | null = null;
 let lastPublishedAt = 0;
 let publishTimer: ReturnType<typeof setTimeout> | null = null;
+/** `true` enquanto esperamos a resposta de uma retomada. */
+let reconnecting = false;
+/** Evita pedir a mesma retomada duas vezes (montagem + socket abrindo). */
+let lastResumeAt = 0;
+
+/**
+ * Chave da sessão guardada.
+ *
+ * `sessionStorage`, e não `localStorage`: a sessão pertence à **aba**. Guardá-la
+ * no armazenamento do navegador faria uma segunda aba "retomar" a mesma sessão,
+ * virando duas conexões disputando a mesma vaga — e o reload, que é o caso que
+ * importa aqui, preserva o `sessionStorage`.
+ */
+const STORAGE_KEY = "cider:listen";
+
+function rememberSession(session: ListenSessionView): void {
+  try {
+    window.sessionStorage.setItem(
+      STORAGE_KEY,
+      serializeListenSession({
+        code: session.code,
+        role: session.me.role,
+        token: session.token,
+      }),
+    );
+  } catch {
+    // Navegador sem armazenamento (modo privado restrito): a sessão vale até
+    // recarregar a página, e a interface continua funcionando.
+  }
+}
+
+function forgetStoredSession(): void {
+  try {
+    window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Nada a limpar.
+  }
+}
+
+function readStoredSession(): StoredListenSession | null {
+  try {
+    return parseListenSession(window.sessionStorage.getItem(STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
 
 function isHost(): boolean {
   return useCiderListen.getState().session?.me.role === "host";
@@ -205,6 +280,24 @@ function applyFollow(): void {
   }
 }
 
+/**
+ * Adota o estado que o servidor guardou (a volta do anfitrião).
+ *
+ * Sem isto, o anfitrião recarregaria a página com o motor vazio e **publicaria
+ * o vazio**: a sessão de todos perderia a música no primeiro batimento. O estado
+ * guardado no servidor é a memória da sessão, e o anfitrião que volta é quem
+ * deve adotá-la.
+ */
+function adoptRemoteState(state: CiderListenState): void {
+  if (!engine || !state.track) return;
+  engine.followQueue(
+    state.queue.map(trackFromListen),
+    state.index,
+    state.positionMs,
+    state.playing,
+  );
+}
+
 const REQUEST_LABEL: Record<CiderListenRequestKind, string> = {
   next: "pulou a faixa",
   previous: "voltou uma faixa",
@@ -250,23 +343,38 @@ function handleListenEvent(event: WSServerEvent): void {
 
   switch (event.t) {
     case "cider:listen:session": {
+      const returning = reconnecting;
+      reconnecting = false;
       lastSignature = null;
       lastPublishedAt = 0;
-      store.setSession({
+      const session: ListenSessionView = {
         code: event.code,
         hostId: event.hostId,
         me: event.me,
         members: event.members,
         sync: event.state,
         receivedAt: Date.now(),
-      });
-      if (event.me.role === "host") {
+        token: event.token,
+      };
+      store.setSession(session);
+      // A sessão fica guardada para o próximo carregamento da página: é o que
+      // faz "Ouvir junto" atravessar um reload.
+      rememberSession(session);
+
+      if (returning) {
+        ciderToast(
+          "success",
+          "De volta à sessão de escuta",
+          event.me.role === "host"
+            ? "A sessão continuou esperando por você."
+            : "Você voltou para onde a sessão está.",
+        );
+      } else if (event.me.role === "host") {
         ciderToast(
           "success",
           "Sessão de escuta aberta",
           `Código ${event.code}. Quem entrar ouve o que você está ouvindo.`,
         );
-        publishTick(Date.now());
       } else {
         const host = event.members.find((member) => member.userId === event.hostId);
         ciderToast(
@@ -274,7 +382,38 @@ function handleListenEvent(event: WSServerEvent): void {
           `Ouvindo junto com ${host?.name ?? "o anfitrião"}`,
           "O que toca aqui é o que toca na sessão.",
         );
+      }
+
+      if (event.me.role === "host") {
+        // O anfitrião que volta adota a memória da sessão; quem acabou de abrir
+        // publica o que o motor dele já tinha.
+        if (returning && event.state) adoptRemoteState(event.state);
+        publishTick(Date.now());
+      } else {
         applyFollow();
+      }
+      break;
+    }
+
+    case "cider:listen:host-presence": {
+      if (!store.session) return;
+      store.setHostPresent(event.present);
+      const hostName =
+        store.session.members.find((member) => member.userId === store.session?.hostId)?.name ??
+        "O anfitrião";
+      if (event.present) {
+        ciderToast("success", `${hostName} voltou`, "A sessão está de novo em movimento.");
+      } else {
+        // Sem o anfitrião não chega sincronização nenhuma: o convidado pausa em
+        // vez de seguir sozinho e ir ficando para trás. A volta dele publica o
+        // estado de novo e o `applyFollow` retoma no ponto certo — parar aqui é
+        // o que faz o aviso "a música fica parada onde estava" ser verdade.
+        if (store.session.me.role === "guest") engine?.pause();
+        ciderToast(
+          "info",
+          `${hostName} caiu da sessão`,
+          `A sala espera por ele por ${Math.round(CiderListen.HOST_GRACE_MS / 60_000)} minutos.`,
+        );
       }
       break;
     }
@@ -330,6 +469,8 @@ function handleListenEvent(event: WSServerEvent): void {
       const hostName = store.session?.members.find(
         (member) => member.userId === store.session?.hostId,
       )?.name;
+      reconnecting = false;
+      forgetStoredSession();
       store.reset();
       ciderToast(
         "info",
@@ -352,6 +493,12 @@ function handleListenEvent(event: WSServerEvent): void {
     }
 
     case "cider:listen:denied": {
+      // Numa retomada, "negado" quer dizer que a sessão não existe mais: não há
+      // o que tentar de novo no próximo carregamento.
+      if (reconnecting) {
+        reconnecting = false;
+        forgetStoredSession();
+      }
       store.setError(event.reason);
       ciderToast("warning", "A sessão de escuta não abriu", event.reason);
       break;
@@ -394,13 +541,34 @@ export function joinListen(rawCode: string): void {
 
 export function leaveListen(): void {
   realtime.send({ t: "cider:listen:leave" });
+  forgetStoredSession();
   useCiderListen.getState().reset();
 }
 
 export function endListen(): void {
   realtime.send({ t: "cider:listen:end" });
+  forgetStoredSession();
   useCiderListen.getState().reset();
   ciderToast("info", "Sessão encerrada", "Quem estava ouvindo junto voltou para a própria fila.");
+}
+
+/**
+ * Volta para a sessão guardada nesta aba.
+ *
+ * É o caminho de **recarregar a página** e de **reconectar** depois de uma queda
+ * de rede — os dois casos em que a pessoa não fez nada de errado e não deveria
+ * perder a sessão. O `token` diz ao servidor quem ela era, então ela volta para a
+ * própria vaga (e para a própria função: anfitrião continua anfitrião).
+ */
+export function resumeListen(): boolean {
+  const stored = readStoredSession();
+  if (!stored) return false;
+  const now = Date.now();
+  if (now - lastResumeAt < 3_000) return true;
+  lastResumeAt = now;
+  reconnecting = true;
+  sendWhenConnected({ t: "cider:listen:resume", code: stored.code, token: stored.token });
+  return true;
 }
 
 export function inviteToListen(userId: number): void {
@@ -476,15 +644,25 @@ export function attachListenEngine(motor: CiderEngine): () => void {
   engine = motor;
   const offEvents = realtime.on(handleListenEvent);
   const offConnect = realtime.onConnect((connected) => {
-    // A sessão vive no processo do realtime e enquanto o socket vive: se a
-    // conexão caiu, o servidor já tirou este usuário da sala. Dizer isso é
-    // melhor do que continuar mostrando uma sessão que não existe mais.
-    if (!connected && useCiderListen.getState().session) {
-      useCiderListen.getState().reset();
-      ciderToast("warning", "A sessão de escuta terminou", "A conexão caiu — entre de novo pelo painel.");
+    const store = useCiderListen.getState();
+    if (connected) {
+      store.setOffline(false);
+      // Reconectou: se esta aba tinha uma sessão, ela volta agora — o servidor
+      // guardou o estado e o lugar de cada um.
+      resumeListen();
+      return;
+    }
+    // A conexão caiu, e cair não é sair: a sessão fica esperando (a carência é
+    // do servidor). O aviso é honesto sobre o que está acontecendo agora.
+    store.setOffline(true);
+    if (store.session) {
+      ciderToast("warning", "A conexão caiu", "Tentando voltar para a sessão de escuta…");
     }
   });
   const offEngine = motor.subscribe(() => publishTick(Date.now()));
+  // Recarregar a página é o caso principal: a aba guardou a sessão e a retoma
+  // assim que há com quem falar.
+  resumeListen();
   return () => {
     offEvents();
     offConnect();

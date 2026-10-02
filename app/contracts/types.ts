@@ -715,6 +715,14 @@ export type WSClientEvent =
   /** Abre uma sessão de escuta compartilhada e vira o anfitrião. */
   | { t: "cider:listen:start" }
   | { t: "cider:listen:join"; code: string }
+  /**
+   * Volta para uma sessão conhecida (recarregamento, reconexão).
+   *
+   * `token` é o segredo que o servidor entregou a **este** membro quando ele
+   * entrou: sem ele, qualquer um que soubesse o código poderia retomar a vaga
+   * de outra pessoa — inclusive a do anfitrião, que manda na fila.
+   */
+  | { t: "cider:listen:resume"; code: string; token: string }
   | { t: "cider:listen:leave" }
   /** O anfitrião encerra a sessão para todos. */
   | { t: "cider:listen:end" }
@@ -991,7 +999,17 @@ export type WSServerEvent =
       hostId: number;
       members: CiderListenMember[];
       state: CiderListenState | null;
+      /** Segredo de retomada do próprio dono (nunca o de outro membro). */
+      token: string;
     }
+  /**
+   * O anfitrião saiu (`present: false`) ou voltou (`present: true`).
+   *
+   * Enquanto ele está ausente a sessão existe: os convidados continuam juntos,
+   * mas o estado não avança — e é melhor dizer isso do que deixá-los seguindo
+   * um player que não está mais lá.
+   */
+  | { t: "cider:listen:host-presence"; code: string; present: boolean }
   | { t: "cider:listen:members"; code: string; members: CiderListenMember[] }
   | { t: "cider:listen:sync"; code: string; state: CiderListenState }
   | {

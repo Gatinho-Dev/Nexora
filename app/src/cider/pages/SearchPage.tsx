@@ -13,7 +13,7 @@
  * entrega uma lista longa.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useSearchParams } from "react-router";
 import { Loader2, Play, Search } from "lucide-react";
 
@@ -31,6 +31,7 @@ import {
   toggleFavoriteWithToast,
 } from "../play";
 import { useCiderUi } from "../ui";
+import { MOOD_TILES } from "../core/mixes";
 import { Button, EmptyState, Notice, SectionHeader, Switch } from "../components/primitives";
 import { YoutubeRow } from "../components/TrackList";
 
@@ -365,11 +366,46 @@ export function CiderSearchPage() {
         />
       ) : null}
 
+      {/*
+        * Antes de digitar, a exploração heurística da referência: blocos de
+        * género, humor e atividade. Cada bloco **mostra a consulta real** que
+        * executa — o contrário de um rótulo de marketing que esconde a busca —
+        * e o clique a leva para o campo, onde ainda pode ser editada.
+        */}
+      {!query ? (
+        <section className="section">
+          <SectionHeader
+            title="Explorar por humor, género ou atividade"
+            action={<span className="xsmall faint">O bloco mostra a consulta que ele faz</span>}
+          />
+          <div className="mood-grid">
+            {MOOD_TILES.map((tile) => (
+              <button
+                key={tile.id}
+                type="button"
+                className="mood-tile"
+                style={{ "--mood-tone": tile.tone } as CSSProperties}
+                onClick={() => setParams({ q: tile.query })}
+                title={`Buscar “${tile.query}”`}
+              >
+                <span className="mood-tile-label">{tile.label}</span>
+                <span className="mood-tile-query">{tile.query}</span>
+              </button>
+            ))}
+          </div>
+          <p className="xsmall faint" style={{ marginTop: 8 }}>
+            São buscas diretas: o bloco mostra o texto que vai para a fonte, sem uma camada de
+            "recomendação" que não existe. Toque num bloco para buscar — o termo cai no campo, e
+            você pode ajustá-lo antes de confirmar.
+          </p>
+        </section>
+      ) : null}
+
       {!query ? (
         <EmptyState
           icon={<Search size={22} />}
           title="Digite para buscar"
-          message="Os resultados aparecem aqui conforme você digita, e a lista continua sozinha enquanto você rola."
+          message="Os resultados aparecem aqui conforme você digita, e a lista continua sozinha enquanto você rola. Os blocos acima começam por humor, género ou atividade."
         />
       ) : null}
     </div>

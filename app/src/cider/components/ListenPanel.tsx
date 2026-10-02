@@ -17,7 +17,7 @@
 import { useMemo, useState } from "react";
 import { Check, ClipboardCopy, DoorOpen, LogIn, Radio, Users, X } from "lucide-react";
 
-import { CIDER_LISTEN_EMOJIS } from "@contracts/constants";
+import { CIDER_LISTEN_EMOJIS, CiderListen } from "@contracts/constants";
 import { trpc } from "@/providers/trpc";
 import {
   endListen,
@@ -37,6 +37,8 @@ export function CiderListenPanel() {
   const session = useCiderListen((store) => store.session);
   const invite = useCiderListen((store) => store.invite);
   const error = useCiderListen((store) => store.error);
+  const hostPresent = useCiderListen((store) => store.hostPresent);
+  const offline = useCiderListen((store) => store.offline);
   const [code, setCode] = useState("");
 
   const host = session?.members.find((member) => member.userId === session.hostId) ?? null;
@@ -50,9 +52,27 @@ export function CiderListenPanel() {
           </Notice>
         ) : null}
 
+        {offline && session ? (
+          <Notice tone="warning" title="Sem conexão">
+            A sessão fica guardada nesta aba: assim que a conexão voltar, você retoma de onde estava.
+          </Notice>
+        ) : null}
+
+        {/*
+          * O anfitrião caído não encerra a sessão: ela **espera** por ele. Dizer
+          * isso é melhor do que deixar a sala parecendo quebrada — e melhor do
+          * que esconder que existe um prazo.
+        */}
+        {session && !hostPresent && session.me.role === "guest" ? (
+          <Notice tone="warning" title="O anfitrião caiu da sessão">
+            A sala espera ele voltar por {Math.round(CiderListen.HOST_GRACE_MS / 60_000)} minutos — a
+            música fica parada onde estava. Se ele não voltar, a sessão termina sozinha.
+          </Notice>
+        ) : null}
+
         {session ? (
           <>
-            <div className="listen-head">
+            <div className="listen-head" data-away={!hostPresent ? "true" : "false"}>
               <span className="listen-role">
                 <Radio size={15} />
                 {session.me.role === "host"

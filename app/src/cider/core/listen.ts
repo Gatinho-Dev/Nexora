@@ -18,6 +18,7 @@
 
 import { CiderListen } from "@contracts/constants";
 import type { CiderListenState, CiderListenTrack } from "@contracts/types";
+
 import type { CiderTrack } from "../api/query";
 
 /** Recorte do motor que a decisão do convidado precisa enxergar. */
@@ -260,4 +261,50 @@ export function readListenCode(raw: string): string | null {
 /** Texto para compartilhar a sessão fora do app (chat, etc.). */
 export function inviteMessage(code: string, hostName: string): string {
   return `${hostName} está ouvindo junto no Cider. Entre na sessão com o código ${code}.`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Sessão guardada (sobrevive ao recarregamento)                       *
+ * ------------------------------------------------------------------ */
+
+/**
+ * O que basta para voltar para a sessão: o código, o papel e o segredo.
+ *
+ * Não guarda o estado da fila: quem guarda isso é o servidor, que devolve o
+ * último estado publicado na retomada. Duplicar a fila aqui criaria duas
+ * verdades que divergem calado.
+ */
+export interface StoredListenSession {
+  code: string;
+  role: "host" | "guest";
+  token: string;
+}
+
+export function serializeListenSession(session: StoredListenSession): string {
+  return JSON.stringify({ code: session.code, role: session.role, token: session.token });
+}
+
+/**
+ * Lê o que ficou guardado — e **recusa** o que não serve.
+ *
+ * É o que roda a cada carregamento da página, então não pode confiar no que
+ * encontra: um código torto, um papel inventado ou um token vazio viram `null`
+ * (e a sessão simplesmente não é retomada) em vez de uma tentativa inválida no
+ * servidor a cada recarga.
+ */
+export function parseListenSession(raw: string | null | undefined): StoredListenSession | null {
+  if (typeof raw !== "string" || !raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const value = parsed as Record<string, unknown>;
+  const code = typeof value.code === "string" ? readListenCode(value.code) : null;
+  const role = value.role === "host" || value.role === "guest" ? value.role : null;
+  const token = typeof value.token === "string" && value.token ? value.token : null;
+  if (!code || !role || !token) return null;
+  return { code, role, token };
 }
