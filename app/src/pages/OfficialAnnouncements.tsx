@@ -58,6 +58,56 @@ function formatAnnouncementDate(value: string | Date) {
     minute: "2-digit",
   }).format(new Date(value));
 }
+
+/** Dia local no formato `AAAA-MM-DD`, para agrupar comunicados por data. */
+function dayKey(value: string | Date) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+/** Rótulo do separador: "Hoje", "Ontem" ou a data por extenso. */
+function dayLabel(value: string | Date) {
+  const date = new Date(value);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (dayKey(date) === dayKey(today)) return "Hoje";
+  if (dayKey(date) === dayKey(yesterday)) return "Ontem";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+/** Separador de data, como o que separa blocos de mensagens em uma conversa. */
+function DayDivider({ date }: { date: string | Date }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 sm:px-7" role="separator">
+      <span className="h-px flex-1 bg-white/10" aria-hidden="true" />
+      <span className="shrink-0 text-[10px] font-semibold text-[#8b919b]">
+        {dayLabel(date)}
+      </span>
+      <span className="h-px flex-1 bg-white/10" aria-hidden="true" />
+    </div>
+  );
+}
+
+/**
+ * Agrupa os comunicados por dia mantendo a ordem do servidor (mais recente
+ * primeiro) e emite um separador quando o dia muda.
+ */
+function groupByDay(items: OfficialAnnouncementDTO[]) {
+  const groups: { key: string; date: string | Date; items: OfficialAnnouncementDTO[] }[] = [];
+  for (const item of items) {
+    const key = dayKey(item.publishedAt);
+    const last = groups.at(-1);
+    if (last && last.key === key) last.items.push(item);
+    else groups.push({ key, date: item.publishedAt, items: [item] });
+  }
+  return groups;
+}
+
 function AnnouncementItem({ announcement }: { announcement: OfficialAnnouncementDTO }) {
   const trackClick = trpc.official.trackClick.useMutation();
   const presentation = kindPresentation[announcement.kind];
@@ -169,7 +219,9 @@ export function OfficialAnnouncements() {
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-black/25 bg-[#202228] px-4 shadow-sm sm:px-5">
           <OfficialIdentity compact />
           <span className="hidden h-5 w-px bg-white/10 sm:block" aria-hidden="true" />
-          <p className="hidden truncate text-xs text-[#949aa4] sm:block">Comunicados oficiais</p>
+          <p className="hidden truncate text-xs text-[#949aa4] sm:block">
+            Mensagem Oficial da Nexora
+          </p>
           {authority.data?.canAccess && (
             <Button
               size="sm"
@@ -215,9 +267,16 @@ export function OfficialAnnouncements() {
                 Não foi possível carregar os comunicados oficiais. Tente novamente em instantes.
               </div>
             ) : announcements.data?.items.length ? (
-              <div className="divide-y divide-white/[0.055]">
-                {announcements.data.items.map(item => (
-                  <AnnouncementItem key={item.id} announcement={item} />
+              <div className="pb-3">
+                {groupByDay(announcements.data.items).map(group => (
+                  <section key={group.key} aria-label={dayLabel(group.date)}>
+                    <DayDivider date={group.date} />
+                    <div className="divide-y divide-white/[0.055]">
+                      {group.items.map(item => (
+                        <AnnouncementItem key={item.id} announcement={item} />
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
             ) : (

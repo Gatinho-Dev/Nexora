@@ -6,6 +6,9 @@ User-agent: *
 Allow: /
 Disallow: /channels
 Disallow: /nexora-admin
+# Salas do Nexora Live são privadas/temporárias — só o /live (lobby) é indexável.
+Allow: /live$
+Disallow: /live/*
 Disallow: /invite
 Disallow: /api
 

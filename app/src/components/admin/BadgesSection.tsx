@@ -9,7 +9,6 @@ import {
   Wrench,
   Bug,
   Flag,
-  Handshake,
   Plus,
   Trash2,
   History,
@@ -37,6 +36,7 @@ import {
   BadgeIcon,
 } from "@/components/badges/BadgeUI";
 import { RARITY_COLORS, RARITY_LABELS } from "@/components/badges/badgeMeta";
+import { PartnerServersPanel } from "@/components/admin/PartnerServersPanel";
 import type { BadgeDTO, PublicUser } from "@contracts/types";
 import { cn } from "@/lib/utils";
 
@@ -150,12 +150,6 @@ export function BadgesSection() {
     },
     onError: e => toast.error(e.message),
   });
-  const setPartnership = trpc.admin.setServerPartnership.useMutation({
-    onSuccess: async () => {
-      toast.success("Parceria atualizada — badges reavaliadas.");
-    },
-    onError: e => toast.error(e.message),
-  });
   const recordBug = trpc.admin.recordBugReport.useMutation({
     onSuccess: result => {
       toast.success(
@@ -177,7 +171,7 @@ export function BadgesSection() {
         >
           <Wrench className="h-3.5 w-3.5" /> Verificar inconsistências
         </Button>
-        <PartnershipTool onSave={vars => setPartnership.mutate(vars)} busy={setPartnership.isPending} />
+        <PartnerServersPanel />
         <BugReportTool onSave={vars => recordBug.mutate(vars)} busy={recordBug.isPending} />
       </section>
 
@@ -654,46 +648,6 @@ function RevokeForm({
           Remover
         </Button>
       </div>
-    </div>
-  );
-}
-
-function PartnershipTool({
-  onSave,
-  busy,
-}: {
-  onSave: (vars: { serverId: number; partnered: boolean }) => void;
-  busy: boolean;
-}) {
-  const [serverId, setServerId] = useState("");
-  const [partnered, setPartnered] = useState(true);
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.075] bg-[#22252b] px-3 py-2">
-      <Handshake className="h-4 w-4 text-[#7383FF]" />
-      <Input
-        value={serverId}
-        onChange={e => setServerId(e.target.value.replace(/\D/g, ""))}
-        placeholder="ID do servidor"
-        aria-label="ID do servidor para parceria"
-        className="h-9 w-36 border-white/[0.08] bg-[#17191e] text-xs text-white placeholder:text-[#68707b]"
-      />
-      <label className="flex items-center gap-1.5 text-[11px] font-semibold text-[#aeb4be]">
-        <input
-          type="checkbox"
-          checked={partnered}
-          onChange={e => setPartnered(e.target.checked)}
-          className="accent-[#5865F2]"
-        />
-        Parceiro
-      </label>
-      <Button
-        size="sm"
-        disabled={!serverId || busy}
-        onClick={() => onSave({ serverId: Number(serverId), partnered })}
-        className="h-9 bg-[#5865F2] px-3 text-[11px] text-white hover:bg-[#5664e6]"
-      >
-        Aplicar
-      </Button>
     </div>
   );
 }

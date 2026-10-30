@@ -1,16 +1,17 @@
--- Backfill: cargos criados antes da feature de permissões avançadas não tinham
--- VIEW_CHANNEL (nem as demais permissões básicas) no JSON `roles.permissions`,
--- o que escondia TODOS os canais de membros comuns em servidores antigos.
--- Idempotente: só adiciona a permissão se ela ainda não existir no array.
-UPDATE roles SET permissions = JSON_ARRAY_APPEND(permissions, '$', 'SEND_MESSAGES')
-WHERE NOT JSON_CONTAINS(COALESCE(permissions, JSON_ARRAY()), '"SEND_MESSAGES"', '$');--> statement-breakpoint
-UPDATE roles SET permissions = JSON_ARRAY_APPEND(permissions, '$', 'READ_MESSAGES')
-WHERE NOT JSON_CONTAINS(COALESCE(permissions, JSON_ARRAY()), '"READ_MESSAGES"', '$');--> statement-breakpoint
-UPDATE roles SET permissions = JSON_ARRAY_APPEND(permissions, '$', 'VIEW_CHANNEL')
-WHERE NOT JSON_CONTAINS(COALESCE(permissions, JSON_ARRAY()), '"VIEW_CHANNEL"', '$');--> statement-breakpoint
-UPDATE roles SET permissions = JSON_ARRAY_APPEND(permissions, '$', 'CONNECT')
-WHERE NOT JSON_CONTAINS(COALESCE(permissions, JSON_ARRAY()), '"CONNECT"', '$');--> statement-breakpoint
-UPDATE roles SET permissions = JSON_ARRAY_APPEND(permissions, '$', 'SPEAK')
-WHERE NOT JSON_CONTAINS(COALESCE(permissions, JSON_ARRAY()), '"SPEAK"', '$');--> statement-breakpoint
-UPDATE roles SET permissions = JSON_ARRAY_APPEND(permissions, '$', 'STREAM')
-WHERE NOT JSON_CONTAINS(COALESCE(permissions, JSON_ARRAY()), '"STREAM"', '$');
+-- Normaliza URLs de arquivos salvass com origem absoluta (ex.: domínio
+-- onrender.com) para caminhos relativos. Com domínio personalizado, URLs
+-- absolutas para outro host são cross-origin: o cookie de sessão não é
+-- enviado e /api/files/:id retorna 401 (avatars/ícones não carregam).
+-- Idempotente: só altera linhas que começam com scheme://host/api/files/.
+UPDATE users SET avatar = REGEXP_SUBSTR(avatar, '/api/files/.+')
+WHERE avatar REGEXP '^https?://[^/]+/api/files/';--> statement-breakpoint
+UPDATE users SET banner = REGEXP_SUBSTR(banner, '/api/files/.+')
+WHERE banner REGEXP '^https?://[^/]+/api/files/';--> statement-breakpoint
+UPDATE servers SET iconUrl = REGEXP_SUBSTR(iconUrl, '/api/files/.+')
+WHERE iconUrl REGEXP '^https?://[^/]+/api/files/';--> statement-breakpoint
+UPDATE servers SET bannerUrl = REGEXP_SUBSTR(bannerUrl, '/api/files/.+')
+WHERE bannerUrl REGEXP '^https?://[^/]+/api/files/';--> statement-breakpoint
+UPDATE conversations SET avatarUrl = REGEXP_SUBSTR(avatarUrl, '/api/files/.+')
+WHERE avatarUrl REGEXP '^https?://[^/]+/api/files/';--> statement-breakpoint
+UPDATE webhooks SET avatarUrl = REGEXP_SUBSTR(avatarUrl, '/api/files/.+')
+WHERE avatarUrl REGEXP '^https?://[^/]+/api/files/';

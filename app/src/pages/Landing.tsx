@@ -21,6 +21,7 @@ import {
   MonitorUp,
   Palette,
   Paperclip,
+  Radio,
   Server,
   ShieldCheck,
   Video,
@@ -237,15 +238,29 @@ function AuthActions({
 
   if (isAuthenticated) {
     return (
-      <Link className="landing-button landing-button--primary" to="/channels/@me">
-        Abrir Nexora
-        <ArrowRight aria-hidden />
-      </Link>
+      <>
+        <Link className="landing-button landing-button--ghost" to="/live">
+          Nexora Live
+          <span className="landing-beta-badge" aria-label="Recurso em beta">
+            Beta
+          </span>
+        </Link>
+        <Link className="landing-button landing-button--primary" to="/channels/@me">
+          Abrir Nexora
+          <ArrowRight aria-hidden />
+        </Link>
+      </>
     );
   }
 
   return (
     <>
+      <Link className="landing-button landing-button--ghost" to="/live">
+        Nexora Live
+        <span className="landing-beta-badge" aria-label="Recurso em beta">
+          Beta
+        </span>
+      </Link>
       <Link className="landing-button landing-button--ghost" to="/login">
         Entrar
       </Link>
@@ -349,7 +364,7 @@ export default function Landing() {
     <div className="nexora-landing">
       <Seo
         canonicalPath="/"
-        description="Nexora é uma plataforma de comunicação para conversar com amigos, criar comunidades, participar de chamadas de voz e vídeo e compartilhar momentos em um só lugar."
+        description="Conheça a Nexora, a plataforma para conversar online, criar comunidades e se conectar com pessoas por mensagens, voz e vídeo — direto no navegador."
       />
       <a className="landing-skip-link" href="#conteudo">
         Pular para o conteúdo
@@ -369,6 +384,8 @@ export default function Landing() {
                 {link.label}
               </a>
             ))}
+            <Link to="/explore">Explorar</Link>
+            <Link to="/cli">CLI</Link>
           </nav>
 
           <div className="landing-nav-actions">
@@ -402,6 +419,10 @@ export default function Landing() {
                   {link.label}
                 </a>
               ))}
+              <Link to="/explore" onClick={() => setMenuOpen(false)}>
+                Explorar
+              </Link>
+              <Link to="/cli">Nexora CLI</Link>
             </nav>
             <div className="landing-mobile-actions">
               <AuthActions
@@ -445,6 +466,19 @@ export default function Landing() {
                     Entrar
                   </Link>
                 </div>
+              </Reveal>
+              <Reveal delay={280}>
+                <Link
+                  className="landing-button landing-button--ghost landing-hero__live"
+                  to="/live"
+                  aria-label="Nexora Live: converse sem criar uma conta"
+                >
+                  <Radio aria-hidden />
+                  Nexora Live — converse sem criar uma conta
+                  <span className="landing-beta-badge" aria-label="Recurso em beta">
+                    Beta
+                  </span>
+                </Link>
               </Reveal>
             </div>
 
@@ -631,24 +665,43 @@ export default function Landing() {
       </main>
 
       <footer className="landing-footer">
-        <div className="landing-shell landing-footer__row">
-          <div className="landing-footer__brand">
-            <NexoraAppIcon className="landing-footer__icon" decorative />
-            <span>Nexora</span>
-            <small>© {year}</small>
+        <div className="landing-shell">
+          <div className="landing-footer__row">
+            <div className="landing-footer__brand">
+              <NexoraAppIcon className="landing-footer__icon" decorative />
+              <span>Nexora</span>
+              <small>© {year}</small>
+            </div>
+            <nav aria-label="Links do rodapé">
+              <Link to="/privacy">Privacidade</Link>
+              <Link to="/legal/terms">Termos</Link>
+              <Link to="/legal/guidelines">Diretrizes</Link>
+              <a
+                href="#seguranca"
+                onClick={event => scrollToSection(event, "seguranca")}
+              >
+                Segurança
+              </a>
+              <a href="mailto:suporte@nexorachat.cloud">Contato</a>
+            </nav>
           </div>
-          <nav aria-label="Links do rodapé">
-            <Link to="/privacy">Privacidade</Link>
-            <Link to="/legal/terms">Termos</Link>
-            <Link to="/legal/guidelines">Diretrizes</Link>
-            <a
-              href="#seguranca"
-              onClick={event => scrollToSection(event, "seguranca")}
-            >
-              Segurança
-            </a>
-            <a href="mailto:suporte@nexorachat.cloud">Contato</a>
-          </nav>
+          <div className="landing-footer__credit">
+            <div className="landing-footer__credit-brand">
+              <img
+                className="landing-footer__credit-logo"
+                src="/furrys.png"
+                alt="Logo da Furry's Life Inc."
+                width={500}
+                height={500}
+                loading="lazy"
+                decoding="async"
+              />
+              <div className="landing-footer__credit-copy">
+                <p>Feito pela Furry's Life Inc.</p>
+                <p>© 2026 Furry's Life Inc. Todos os direitos reservados.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

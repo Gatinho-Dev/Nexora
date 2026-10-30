@@ -1,14 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { apiUrl } from "@/lib/endpoints";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useGifSearch } from "@/hooks/useGifSearch";
 
-type TenorGif = { id: string; url: string; preview: string; desc: string };
-
-const gifCache = new Map<string, { url: string; preview: string }[]>();
-
+/**
+ * Seletor de GIFs do compositor. A busca (debounce, cache e cancelamento) vive
+ * em `useGifSearch`, compartilhada com o modal de avatar.
+ */
 export function GifPicker({
   onPick,
   children,
@@ -17,62 +17,7 @@ export function GifPicker({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [gifs, setGifs] = useState<TenorGif[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      setError(null);
-      const endpoint = query.trim()
-        ? apiUrl(`/api/gifs/search?q=${encodeURIComponent(query.trim())}`)
-        : apiUrl("/api/gifs/trending");
-      const cached = gifCache.get(endpoint);
-      if (cached) {
-        setGifs(
-          cached.map((g, i) => ({
-            id: `cached-${i}-${g.url}`,
-            url: g.url,
-            preview: g.preview,
-            desc: "",
-          })),
-        );
-        setLoading(false);
-        return;
-      }
-      try {
-        const res = await fetch(endpoint, {
-          credentials: "include",
-          signal: controller.signal,
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Falha ao carregar GIFs.");
-        const results: TenorGif[] = data.results ?? [];
-        setGifs(results);
-        gifCache.set(
-          endpoint,
-          results.map(g => ({ url: g.url, preview: g.preview })),
-        );
-        if (gifCache.size > 20) {
-          const oldest = gifCache.keys().next().value;
-          if (oldest !== undefined) gifCache.delete(oldest);
-        }
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return;
-        setError(e instanceof Error ? e.message : "Falha ao carregar GIFs.");
-      } finally {
-        setLoading(false);
-      }
-    }, 250);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [open, query]);
+  const { query, setQuery, gifs, loading, error } = useGifSearch(open);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

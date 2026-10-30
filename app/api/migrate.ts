@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,8 +10,13 @@ import { env } from "./lib/env";
 
 const pool = mysql.createPool(env.databaseUrl);
 
-const SERVER_SETTINGS_MIGRATION = "0021_server_settings_control_center.sql";
+const PRIVATE_INBOX_MIGRATION = "0018_private_inbox_preferences.sql";
+const PRIVATE_INBOX_MIGRATION_TIMESTAMP = 1788399600000;
+const SERVER_SETTINGS_MIGRATION = "0019_server_settings_control_center.sql";
 const SERVER_SETTINGS_MIGRATION_TIMESTAMP = 1788486000000;
+const MESSAGE_IDEMPOTENCY_MIGRATION = "0022_message_delivery_idempotency.sql";
+const DISCOVERY_MIGRATION = "0026_server_discovery.sql";
+const DISCOVERY_MIGRATION_TIMESTAMP = 1790212976705;
 
 async function queryExists(sql: string, params: unknown[]) {
   const [rows] = await pool.query(sql, params);
@@ -47,6 +53,102 @@ async function ensureColumn(tableName: string, columnName: string, definition: s
 async function ensureIndex(tableName: string, indexName: string, columns: string) {
   if (!await indexExists(tableName, indexName)) {
     await pool.query(`CREATE INDEX \`${indexName}\` ON \`${tableName}\` (${columns})`);
+  }
+}
+
+async function ensureUniqueIndex(tableName: string, indexName: string, columns: string) {
+  if (!await indexExists(tableName, indexName)) {
+    await pool.query(`CREATE UNIQUE INDEX \`${indexName}\` ON \`${tableName}\` (${columns})`);
+  }
+}
+
+/**
+ * The private-inbox SQL file was added after newer migrations had already been
+ * recorded in production. Drizzle orders migrations by timestamp, so those
+ * databases can legitimately skip 0018 and leave dm.list querying a table that
+ * does not exist. Reconcile the required schema before the application starts.
+ */
+async function recoverPrivateInboxMigration(migrationsFolder: string) {
+  if (!await tableExists("__drizzle_migrations")) return;
+
+  const migrationPath = path.join(migrationsFolder, PRIVATE_INBOX_MIGRATION);
+  const migrationHash = createHash("sha256")
+    .update(await readFile(migrationPath))
+    .digest("hex");
+  const migrationApplied = await queryExists(
+    "SELECT 1 FROM __drizzle_migrations WHERE hash = ? LIMIT 1",
+    [migrationHash],
+  );
+
+  // These columns belong to the conversation model consumed by dm.list. Keep
+  // them here as well because an interrupted older group migration can leave
+  // the table usable for basic DMs but incompatible with the current query.
+  await ensureColumn("conversation_members", "role", "enum('owner','admin','member') NOT NULL DEFAULT 'member'");
+  await ensureColumn("conversation_members", "nickname", "varchar(64)");
+  await ensureColumn("conversation_members", "mutedUntil", "timestamp NULL");
+  await ensureColumn("conversation_members", "notificationLevel", "enum('all','mentions','muted') NOT NULL DEFAULT 'all'");
+
+  if (!await tableExists("conversation_preferences")) {
+    await pool.query(`CREATE TABLE \`conversation_preferences\` (
+      \`id\` serial AUTO_INCREMENT NOT NULL,
+      \`conversationId\` bigint unsigned NOT NULL,
+      \`userId\` bigint unsigned NOT NULL,
+      \`pinnedAt\` timestamp NULL,
+      \`hiddenAt\` timestamp NULL,
+      \`mutedUntil\` timestamp NULL,
+      \`mutedForever\` boolean NOT NULL DEFAULT false,
+      \`requestState\` enum('pending','accepted','ignored','spam'),
+      \`privateNote\` text,
+      \`friendNickname\` varchar(64),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE NOW(),
+      CONSTRAINT \`conversation_preferences_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`cp_user_conversation_uniq\` UNIQUE(\`userId\`,\`conversationId\`)
+    )`);
+  }
+  await ensureColumn("conversation_preferences", "pinnedAt", "timestamp NULL");
+  await ensureColumn("conversation_preferences", "hiddenAt", "timestamp NULL");
+  await ensureColumn("conversation_preferences", "mutedUntil", "timestamp NULL");
+  await ensureColumn("conversation_preferences", "mutedForever", "boolean NOT NULL DEFAULT false");
+  await ensureColumn("conversation_preferences", "requestState", "enum('pending','accepted','ignored','spam')");
+  await ensureColumn("conversation_preferences", "privateNote", "text");
+  await ensureColumn("conversation_preferences", "friendNickname", "varchar(64)");
+  await ensureColumn("conversation_preferences", "updatedAt", "timestamp NOT NULL DEFAULT (now()) ON UPDATE NOW()");
+  if (!await indexExists("conversation_preferences", "cp_user_conversation_uniq")) {
+    await pool.query(`DELETE older FROM \`conversation_preferences\` older
+      INNER JOIN \`conversation_preferences\` newer
+        ON older.\`userId\` = newer.\`userId\`
+        AND older.\`conversationId\` = newer.\`conversationId\`
+        AND older.\`id\` < newer.\`id\``);
+  }
+  await ensureUniqueIndex("conversation_preferences", "cp_user_conversation_uniq", "`userId`,`conversationId`");
+  await ensureIndex("conversation_preferences", "cp_user_pinned_idx", "`userId`,`pinnedAt`");
+
+  if (await tableExists("channel_reads")) {
+    const needsChannelIndex = !await indexExists("channel_reads", "cr_user_channel_uniq");
+    const needsConversationIndex = !await indexExists("channel_reads", "cr_user_conversation_uniq");
+    if (needsChannelIndex || needsConversationIndex) {
+      await pool.query(`DELETE older FROM \`channel_reads\` older
+        INNER JOIN \`channel_reads\` newer
+          ON older.\`userId\` = newer.\`userId\`
+          AND (
+            (older.\`channelId\` IS NOT NULL AND older.\`channelId\` = newer.\`channelId\`)
+            OR (older.\`conversationId\` IS NOT NULL AND older.\`conversationId\` = newer.\`conversationId\`)
+          )
+          AND (
+            older.\`lastReadMessageId\` < newer.\`lastReadMessageId\`
+            OR (older.\`lastReadMessageId\` = newer.\`lastReadMessageId\` AND older.\`id\` < newer.\`id\`)
+          )`);
+    }
+    await ensureUniqueIndex("channel_reads", "cr_user_channel_uniq", "`userId`,`channelId`");
+    await ensureUniqueIndex("channel_reads", "cr_user_conversation_uniq", "`userId`,`conversationId`");
+  }
+
+  if (!migrationApplied) {
+    await pool.query(
+      "INSERT INTO __drizzle_migrations (`hash`, `created_at`) VALUES (?, ?)",
+      [migrationHash, PRIVATE_INBOX_MIGRATION_TIMESTAMP],
+    );
+    console.log("[database] Recovered skipped private inbox migration.");
   }
 }
 
@@ -143,14 +245,116 @@ async function recoverIncompleteServerSettingsMigration(migrationsFolder: string
   console.log("[database] Recovered incomplete server settings migration.");
 }
 
-try {
-  const db = drizzle(pool);
-  const migrationsFolder = fileURLToPath(
-    new URL("./migrations", import.meta.url)
+/**
+ * 0022 was added to the repository after production had already recorded the
+ * newer email-auth migration, so Drizzle can legitimately skip its ALTER TABLE.
+ * The application now selects clientNonce on every message read; reconcile the
+ * column and its idempotency index on every startup, including fresh databases.
+ */
+async function recoverMessageIdempotencyMigration() {
+  if (!(await tableExists("messages"))) return;
+
+  const hadColumn = await columnExists("messages", "clientNonce");
+  await ensureColumn("messages", "clientNonce", "varchar(64) NULL");
+  const hadIndex = await indexExists("messages", "msg_author_nonce_uniq");
+  await ensureUniqueIndex(
+    "messages",
+    "msg_author_nonce_uniq",
+    "`authorId`,`clientNonce`",
   );
 
+  if (!hadColumn || !hadIndex) {
+    console.log(
+      `[database] Reconciled ${MESSAGE_IDEMPOTENCY_MIGRATION} (column=${!hadColumn}, index=${!hadIndex}).`,
+    );
+  }
+}
+
+async function recoverServerDiscoveryMigration(migrationsFolder: string) {
+  if (!await tableExists("__drizzle_migrations")) return;
+  const migrationPath = path.join(migrationsFolder, DISCOVERY_MIGRATION);
+  const migrationHash = createHash("sha256")
+    .update(await readFile(migrationPath))
+    .digest("hex");
+  const [appliedRows] = await pool.query(
+    "SELECT 1 FROM __drizzle_migrations WHERE hash = ? LIMIT 1",
+    [migrationHash],
+  );
+  if (Array.isArray(appliedRows) && appliedRows.length > 0) return;
+
+  const hasPartialSchema =
+    (await tableExists("discovery_categories")) ||
+    (await columnExists("servers", "publicDiscovery")) ||
+    (await columnExists("servers", "isFeatured")) ||
+    (await columnExists("servers", "discoveryCategoryId"));
+  if (!hasPartialSchema) return;
+
+  if (!await tableExists("discovery_categories")) {
+    await pool.query(`CREATE TABLE \`discovery_categories\` (
+      \`id\` serial AUTO_INCREMENT NOT NULL,
+      \`slug\` varchar(32) NOT NULL,
+      \`name\` varchar(64) NOT NULL,
+      \`icon\` varchar(32) NOT NULL DEFAULT 'sparkles',
+      \`position\` int NOT NULL DEFAULT 0,
+      \`active\` boolean NOT NULL DEFAULT true,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`discovery_categories_id\` PRIMARY KEY(\`id\`),
+      UNIQUE KEY \`discovery_category_slug_uniq\` (\`slug\`),
+      KEY \`discovery_category_position_idx\` (\`active\`, \`position\`)
+    )`);
+  }
+  await ensureColumn("servers", "publicDiscovery", "boolean NOT NULL DEFAULT false");
+  await ensureColumn("servers", "isFeatured", "boolean NOT NULL DEFAULT false");
+  await ensureColumn("servers", "discoveryCategoryId", "bigint unsigned NULL");
+  await ensureIndex("servers", "srv_discovery_idx", "`publicDiscovery`, `isFeatured`, `createdAt`, `id`");
+  await ensureIndex("servers", "srv_discovery_category_idx", "`discoveryCategoryId`, `publicDiscovery`");
+  await pool.query(`INSERT INTO \`discovery_categories\` (\`slug\`, \`name\`, \`icon\`, \`position\`)
+    VALUES
+      ('jogos', 'Jogos', 'gamepad-2', 10),
+      ('musica', 'Música', 'music-2', 20),
+      ('entretenimento', 'Entretenimento', 'clapperboard', 30),
+      ('tecnologia', 'Ciência e Tecnologia', 'cpu', 40),
+      ('educacao', 'Educação', 'graduation-cap', 50),
+      ('arte-design', 'Arte e Design', 'palette', 60),
+      ('social', 'Social', 'messages-square', 70),
+      ('esportes', 'Esportes', 'trophy', 80),
+      ('comunidades', 'Comunidades', 'globe-2', 90),
+      ('estudos', 'Estudos', 'book-open', 100),
+      ('criadores', 'Criadores', 'video', 110),
+      ('programacao', 'Programação', 'code-2', 120)
+    ON DUPLICATE KEY UPDATE
+      \`name\` = VALUES(\`name\`),
+      \`icon\` = VALUES(\`icon\`),
+      \`position\` = VALUES(\`position\`),
+      \`active\` = true`);
+  await pool.query(
+    "INSERT IGNORE INTO __drizzle_migrations (`hash`, `created_at`) VALUES (?, ?)",
+    [migrationHash, DISCOVERY_MIGRATION_TIMESTAMP],
+  );
+  console.log("[database] Recovered partial server discovery migration.");
+}
+
+try {
+  const db = drizzle(pool);
+  const bundledMigrationsFolder = fileURLToPath(
+    new URL("./migrations", import.meta.url),
+  );
+  const sourceMigrationsFolder = fileURLToPath(
+    new URL("../db/migrations", import.meta.url),
+  );
+  const migrationsFolder = existsSync(bundledMigrationsFolder)
+    ? bundledMigrationsFolder
+    : sourceMigrationsFolder;
+
+  await recoverPrivateInboxMigration(migrationsFolder);
   await recoverIncompleteServerSettingsMigration(migrationsFolder);
+  await recoverMessageIdempotencyMigration();
+  await recoverServerDiscoveryMigration(migrationsFolder);
   await migrate(db, { migrationsFolder });
+  // Also reconcile a brand-new database: before the first Drizzle run the
+  // messages table (and the migration journal) do not exist yet.
+  await recoverMessageIdempotencyMigration();
+  await recoverServerDiscoveryMigration(migrationsFolder);
   console.log("[database] Migrations are up to date.");
 } finally {
   await pool.end();

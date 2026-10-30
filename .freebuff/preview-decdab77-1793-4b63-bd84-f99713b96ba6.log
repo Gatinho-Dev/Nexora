@@ -1,0 +1,239 @@
+
+> nexora@1.1.0 dev
+> concurrently "tsx watch api/server.ts" "vite"
+
+[1] 
+[1]   VITE v7.3.6  ready in 586 ms
+[1] 
+[1]   ➜  Local:   http://localhost:5173/
+[1]   ➜  Network: use --host to expose
+[0] ◇ injected env (8) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[0] [realtime] WebSocket server attached at /ws
+[0] [companion] WebSocket gateway attached at /ws/companion
+[0] [live] WebSocket gateway attached at /ws/live
+[0] [live-companion] WebSocket gateway attached at /ws/live-companion
+[0] Server running on http://localhost:3000/
+[0] [safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+[0] params: queued,RESTART_RECOVERY,processing
+[0]     at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]     at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+[0]     at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]     at async Promise.allSettled (index 1) {
+[0]   query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+[0]   params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+[0]   cause: Error: Table 'nexora.media_deep_reviews' doesn't exist
+[0]       at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+[0]       at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+[0]       at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+[0]       at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+[0]       at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+[0]       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]       at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]       at async Promise.allSettled (index 1) {
+[0]     code: 'ER_NO_SUCH_TABLE',
+[0]     errno: 1146,
+[0]     sqlState: '42S02',
+[0]     sqlMessage: "Table 'nexora.media_deep_reviews' doesn't exist",
+[0]     sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+[0]   }
+[0] }
+[0] 15:07:25 [tsx] change in ./api/live/rooms.ts Restarting...
+[1] 15:07:26 [vite] ws proxy error:
+[1] Error: connect ECONNREFUSED 127.0.0.1:3000
+[1]     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2017:16)
+[1] 15:07:27 [vite] ws proxy error:
+[1] Error: connect ECONNREFUSED 127.0.0.1:3000
+[1]     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2017:16)
+[0] ◇ injected env (8) from .env // tip: ⌘ enable debugging { debug: true }
+[0] [realtime] WebSocket server attached at /ws
+[0] [companion] WebSocket gateway attached at /ws/companion
+[0] [live] WebSocket gateway attached at /ws/live
+[0] [live-companion] WebSocket gateway attached at /ws/live-companion
+[0] Server running on http://localhost:3000/
+[0] [safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+[0] params: queued,RESTART_RECOVERY,processing
+[0]     at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]     at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+[0]     at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]     at async Promise.allSettled (index 1) {
+[0]   query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+[0]   params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+[0]   cause: Error: Table 'nexora.media_deep_reviews' doesn't exist
+[0]       at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+[0]       at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+[0]       at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+[0]       at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+[0]       at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+[0]       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]       at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]       at async Promise.allSettled (index 1) {
+[0]     code: 'ER_NO_SUCH_TABLE',
+[0]     errno: 1146,
+[0]     sqlState: '42S02',
+[0]     sqlMessage: "Table 'nexora.media_deep_reviews' doesn't exist",
+[0]     sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+[0]   }
+[0] }
+[0] [live-debug] conn state 1
+[0] [live-debug] conn state 1
+[0] 15:09:28 [tsx] change in ./api/live/liveCompanionGateway.ts Restarting...
+[0] ◇ injected env (8) from .env // tip: ⌘ enable debugging { debug: true }
+[0] [realtime] WebSocket server attached at /ws
+[0] [companion] WebSocket gateway attached at /ws/companion
+[0] [live] WebSocket gateway attached at /ws/live
+[0] [live-companion] WebSocket gateway attached at /ws/live-companion
+[0] Server running on http://localhost:3000/
+[0] [safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+[0] params: queued,RESTART_RECOVERY,processing
+[0]     at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]     at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+[0]     at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]     at async Promise.allSettled (index 1) {
+[0]   query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+[0]   params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+[0]   cause: Error: Table 'nexora.media_deep_reviews' doesn't exist
+[0]       at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+[0]       at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+[0]       at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+[0]       at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+[0]       at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+[0]       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]       at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]       at async Promise.allSettled (index 1) {
+[0]     code: 'ER_NO_SUCH_TABLE',
+[0]     errno: 1146,
+[0]     sqlState: '42S02',
+[0]     sqlMessage: "Table 'nexora.media_deep_reviews' doesn't exist",
+[0]     sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+[0]   }
+[0] }
+[0] [live-debug] conn state 1
+[0] [live-debug] conn state 1
+[0] [live-debug] conn state 1
+[0] [live-debug] conn state 1
+[0] 15:12:00 [tsx] change in ./api/live/rooms.ts Restarting...
+[1] 15:12:00 [vite] ws proxy error:
+[1] Error: connect ECONNREFUSED 127.0.0.1:3000
+[1]     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2017:16)
+[1] 15:12:01 [vite] ws proxy error:
+[1] Error: connect ECONNREFUSED 127.0.0.1:3000
+[1]     at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2017:16)
+[0] ◇ injected env (8) from .env // tip: ⌘ enable debugging { debug: true }
+[0] [realtime] WebSocket server attached at /ws
+[0] [companion] WebSocket gateway attached at /ws/companion
+[0] [live] WebSocket gateway attached at /ws/live
+[0] [live-companion] WebSocket gateway attached at /ws/live-companion
+[0] Server running on http://localhost:3000/
+[0] [safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+[0] params: queued,RESTART_RECOVERY,processing
+[0]     at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]     at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+[0]     at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]     at async Promise.allSettled (index 1) {
+[0]   query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+[0]   params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+[0]   cause: Error: Table 'nexora.media_deep_reviews' doesn't exist
+[0]       at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+[0]       at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+[0]       at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+[0]       at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+[0]       at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+[0]       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]       at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]       at async Promise.allSettled (index 1) {
+[0]     code: 'ER_NO_SUCH_TABLE',
+[0]     errno: 1146,
+[0]     sqlState: '42S02',
+[0]     sqlMessage: "Table 'nexora.media_deep_reviews' doesn't exist",
+[0]     sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+[0]   }
+[0] }
+[1] 15:31:45 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[1] 15:31:59 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[1] 15:32:22 [vite] (client) hmr update /src/index.css
+[1] 15:32:51 [vite] (client) hmr update /src/index.css
+[1] 15:45:41 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[1] 15:46:30 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[1] 15:48:34 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[1] 15:50:17 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[1] 15:52:34 [vite] (client) hmr update /src/index.css
+[1] 15:53:45 [vite] (client) hmr update /src/index.css
+[1] 15:55:49 [vite] (client) hmr update /src/index.css
+[1] 15:57:37 [vite] (client) hmr update /src/index.css
+[1] 15:58:27 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[1] 15:58:27 [vite] Internal server error: /home/daniel/Downloads/app/app/src/pages/MobileCameraPage.tsx: Identifier 'codeRef' has already been declared. (60:8)
+[1] 
+[1]   58 |    *  quando o usuário digita o código no input (setActiveCode é async), e
+[1]   59 |    *  enviar signaling com code="" faz o gateway descartar em silêncio. */
+[1] > 60 |   const codeRef = useRef(urlCode);
+[1]      |         ^
+[1]   61 |   const facingRef = useRef<FacingMode>("user");
+[1]   62 |   const finishedRef = useRef(false);
+[1]   63 |   const attemptsRef = useRef(0);
+[1]   Plugin: vite-plugin-inspect-dom-simple
+[1]   File: /home/daniel/Downloads/app/app/src/pages/MobileCameraPage.tsx:60:8
+[1]   58 |     *  quando o usuário digita o código no input (setActiveCode é async), e
+[1]   59 |     *  enviar signaling com code="" faz o gateway descartar em silêncio. */
+[1]   60 |    const codeRef = useRef(urlCode);
+[1]      |          ^
+[1]   61 |    const facingRef = useRef<FacingMode>("user");
+[1]   62 |    const finishedRef = useRef(false);
+[1]       at constructor (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:369:19)
+[1]       at TypeScriptParserMixin.raise (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:6620:19)
+[1]       at TypeScriptScopeHandler.checkRedeclarationInScope (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:1623:19)
+[1]       at TypeScriptScopeHandler.declareName (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:1589:12)
+[1]       at TypeScriptScopeHandler.declareName (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:4896:11)
+[1]       at TypeScriptParserMixin.declareNameFromIdentifier (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:7588:16)
+[1]       at TypeScriptParserMixin.checkIdentifier (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:7584:12)
+[1]       at TypeScriptParserMixin.checkLVal (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:7521:12)
+[1]       at TypeScriptParserMixin.parseVarId (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13441:10)
+[1]       at TypeScriptParserMixin.parseVarId (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:9773:11)
+[1]       at TypeScriptParserMixin.parseVar (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13412:12)
+[1]       at TypeScriptParserMixin.parseVarStatement (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13259:10)
+[1]       at TypeScriptParserMixin.parseVarStatement (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:9429:31)
+[1]       at TypeScriptParserMixin.parseStatementContent (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12880:23)
+[1]       at TypeScriptParserMixin.parseStatementContent (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:9529:18)
+[1]       at TypeScriptParserMixin.parseStatementLike (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12796:17)
+[1]       at TypeScriptParserMixin.parseStatementListItem (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12776:17)
+[1]       at TypeScriptParserMixin.parseBlockOrModuleBlockBody (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13345:61)
+[1]       at TypeScriptParserMixin.parseBlockBody (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13338:10)
+[1]       at TypeScriptParserMixin.parseBlock (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13326:10)
+[1]       at TypeScriptParserMixin.parseFunctionBody (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12129:24)
+[1]       at TypeScriptParserMixin.parseFunctionBodyAndFinish (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12115:10)
+[1]       at TypeScriptParserMixin.parseFunctionBodyAndFinish (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:9193:18)
+[1]       at /home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13474:12
+[1]       at TypeScriptParserMixin.withSmartMixTopicForbiddingContext (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12432:14)
+[1]       at TypeScriptParserMixin.parseFunction (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13473:10)
+[1]       at TypeScriptParserMixin.parseExportDefaultExpression (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13936:19)
+[1]       at TypeScriptParserMixin.parseExportDefaultExpression (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:9423:18)
+[1]       at TypeScriptParserMixin.parseExport (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13857:25)
+[1]       at TypeScriptParserMixin.parseExport (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:9406:20)
+[1]       at TypeScriptParserMixin.parseStatementContent (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12907:27)
+[1]       at TypeScriptParserMixin.parseStatementContent (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:9529:18)
+[1]       at TypeScriptParserMixin.parseStatementLike (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12796:17)
+[1]       at TypeScriptParserMixin.parseModuleItem (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12773:17)
+[1]       at TypeScriptParserMixin.parseBlockOrModuleBlockBody (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13345:36)
+[1]       at TypeScriptParserMixin.parseBlockBody (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:13338:10)
+[1]       at TypeScriptParserMixin.parseProgram (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12651:10)
+[1]       at TypeScriptParserMixin.parseTopLevel (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:12641:25)
+[1]       at TypeScriptParserMixin.parse (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:14517:25)
+[1]       at TypeScriptParserMixin.parse (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:10147:18)
+[1]       at parse (/home/daniel/Downloads/app/app/node_modules/@babel/parser/lib/index.js:14551:38)
+[1]       at parser (/home/daniel/Downloads/app/app/node_modules/@babel/core/lib/parser/index.js:41:34)
+[1]       at parser.next (<anonymous>)
+[1]       at parse (/home/daniel/Downloads/app/app/node_modules/@babel/core/lib/parse.js:25:37)
+[1]       at parse.next (<anonymous>)
+[1]       at evaluateSync (/home/daniel/Downloads/app/app/node_modules/gensync/index.js:251:28)
+[1]       at sync (/home/daniel/Downloads/app/app/node_modules/gensync/index.js:89:14)
+[1]       at stopHiding - secret - don't use this - v1 (/home/daniel/Downloads/app/app/node_modules/@babel/core/lib/errors/rewrite-stack-trace.js:47:12)
+[1]       at parse (/home/daniel/Downloads/app/app/node_modules/@babel/core/lib/parse.js:33:74)
+[1]       at TransformPluginContext.transform (file:///home/daniel/Downloads/app/app/node_modules/kimi-plugin-inspect-react/dist/inspectAttr.mjs:1091:21)
+[1] 16:02:33 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[1] 16:05:40 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[1] 16:08:09 [vite] (client) hmr update /src/pages/MobileCameraPage.tsx, /src/index.css
+[0] tsx watch api/server.ts exited with code SIGTERM
+[1] vite exited with code SIGTERM

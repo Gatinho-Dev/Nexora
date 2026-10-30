@@ -11,19 +11,19 @@ const LIVE = process.env.RUN_ROBLOX_LIVE === "1";
 
 describe.skipIf(!LIVE)("Roblox presence pipeline (live)", () => {
   it("consulta presença real e persiste atividade normalizada", async () => {
-    const { fetchPresenceBatch, PRESENCE_TYPE_MAP } = await import(
-      "../client"
-    );
+    const { fetchPresenceBatch, PRESENCE_TYPE_MAP } = await import("../client");
     const { pollOnce } = await import("../presenceWorker");
     const mysql = await import("mysql2/promise");
     const conn = await mysql.createConnection({
-      uri: process.env.DATABASE_URL ?? "mysql://pulsar:pulsar@localhost:3306/pulsar",
+      uri:
+        process.env.DATABASE_URL ??
+        "mysql://pulsar:pulsar@localhost:3306/pulsar",
     });
 
     // Conta Roblox pública e estável (Shedletsky).
     const ROBLOX_ID = 261;
     await conn.query(
-      "INSERT INTO users (unionId, username, name, passwordHash, createdAt, updatedAt) VALUES (?, ?, ?, 'x', NOW(), NOW()) ON DUPLICATE KEY UPDATE username=VALUES(username)",
+      "INSERT INTO users (unionId, username, name, passwordHash, profileGames, profileWishlist, profileWidgets, createdAt, updatedAt) VALUES (?, ?, ?, 'x', JSON_ARRAY(), JSON_ARRAY(), JSON_ARRAY('games', 'favorite'), NOW(), NOW()) ON DUPLICATE KEY UPDATE username=VALUES(username)",
       [`live-roblox-${ROBLOX_ID}`, `liverbx${ROBLOX_ID}`, "Live RBX"]
     );
     const [userRows] = await conn.query(
@@ -38,21 +38,32 @@ describe.skipIf(!LIVE)("Roblox presence pipeline (live)", () => {
       [userId]
     );
     await conn.query(
-      "INSERT INTO user_connections (userId, provider, providerUserId, username, showActivity) VALUES (?, 'ROBLOX', ?, 'Shedletsky', 1)",
+      "INSERT INTO user_connections (userId, provider, providerUserId, username, scopes, showActivity) VALUES (?, 'ROBLOX', ?, 'Shedletsky', JSON_ARRAY(), 1)",
       [userId, String(ROBLOX_ID)]
     );
 
     // Pipeline real: worker consulta a API do Roblox agora.
     await pollOnce([ROBLOX_ID]);
 
-    const [activity] = await conn.query(
-      "SELECT status, name, thumbnailUrl FROM roblox_activity WHERE userId=?",
-      [userId]
-    ).then(r => r[0] as { status: string; name: string | null; thumbnailUrl: string | null }[]);
+    const [activity] = await conn
+      .query(
+        "SELECT status, name, thumbnailUrl FROM roblox_activity WHERE userId=?",
+        [userId]
+      )
+      .then(
+        r =>
+          r[0] as {
+            status: string;
+            name: string | null;
+            thumbnailUrl: string | null;
+          }[]
+      );
 
     const validStatuses = [...Object.values(PRESENCE_TYPE_MAP), "UNKNOWN"];
     expect(validStatuses).toContain(activity?.status);
-    console.log(`[live] status real recebido: ${activity?.status}, jogo: ${activity?.name}`);
+    console.log(
+      `[live] status real recebido: ${activity?.status}, jogo: ${activity?.name}`
+    );
 
     // Limpeza
     await conn.query("DELETE FROM roblox_activity WHERE userId=?", [userId]);
@@ -78,7 +89,9 @@ describe("mapeamento de tipos de presença", () => {
     const { PRESENCE_TYPE_MAP } = await import("../client");
     expect(PRESENCE_TYPE_MAP[0]).toBe("OFFLINE");
     expect(PRESENCE_TYPE_MAP[2]).toBe("IN_GAME");
-    expect((PRESENCE_TYPE_MAP as Record<number, string>)[99] ?? "UNKNOWN").toBe("UNKNOWN");
+    expect((PRESENCE_TYPE_MAP as Record<number, string>)[99] ?? "UNKNOWN").toBe(
+      "UNKNOWN"
+    );
   });
 
   it("bloqueia host fora da allowlist (SSRF guard)", async () => {
@@ -94,4 +107,3 @@ describe("mapeamento de tipos de presença", () => {
     void mod;
   });
 });
-

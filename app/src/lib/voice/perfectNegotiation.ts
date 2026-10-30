@@ -2,16 +2,19 @@ export function shouldIgnoreOffer({
   descriptionType,
   makingOffer,
   signalingState,
+  isSettingRemoteAnswerPending = false,
   polite,
 }: {
   descriptionType: RTCSdpType;
   makingOffer: boolean;
   signalingState: RTCSignalingState;
+  isSettingRemoteAnswerPending?: boolean;
   polite: boolean;
 }): boolean {
-  const offerCollision =
-    descriptionType === "offer" &&
-    (makingOffer || signalingState !== "stable");
+  const readyForOffer =
+    !makingOffer &&
+    (signalingState === "stable" || isSettingRemoteAnswerPending);
+  const offerCollision = descriptionType === "offer" && !readyForOffer;
   return !polite && offerCollision;
 }
 

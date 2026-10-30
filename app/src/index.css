@@ -41,6 +41,13 @@
     --streaming: 268 48% 40%;
     --offline: 222 6% 53%;
     --link: 199 100% 49%;
+    --presence-online: 145 65% 39%;
+    --presence-idle: 41 86% 45%;
+    --presence-dnd: 359 72% 50%;
+    --presence-offline: 222 6% 48%;
+    --dm-unread-indicator: #27314f;
+    --dm-unread-divider: #4654d8;
+    --mention-badge: #d83f49;
 
     /* Chrome surfaces & text tiers */
     --panel: #ebedef;
@@ -89,6 +96,13 @@
     --streaming: 268 48% 40%; /* #593695 */
     --offline: 222 6% 53%; /* #80848E */
     --link: 199 100% 49%; /* #00A8FC */
+    --presence-online: 145 65% 45%;
+    --presence-idle: 41 86% 57%;
+    --presence-dnd: 359 82% 64%;
+    --presence-offline: 222 8% 58%;
+    --dm-unread-indicator: #f4f7fb;
+    --dm-unread-divider: #7383ff;
+    --mention-badge: #ed5962;
 
     /* Chrome surfaces & text tiers */
     --panel: #232428;
@@ -138,7 +152,31 @@
   }
 }
 
+.dm-unread-pulse {
+  background: var(--dm-unread-indicator);
+  box-shadow: 0 0 0 1px rgb(17 19 26 / 35%);
+  transform-origin: left center;
+  animation: dm-unread-enter 160ms cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+@keyframes dm-unread-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.65);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @layer utilities {
+  .notification-liquid-glass {
+    background-color: rgb(24 26 34 / 68%);
+    -webkit-backdrop-filter: blur(26px) saturate(150%);
+    backdrop-filter: blur(26px) saturate(150%);
+  }
+
   .bg-rail {
     background-color: hsl(var(--rail));
   }
@@ -481,4 +519,45 @@ html.reduce-motion *::after {
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
+}
+
+/* ------------------------------------------------------------------ *
+ * Cider: esconder o dock do player em qualquer página                 *
+ * ------------------------------------------------------------------ *
+ * O `<iframe>` do player mora fora de `/cider` de propósito — é o que faz o
+ * áudio sobreviver à navegação (ver `src/cider/components/AudioDock.tsx`). O
+ * CSS que o esconde vive em `src/cider/styles/web.css`, que só é carregado
+ * quando a rota `/cider` é visitada. Em qualquer outra página o dock ficava sem
+ * estilo nenhum: `position: static`, opacidade 1 e um player do YouTube visível
+ * no meio da interface da Nexora. Estas cinco regras são o mínimo que precisa
+ * existir **sempre**; o resto do visual do dock continua no CSS do Cider.
+ */
+.cider-audio-dock {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 344px;
+  height: 56px;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cider-audio-dock .youtube-frame-host,
+.cider-audio-dock .youtube-frame-host iframe,
+.cider-audio-dock > iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+.cider-audio-veil {
+  position: absolute;
+  inset: 0;
+  background: #0b0a12;
 }

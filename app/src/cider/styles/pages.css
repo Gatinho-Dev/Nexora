@@ -1,0 +1,562 @@
+/* Cider 2 — estilos das páginas. */
+
+/* ------------------------------------------------------------------ *
+ * Cabeçalhos de página                                               *
+ * ------------------------------------------------------------------ */
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--cider-space-4);
+  margin-bottom: var(--cider-space-6);
+  flex-wrap: wrap;
+}
+
+.page-head .page-kicker {
+  font-size: var(--cider-text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--cider-tracking-wide);
+  color: var(--cider-text-faint);
+  margin-bottom: 4px;
+}
+
+.page-head h1 {
+  font-size: var(--cider-text-2xl);
+  letter-spacing: var(--cider-tracking-tight);
+  font-weight: var(--cider-weight-bold);
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--cider-space-2);
+  flex-wrap: wrap;
+}
+
+.section-head h3 {
+  font-size: var(--cider-text-lg);
+  font-weight: var(--cider-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+.section-head .section-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--cider-space-2);
+}
+
+/* Destaque amplo (home/listen now) */
+.spotlight {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: var(--cider-space-6);
+  align-items: center;
+  border-radius: var(--cider-radius-2xl);
+  overflow: hidden;
+  padding: var(--cider-space-6);
+  border: 1px solid var(--cider-border);
+  background:
+    radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--cider-accent) 24%, transparent), transparent 62%),
+    radial-gradient(90% 100% at 100% 100%, color-mix(in srgb, var(--cider-accent-secondary) 22%, transparent), transparent 60%),
+    color-mix(in srgb, var(--cider-bg-elevated) var(--cider-glass-opacity), transparent);
+  backdrop-filter: blur(var(--cider-blur)) saturate(160%);
+  box-shadow: var(--cider-shadow-lg);
+}
+
+.spotlight .spotlight-cover {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--cider-radius-xl);
+  object-fit: cover;
+  box-shadow: var(--cider-shadow-lg);
+}
+
+.spotlight h2 {
+  font-size: clamp(24px, 2.6vw + 0.5rem, 42px);
+  line-height: var(--cider-leading-tight);
+  letter-spacing: var(--cider-tracking-tight);
+  margin-bottom: var(--cider-space-2);
+}
+
+.spotlight p {
+  color: var(--cider-text-muted);
+  max-width: 60ch;
+  margin-bottom: var(--cider-space-4);
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .spotlight {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Detalhes (álbum, artista, playlist)                                *
+ * ------------------------------------------------------------------ */
+.detail-hero {
+  position: relative;
+  display: flex;
+  gap: var(--cider-space-6);
+  align-items: flex-end;
+  margin-bottom: var(--cider-space-8);
+  padding: var(--cider-space-6);
+  border-radius: var(--cider-radius-xl);
+  overflow: hidden;
+  border: 1px solid var(--cider-border);
+  background: color-mix(in srgb, var(--cider-bg-elevated) 70%, transparent);
+}
+
+.detail-hero .detail-bg {
+  position: absolute;
+  inset: -20%;
+  filter: blur(60px) saturate(150%);
+  opacity: 0.35;
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+.detail-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.detail-hero .detail-cover {
+  width: clamp(160px, 20vw, 240px);
+  aspect-ratio: 1;
+  border-radius: var(--cider-radius-lg);
+  object-fit: cover;
+  box-shadow: var(--cider-shadow-lg);
+  flex: 0 0 auto;
+}
+
+.detail-hero .detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-3);
+  min-width: 0;
+}
+
+.detail-hero h1 {
+  font-size: clamp(28px, 3.2vw + 0.5rem, 52px);
+  line-height: var(--cider-leading-tight);
+  letter-spacing: var(--cider-tracking-tight);
+}
+
+.detail-hero .detail-sub {
+  color: var(--cider-text-muted);
+}
+
+.track-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.track-table-head {
+  display: grid;
+  grid-template-columns: 40px 1fr 200px 120px 96px;
+  gap: var(--cider-space-3);
+  padding: 6px var(--cider-space-3);
+  font-size: var(--cider-text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--cider-tracking-wide);
+  color: var(--cider-text-faint);
+  border-bottom: 1px solid var(--cider-border);
+}
+
+@media (max-width: 900px) {
+  .track-table-head {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Pesquisa                                                           *
+ * ------------------------------------------------------------------ */
+.search-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-6);
+}
+
+.search-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--cider-space-5);
+}
+
+@media (max-width: 900px) {
+  .search-top {
+    grid-template-columns: 1fr;
+  }
+}
+
+.search-top-card {
+  display: flex;
+  gap: var(--cider-space-4);
+  align-items: center;
+  padding: var(--cider-space-5);
+  border-radius: var(--cider-radius-xl);
+  border: 1px solid var(--cider-border);
+  background: color-mix(in srgb, var(--cider-bg-elevated) 80%, transparent);
+  cursor: pointer;
+  transition: transform var(--cider-duration-base) var(--cider-ease-out);
+}
+
+.search-top-card:hover {
+  transform: translateY(-3px);
+}
+
+.search-top-card img {
+  width: 92px;
+  height: 92px;
+  border-radius: var(--cider-radius-md);
+  object-fit: cover;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cider-space-2);
+}
+
+.chip {
+  padding: 5px 12px;
+  border-radius: var(--cider-radius-full);
+  border: 1px solid var(--cider-border);
+  background: var(--cider-surface);
+  color: var(--cider-text-muted);
+  font-size: var(--cider-text-sm);
+  cursor: pointer;
+  transition: background var(--cider-duration-fast), color var(--cider-duration-fast);
+}
+
+.chip:hover {
+  background: var(--cider-surface-strong);
+  color: var(--cider-text);
+}
+
+/* ------------------------------------------------------------------ *
+ * Histórico e estatísticas                                           *
+ * ------------------------------------------------------------------ */
+.history-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 150px 110px auto;
+  align-items: center;
+  gap: var(--cider-space-3);
+  padding: var(--cider-space-2);
+  border-radius: var(--cider-radius-md);
+  transition: background var(--cider-duration-fast);
+}
+
+.history-item:hover {
+  background: var(--cider-surface);
+}
+
+.history-item .history-when {
+  font-size: var(--cider-text-sm);
+  color: var(--cider-text-muted);
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .history-item {
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+  }
+  .history-item .history-album,
+  .history-item .history-when {
+    display: none;
+  }
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--cider-space-4);
+}
+
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 180px;
+  padding: var(--cider-space-3) 0;
+}
+
+.bar-chart .bar {
+  flex: 1 1 0;
+  min-width: 6px;
+  border-radius: var(--cider-radius-sm) var(--cider-radius-sm) 2px 2px;
+  background: linear-gradient(180deg, var(--cider-accent), color-mix(in srgb, var(--cider-accent-secondary) 60%, transparent));
+  position: relative;
+}
+
+.bar-chart .bar span {
+  position: absolute;
+  bottom: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--cider-text-faint);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Integrações e controle remoto                                      *
+ * ------------------------------------------------------------------ */
+.integration-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-3);
+  padding: var(--cider-space-5);
+  border-radius: var(--cider-radius-lg);
+  border: 1px solid var(--cider-border);
+  background: color-mix(in srgb, var(--cider-bg-elevated) 72%, transparent);
+}
+
+.integration-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cider-space-3);
+}
+
+.integration-card header h3 {
+  font-size: var(--cider-text-md);
+}
+
+.pairing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: var(--cider-space-5);
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .pairing {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pairing-code {
+  font-family: var(--cider-font-mono);
+  font-size: clamp(28px, 4vw, 44px);
+  letter-spacing: 0.24em;
+  font-weight: var(--cider-weight-semibold);
+  color: var(--cider-text);
+}
+
+.qr-box {
+  display: grid;
+  place-items: center;
+  padding: var(--cider-space-3);
+  border-radius: var(--cider-radius-lg);
+  border: 1px solid var(--cider-border);
+  background: #ffffff;
+  aspect-ratio: 1;
+}
+
+.qr-box svg {
+  width: 100%;
+  height: auto;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cider-space-3);
+  padding: var(--cider-space-3);
+  border-radius: var(--cider-radius-md);
+  border: 1px solid var(--cider-border);
+  background: var(--cider-surface);
+  margin-bottom: var(--cider-space-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Diagnóstico                                                        *
+ * ------------------------------------------------------------------ */
+.check-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--cider-space-3);
+  padding: var(--cider-space-3);
+  border-bottom: 1px solid var(--cider-border);
+}
+
+.check-row:last-child {
+  border-bottom: 0;
+}
+
+.check-row[data-status="ok"] svg {
+  color: var(--cider-success);
+}
+
+.check-row[data-status="warn"] svg {
+  color: var(--cider-warning);
+}
+
+.check-row[data-status="fail"] svg {
+  color: var(--cider-danger);
+}
+
+.check-row .check-title {
+  font-weight: var(--cider-weight-medium);
+}
+
+.check-row .check-detail {
+  font-size: var(--cider-text-sm);
+  color: var(--cider-text-muted);
+  line-height: 1.55;
+}
+
+.log-viewer {
+  max-height: 420px;
+  overflow: auto;
+  border-radius: var(--cider-radius-md);
+  border: 1px solid var(--cider-border);
+  background: var(--cider-bg-sunken);
+  padding: var(--cider-space-3);
+  font-family: var(--cider-font-mono);
+  font-size: var(--cider-text-xs);
+  line-height: 1.6;
+}
+
+.log-line {
+  display: grid;
+  grid-template-columns: 130px 60px minmax(0, 1fr);
+  gap: var(--cider-space-2);
+  padding: 1px 0;
+}
+
+.log-line[data-level="warn"] {
+  color: var(--cider-warning);
+}
+
+.log-line[data-level="error"] {
+  color: var(--cider-danger);
+}
+
+.log-line[data-level="debug"] {
+  color: var(--cider-text-faint);
+}
+
+/* ------------------------------------------------------------------ *
+ * Importação de arquivos locais                                      *
+ * ------------------------------------------------------------------ */
+.drop-zone {
+  border: 1px dashed var(--cider-border-strong);
+  border-radius: var(--cider-radius-lg);
+  padding: var(--cider-space-8);
+  text-align: center;
+  color: var(--cider-text-muted);
+  transition: border-color var(--cider-duration-base), background var(--cider-duration-base);
+}
+
+.drop-zone[data-over="true"] {
+  border-color: var(--cider-accent);
+  background: color-mix(in srgb, var(--cider-accent) 10%, transparent);
+}
+
+.confirm-text {
+  font-size: var(--cider-text-sm);
+  color: var(--cider-text-muted);
+  line-height: 1.6;
+}
+
+/* ------------------------------------------------------------------ *
+ * Seções de página, estatísticas e utilitários                       *
+ * ------------------------------------------------------------------ */
+.page-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-3);
+  min-width: 0;
+}
+
+.grid.two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--cider-space-5);
+}
+
+/* Numeração das listas de estatística. */
+.rank {
+  flex: 0 0 auto;
+  width: 24px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--cider-text-faint);
+  font-size: var(--cider-text-sm);
+}
+
+/* Rótulos de data abaixo das barras do gráfico diário. */
+.bar-chart {
+  padding-bottom: 28px;
+}
+
+.check-row[data-status="neutral"] svg {
+  color: var(--cider-text-faint);
+}
+
+.check-row > div > .small {
+  line-height: 1.5;
+}
+
+/* Widgets de plugins: cada um é um iframe isolado, com origem própria. */
+.plugin-widgets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cider-space-4);
+}
+
+.plugin-widgets .section-head {
+  margin-bottom: 0;
+}
+
+.plugin-widgets .section-head h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--cider-space-2);
+  font-size: var(--cider-text-lg);
+}
+
+.plugin-widget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--cider-space-4);
+}
+
+.plugin-widget {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-lg);
+  background: var(--cider-surface);
+}
+
+.plugin-widget iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.plugin-widget-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--cider-space-3);
+  padding: var(--cider-space-2) var(--cider-space-3);
+  border-top: 1px solid var(--cider-border);
+}
+

@@ -13,11 +13,12 @@ import {
   shouldIgnoreCandidate,
   shouldIgnoreOffer,
 } from "./voice/perfectNegotiation";
-import { serializeRtcStats } from "./voice/rtcStats";
 import {
-  addRemoteTrack,
-  removeRemoteTracksOfKind,
-} from "./voice/remoteStream";
+  serializeRtcStats,
+  summarizeVoiceQuality,
+  type VoiceStatsSample,
+} from "./voice/rtcStats";
+import { addRemoteTrack, removeRemoteTracksOfKind } from "./voice/remoteStream";
 
 type SignalData = {
   description?: RTCSessionDescriptionInit;
@@ -29,12 +30,15 @@ type JoinTarget = {
   conversationId?: number;
   serverId?: number;
   myId: number;
+  initiated?: boolean;
+  video?: boolean;
 };
 
 type Peer = {
   pc: RTCPeerConnection;
   makingOffer: boolean;
   ignoreOffer: boolean;
+  isSettingRemoteAnswerPending: boolean;
   pendingCandidates: (RTCIceCandidateInit | null)[];
   remoteStream: MediaStream;
   microphoneSender: RTCRtpSender | null;
@@ -43,6 +47,17 @@ type Peer = {
   restartAttempts: number;
   disconnectTimer: ReturnType<typeof setTimeout> | null;
 };
+
+type CallMetric =
+  | "callInitiatedAt"
+  | "mediaRequestStartedAt"
+  | "mediaReadyAt"
+  | "offerCreatedAt"
+  | "offerSentAt"
+  | "answerReceivedAt"
+  | "iceConnectedAt"
+  | "firstRemoteAudioAt"
+  | "callConnectedAt";
 
 const DEFAULT_ICE: RTCIceServer[] = [
   {
@@ -86,6 +101,16 @@ function iceServersFromClientEnv(): RTCIceServer[] {
   return servers;
 }
 
+function keybindFromEvent(event: KeyboardEvent) {
+  const key = event.key === " " ? "Space" : event.key;
+  const modifiers: string[] = [];
+  if (event.ctrlKey) modifiers.push("Ctrl");
+  if (event.shiftKey) modifiers.push("Shift");
+  if (event.altKey) modifiers.push("Alt");
+  if (event.metaKey) modifiers.push("Meta");
+  return [...modifiers, key].join("+");
+}
+
 /**
  * Single WebRTC implementation used by every Nexora voice surface.
  * It owns capture, processing, peer negotiation, reconnection and cleanup.
@@ -101,10 +126,27 @@ class VoiceManager {
   private cameraTrack: MediaStreamTrack | null = null;
   private screenTrack: MediaStreamTrack | null = null;
   private screenAudioTrack: MediaStreamTrack | null = null;
+  private companionPc: RTCPeerConnection | null = null;
+  private companionPendingCandidates: (RTCIceCandidateInit | null)[] = [];
+  private companionVideoTrack: MediaStreamTrack | null = null;
+  private companionSessionId: string | null = null;
+  /** De onde deve vir o vídeo publicado: webcam local ou celular. */
+  private preferredCameraSource: "local" | "companion" = "local";
+  /** Vira true quando o usuário escolhe a fonte manualmente (menu da seta). */
+  private cameraSourceExplicit = false;
   private knownParticipantIds = new Set<number>();
   private mutedBeforeDeafen = false;
   private reconnectDeadline: ReturnType<typeof setTimeout> | null = null;
   private cleaningUp = false;
+  private initialJoinSent = false;
+  private statsTimer: ReturnType<typeof setInterval> | null = null;
+  private previousInbound = new Map<
+    number,
+    { bytesReceived: number; timestamp: number }
+  >();
+  private metrics: Partial<Record<CallMetric, number>> = {};
+  private joinGeneration = 0;
+  private pushToTalkPressed = false;
   private joinAck: {
     resolve: () => void;
     reject: (error: Error) => void;
@@ -116,6 +158,13 @@ class VoiceManager {
       const cleanup = () => this.teardown("page-exit");
       window.addEventListener("pagehide", cleanup);
       window.addEventListener("beforeunload", cleanup);
+      window.addEventListener("keydown", event => {
+        if (!event.repeat) this.handlePushToTalk(event, true);
+      });
+      window.addEventListener("keyup", event => {
+        this.handlePushToTalk(event, false);
+      });
+      window.addEventListener("blur", () => this.releasePushToTalk());
       if (DEBUG) {
         window.__NEXORA_VOICE_DEBUG__ = () => this.getDebugStats();
       }
@@ -132,6 +181,22 @@ class VoiceManager {
 
   private log(...args: unknown[]) {
     if (DEBUG) console.debug("[VOICE]", ...args);
+  }
+
+  private markMetric(metric: CallMetric) {
+    if (this.metrics[metric] != null) return;
+    this.metrics[metric] = Date.now();
+    if (DEBUG) {
+      this.log("metric", metric, {
+        at: this.metrics[metric],
+        sinceInitiatedMs:
+          metric === "callInitiatedAt"
+            ? 0
+            : this.metrics.callInitiatedAt
+              ? this.metrics[metric]! - this.metrics.callInitiatedAt
+              : null,
+      });
+    }
   }
 
   private async loadIceServers() {
@@ -157,13 +222,27 @@ class VoiceManager {
     const nextRoomKey = roomKeyOf(target);
     if (this.roomKey === nextRoomKey) return;
     await this.leave();
+    const joinGeneration = ++this.joinGeneration;
 
     this.myId = target.myId;
     this.roomKey = nextRoomKey;
     this.target = target;
+    this.initialJoinSent = false;
     this.knownParticipantIds.clear();
+    this.metrics = {};
+    this.markMetric("callInitiatedAt");
     useAppStore.getState().setVoiceSession({
+      voiceChannelId: target.channelId ?? null,
+      voiceConversationId: target.conversationId ?? null,
+      voiceServerId: target.serverId ?? null,
       voiceConnectionStatus: "connecting",
+      voiceCallPhase: target.conversationId ? "creating" : "connecting",
+      voiceCallStartedAt: this.metrics.callInitiatedAt ?? Date.now(),
+      voiceCallConnectedAt: null,
+      voiceCallDeadlineAt: null,
+      voiceCallEndReason: null,
+      voiceCallId: null,
+      voiceDeviceError: null,
       voicePlaybackBlocked: false,
     });
     this.log("joining", nextRoomKey);
@@ -172,6 +251,8 @@ class VoiceManager {
       // Microfone ANTES de qualquer await de rede: no iOS Safari o
       // getUserMedia precisa rodar dentro da ativação do toque do usuário.
       const prefs = getDevicePrefs();
+      const iceConfigPromise = this.loadIceServers();
+      this.markMetric("mediaRequestStartedAt");
       let rawStream: MediaStream;
       try {
         rawStream = await navigator.mediaDevices.getUserMedia({
@@ -186,7 +267,10 @@ class VoiceManager {
           (error.name === "OverconstrainedError" ||
             error.name === "NotFoundError")
         ) {
-          this.log("constraints incompatíveis; usando áudio padrão", error.name);
+          this.log(
+            "constraints incompatíveis; usando áudio padrão",
+            error.name
+          );
           rawStream = await navigator.mediaDevices.getUserMedia({
             audio: true,
             video: false,
@@ -195,7 +279,15 @@ class VoiceManager {
           throw error;
         }
       }
-      await this.loadIceServers();
+      this.markMetric("mediaReadyAt");
+      if (
+        joinGeneration !== this.joinGeneration ||
+        this.roomKey !== nextRoomKey
+      ) {
+        rawStream.getTracks().forEach(track => track.stop());
+        throw new Error("A chamada foi cancelada.");
+      }
+      await iceConfigPromise;
       const rawTrack = rawStream.getAudioTracks()[0];
       if (!rawTrack || rawTrack.readyState !== "live") {
         rawStream.getTracks().forEach(track => track.stop());
@@ -216,17 +308,18 @@ class VoiceManager {
         this.audioSession = null;
         throw new Error("O processamento de áudio não gerou uma faixa válida.");
       }
+      this.bindMicrophoneEnded(outputTrack);
+      const startsMuted = !!prefs.pushToTalkKeybind;
+      outputTrack.enabled = !startsMuted;
 
       useAppStore.getState().setVoiceSession({
-        voiceChannelId: target.channelId ?? null,
-        voiceConversationId: target.conversationId ?? null,
-        voiceServerId: target.serverId ?? null,
         localStream,
         localVideo: null,
-        muted: false,
+        muted: startsMuted,
         deafened: false,
         cameraOn: false,
         screenOn: false,
+        voiceCallPhase: "connecting",
       });
 
       realtime.connect();
@@ -235,6 +328,10 @@ class VoiceManager {
         throw new Error("O canal em tempo real ainda não está disponível.");
       }
       await this.waitForJoinAck();
+      if (startsMuted) this.sendState({ muted: true });
+      if (target.conversationId && target.initiated) {
+        useAppStore.getState().setVoiceSession({ voiceCallPhase: "ringing" });
+      }
       soundManager.play("join");
     } catch (error) {
       this.teardown("join-failed");
@@ -245,8 +342,16 @@ class VoiceManager {
         );
       }
       if (error instanceof DOMException && error.name === "NotFoundError") {
+        throw new Error("Nenhum microfone foi encontrado neste aparelho.");
+      }
+      if (error instanceof DOMException && error.name === "NotReadableError") {
         throw new Error(
-          "Nenhum microfone foi encontrado neste aparelho."
+          "O microfone está ocupado por outro aplicativo ou não pôde ser iniciado."
+        );
+      }
+      if (error instanceof DOMException && error.name === "SecurityError") {
+        throw new Error(
+          "O navegador bloqueou o microfone por uma restrição de segurança."
         );
       }
       throw error;
@@ -255,11 +360,37 @@ class VoiceManager {
 
   private sendJoin() {
     if (!this.target) return false;
-    return realtime.send({
+    const sent = realtime.send({
       t: "voice:join",
       channelId: this.target.channelId,
       conversationId: this.target.conversationId,
+      initiated: !this.initialJoinSent && this.target.initiated === true,
+      video: this.target.video === true,
     });
+    if (sent) this.initialJoinSent = true;
+    return sent;
+  }
+
+  private bindMicrophoneEnded(track: MediaStreamTrack) {
+    track.onended = () => {
+      if (this.cleaningUp || !this.inCall) return;
+      const store = useAppStore.getState();
+      store.setVoiceSession({
+        voiceDeviceError:
+          "O microfone foi desconectado. Tentando usar o dispositivo padrão…",
+      });
+      void this.switchAudioInput(undefined)
+        .then(() =>
+          useAppStore.getState().setVoiceSession({ voiceDeviceError: null })
+        )
+        .catch(() =>
+          useAppStore.getState().setVoiceSession({
+            muted: true,
+            voiceDeviceError:
+              "Microfone indisponível. Escolha outro dispositivo nas configurações de voz.",
+          })
+        );
+    };
   }
 
   private waitForJoinAck(timeoutMs = 10_000) {
@@ -283,13 +414,23 @@ class VoiceManager {
   syncParticipants(roomKey: string, participants: VoiceParticipant[]) {
     if (!this.roomKey || roomKey !== this.roomKey) return;
     const selfIsPresent = participants.some(p => p.userId === this.myId);
-    if (selfIsPresent) {
-      useAppStore
-        .getState()
-        .setVoiceSession({ voiceConnectionStatus: "connected" });
-    }
-
     const others = participants.filter(p => p.userId !== this.myId);
+    if (selfIsPresent) {
+      const current = useAppStore.getState();
+      const connected = !this.target?.conversationId || others.length > 0;
+      current.setVoiceSession({
+        voiceConnectionStatus: connected ? "connected" : "connecting",
+        voiceCallPhase: connected
+          ? "connected"
+          : this.target?.initiated
+            ? "ringing"
+            : "connecting",
+        ...(connected && current.voiceCallConnectedAt == null
+          ? { voiceCallConnectedAt: Date.now() }
+          : {}),
+      });
+      if (connected) this.markMetric("callConnectedAt");
+    }
     const currentIds = new Set(others.map(participant => participant.userId));
     for (const id of currentIds) {
       if (!this.knownParticipantIds.has(id)) {
@@ -360,6 +501,7 @@ class VoiceManager {
       pc,
       makingOffer: false,
       ignoreOffer: false,
+      isSettingRemoteAnswerPending: false,
       pendingCandidates: [],
       remoteStream: new MediaStream(),
       microphoneSender: null,
@@ -369,13 +511,20 @@ class VoiceManager {
       disconnectTimer: null,
     };
     this.peers.set(userId, peer);
+    this.startStatsMonitor();
 
     pc.onnegotiationneeded = async () => {
       try {
         peer.makingOffer = true;
         await pc.setLocalDescription();
         if (pc.localDescription) {
+          if (pc.localDescription.type === "offer") {
+            this.markMetric("offerCreatedAt");
+          }
           this.signal(userId, { description: pc.localDescription.toJSON() });
+          if (pc.localDescription.type === "offer") {
+            this.markMetric("offerSentAt");
+          }
         }
       } catch (error) {
         console.error("[VOICE] Falha de negociação", userId, error);
@@ -396,6 +545,7 @@ class VoiceManager {
         : [event.track];
       for (const track of tracks) {
         addRemoteTrack(peer.remoteStream, track);
+        if (track.kind === "audio") this.markMetric("firstRemoteAudioAt");
         track.onended = () => {
           peer.remoteStream.removeTrack(track);
           useAppStore
@@ -422,6 +572,8 @@ class VoiceManager {
     pc.onconnectionstatechange = () => {
       this.log("connection", userId, pc.connectionState);
       if (pc.connectionState === "connected") {
+        this.markMetric("iceConnectedAt");
+        this.markMetric("callConnectedAt");
         peer.restartAttempts = 0;
         if (peer.disconnectTimer) clearTimeout(peer.disconnectTimer);
         peer.disconnectTimer = null;
@@ -443,7 +595,8 @@ class VoiceManager {
     if (microphoneTrack && localStream) {
       peer.microphoneSender = pc.addTrack(microphoneTrack, localStream);
     }
-    const videoTrack = this.screenTrack ?? this.cameraTrack;
+    const videoTrack =
+      this.screenTrack ?? this.companionVideoTrack ?? this.cameraTrack;
     if (videoTrack) {
       peer.videoSender = pc.addTrack(videoTrack, new MediaStream([videoTrack]));
     }
@@ -464,10 +617,12 @@ class VoiceManager {
 
     try {
       if (data.description) {
+        peer.isSettingRemoteAnswerPending = data.description.type === "answer";
         peer.ignoreOffer = shouldIgnoreOffer({
           descriptionType: data.description.type,
           makingOffer: peer.makingOffer,
           signalingState: pc.signalingState,
+          isSettingRemoteAnswerPending: peer.isSettingRemoteAnswerPending,
           polite,
         });
         if (peer.ignoreOffer) {
@@ -480,6 +635,10 @@ class VoiceManager {
         }
 
         await pc.setRemoteDescription(data.description);
+        peer.isSettingRemoteAnswerPending = false;
+        if (data.description.type === "answer") {
+          this.markMetric("answerReceivedAt");
+        }
         while (peer.pendingCandidates.length) {
           await pc.addIceCandidate(peer.pendingCandidates.shift() ?? null);
         }
@@ -501,6 +660,7 @@ class VoiceManager {
         }
       }
     } catch (error) {
+      peer.isSettingRemoteAnswerPending = false;
       if (!peer.ignoreOffer) {
         console.error("[VOICE] Falha ao tratar signaling", from, error);
       }
@@ -535,26 +695,35 @@ class VoiceManager {
   private async restartIce(userId: number) {
     const peer = this.peers.get(userId);
     if (!peer || !this.roomKey) return;
-    if (peer.restartAttempts >= 2) {
-      useAppStore
-        .getState()
-        .setVoiceSession({ voiceConnectionStatus: "failed" });
+    if (peer.restartAttempts >= 4) {
+      useAppStore.getState().setVoiceSession({
+        voiceConnectionStatus: "failed",
+        voiceCallPhase: "failed",
+      });
       return;
     }
     peer.restartAttempts += 1;
-    useAppStore
-      .getState()
-      .setVoiceSession({ voiceConnectionStatus: "reconnecting" });
-    try {
-      peer.pc.restartIce();
-      if (peer.pc.signalingState === "stable") {
-        const offer = await peer.pc.createOffer({ iceRestart: true });
-        await peer.pc.setLocalDescription(offer);
-        this.signal(userId, { description: offer });
+    useAppStore.getState().setVoiceSession({
+      voiceConnectionStatus: "reconnecting",
+      voiceCallPhase: "reconnecting",
+    });
+    const delay = [500, 1_000, 2_000, 4_000][peer.restartAttempts - 1];
+    if (peer.disconnectTimer) clearTimeout(peer.disconnectTimer);
+    peer.disconnectTimer = setTimeout(async () => {
+      try {
+        peer.pc.restartIce();
+        if (peer.pc.signalingState === "stable") {
+          const offer = await peer.pc.createOffer({ iceRestart: true });
+          await peer.pc.setLocalDescription(offer);
+          this.signal(userId, { description: offer });
+        }
+      } catch (error) {
+        console.error("[VOICE] ICE restart falhou", userId, error);
+        if (peer.pc.connectionState !== "connected") {
+          void this.restartIce(userId);
+        }
       }
-    } catch (error) {
-      console.error("[VOICE] ICE restart falhou", userId, error);
-    }
+    }, delay);
   }
 
   private updateAggregateConnectionState() {
@@ -570,7 +739,17 @@ class VoiceManager {
           : states.some(state => state === "disconnected")
             ? "reconnecting"
             : "connecting";
-    useAppStore.getState().setVoiceSession({ voiceConnectionStatus: status });
+    useAppStore.getState().setVoiceSession({
+      voiceConnectionStatus: status,
+      voiceCallPhase:
+        status === "reconnecting"
+          ? "reconnecting"
+          : status === "failed"
+            ? "failed"
+            : status === "connected"
+              ? "connected"
+              : useAppStore.getState().voiceCallPhase,
+    });
   }
 
   toggleMute() {
@@ -583,6 +762,32 @@ class VoiceManager {
     store.setVoiceSession({ muted });
     this.sendState({ muted });
     soundManager.play(muted ? "mute" : "unmute");
+  }
+
+  private handlePushToTalk(event: KeyboardEvent, pressed: boolean) {
+    const keybind = getDevicePrefs().pushToTalkKeybind;
+    if (!keybind || keybindFromEvent(event) !== keybind || !this.inCall) return;
+    event.preventDefault();
+    if (pressed === this.pushToTalkPressed) return;
+    const store = useAppStore.getState();
+    if (store.deafened) return;
+    this.pushToTalkPressed = pressed;
+    store.localStream?.getAudioTracks().forEach(track => {
+      track.enabled = pressed;
+    });
+    store.setVoiceSession({ muted: !pressed });
+    this.sendState({ muted: !pressed });
+  }
+
+  private releasePushToTalk() {
+    if (!this.pushToTalkPressed || !this.inCall) return;
+    this.pushToTalkPressed = false;
+    const store = useAppStore.getState();
+    store.localStream?.getAudioTracks().forEach(track => {
+      track.enabled = false;
+    });
+    store.setVoiceSession({ muted: true });
+    this.sendState({ muted: true });
   }
 
   toggleDeafen() {
@@ -627,7 +832,11 @@ class VoiceManager {
       )
     );
     const previousSession = this.audioSession;
+    previousSession?.outputStream.getAudioTracks().forEach(track => {
+      track.onended = null;
+    });
     this.audioSession = nextSession;
+    this.bindMicrophoneEnded(nextTrack);
     useAppStore
       .getState()
       .setVoiceSession({ localStream: nextSession.outputStream });
@@ -702,15 +911,311 @@ class VoiceManager {
     this.sendState({ camera: false });
   }
 
+  // ── Companion camera (QR-paired second device) ─────────────
+  /** Request a fresh pairing code for an external camera device. */
+  startCompanionCamera() {
+    if (!this.inCall) return;
+    realtime.send({
+      t: "companion:start",
+      voiceSessionId: this.voiceSessionId ?? undefined,
+    });
+  }
+
+  /** Store the pairing code returned by the server. */
+  handleCompanionSession(sessionId: string, code: string) {
+    this.companionSessionId = sessionId;
+    useAppStore.getState().setVoiceSession({
+      companionSessionId: sessionId,
+      companionCode: code,
+      companionStatus: "pending",
+    });
+  }
+
+  /** A companion device connected — prepare the WebRTC peer. */
+  handleCompanionPaired(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    if (!this.companionPc) this.createCompanionPeer();
+    useAppStore.getState().setVoiceSession({
+      companionStatus: "paired",
+    });
+  }
+
+  /** Um celular está solicitando parear — o dono precisa aprovar no PC. */
+  handleCompanionRequest(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    useAppStore.getState().setVoiceSession({ companionRequestPending: true });
+  }
+
+  /** Dono aprovou: o celular envia a oferta WebRTC em seguida. */
+  approveCompanion(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    useAppStore.getState().setVoiceSession({ companionRequestPending: false });
+    realtime.send({ t: "companion:approve", sessionId });
+  }
+
+  /** Dono recusou: invalida a sessão e limpa o estado local. */
+  rejectCompanion(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    this.companionSessionId = null;
+    realtime.send({ t: "companion:reject", sessionId });
+    useAppStore.getState().setVoiceSession({
+      companionRequestPending: false,
+      companionStatus: "idle",
+      companionSessionId: null,
+      companionCode: null,
+    });
+  }
+
+  private createCompanionPeer() {
+    if (this.companionPc) return;
+    this.companionPendingCandidates = [];
+    const pc = new RTCPeerConnection({
+      iceServers: this.iceServers,
+      iceCandidatePoolSize: 4,
+    });
+    this.companionPc = pc;
+
+    pc.onicecandidate = event => {
+      if (!this.companionSessionId) return;
+      realtime.send({
+        t: "companion:signal",
+        sessionId: this.companionSessionId,
+        data: {
+          candidate: event.candidate ? event.candidate.toJSON() : null,
+        },
+      });
+    };
+
+    pc.ontrack = event => {
+      const videoTrack = event.streams.length
+        ? event.streams.flatMap(s => s.getTracks())
+        : [event.track];
+      const track = videoTrack.find(t => t.kind === "video");
+      if (track) {
+        this.companionVideoTrack = track;
+        // O celular vira a câmera automaticamente (a menos que o usuário
+        // tenha escolhido a webcam local explicitamente no menu).
+        if (!this.cameraSourceExplicit) {
+          this.preferredCameraSource = "companion";
+        }
+        track.onmute = () => {
+          // Câmera do celular desligada pelo próprio celular.
+          useAppStore.getState().setVoiceSession({ companionCameraActive: false });
+          if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+            this.sendState({ camera: false });
+          }
+        };
+        track.onunmute = () => {
+          useAppStore.getState().setVoiceSession({ companionCameraActive: true });
+          if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+            this.sendState({ camera: true });
+          }
+        };
+        if (!this.screenTrack && this.preferredCameraSource === "companion") {
+          this.publishVideoTrack(track).catch(() => {});
+        }
+        this.refreshLocalVideo();
+        useAppStore.getState().setVoiceSession({
+          cameraOn: true,
+          cameraSource: this.preferredCameraSource,
+          companionVideo: new MediaStream([track]),
+          companionStatus: "video-ready",
+          companionCameraActive: true,
+        });
+        if (!this.screenTrack && this.preferredCameraSource === "companion") {
+          this.sendState({ camera: true });
+        }
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      this.log("companion connection", pc.connectionState);
+    };
+  }
+
+  /** Incoming signaling from the companion (offer/answer/ice). */
+  async handleCompanionSignal(sessionId: string, data: SignalData) {
+    if (sessionId !== this.companionSessionId) return;
+    if (!this.companionPc) this.createCompanionPeer();
+    const pc = this.companionPc!;
+    try {
+      if (data.description) {
+        await pc.setRemoteDescription(data.description);
+        while (this.companionPendingCandidates.length) {
+          await pc.addIceCandidate(
+            this.companionPendingCandidates.shift() ?? null
+          );
+        }
+        if (data.description.type === "offer") {
+          await pc.setLocalDescription();
+          if (pc.localDescription) {
+            realtime.send({
+              t: "companion:signal",
+              sessionId,
+              data: { description: pc.localDescription.toJSON() },
+            });
+          }
+        }
+      } else if (data.candidate !== undefined) {
+        if (!pc.remoteDescription) {
+          this.companionPendingCandidates.push(data.candidate);
+        } else {
+          await pc.addIceCandidate(data.candidate);
+        }
+      }
+    } catch (error) {
+      console.error("[VOICE] Falha no signaling do companion", error);
+    }
+  }
+
+  /** The companion panel sent a control action for this call. */
+  handleCompanionControl(sessionId: string, action: string) {
+    if (sessionId !== this.companionSessionId) return;
+    switch (action) {
+      case "toggle-mute":
+        this.toggleMute();
+        break;
+      case "toggle-deafen":
+        this.toggleDeafen();
+        break;
+      case "toggle-camera":
+        void this.stopCompanionCamera();
+        break;
+      case "toggle-screen":
+        this.toggleCompanionScreen();
+        break;
+      // ── Nexora Mobile Camera: controles granulares do celular ──
+      case "camera-on":
+        useAppStore.getState().setVoiceSession({ companionCameraActive: true });
+        if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+          this.sendState({ camera: true });
+        }
+        break;
+      case "camera-off":
+        useAppStore.getState().setVoiceSession({ companionCameraActive: false });
+        if (this.preferredCameraSource === "companion" && !this.screenTrack) {
+          this.sendState({ camera: false });
+        }
+        break;
+      case "mic-on":
+      case "mic-off":
+        // O celular muta a própria track — nada a fazer além do VAD,
+        // que naturalmente deixa de detectar fala quando mudo.
+        break;
+      case "disconnect":
+        // O celular se desconectou (não encerra a chamada do Nexora):
+        // solta o peer e restaura a webcam local.
+        void this.stopCompanionCamera();
+        break;
+      case "leave-call":
+        void this.leave();
+        break;
+    }
+  }
+
+  /** Companion requested to disconnect — tear down the peer. */
+  handleCompanionDisconnected(sessionId: string) {
+    if (sessionId !== this.companionSessionId) return;
+    this.disconnectCompanionPeer();
+    useAppStore.getState().setVoiceSession({
+      companionStatus: "idle",
+      companionVideo: null,
+      companionCameraActive: false,
+      companionSessionId: null,
+      companionCode: null,
+    });
+  }
+
+  /** Publica a webcam local ou o vídeo do celular como câmera da chamada. */
+  async setCameraSource(source: "local" | "companion") {
+    if (this.preferredCameraSource === source) return;
+    this.preferredCameraSource = source;
+    this.cameraSourceExplicit = true;
+    useAppStore.getState().setVoiceSession({ cameraSource: source });
+    // A tela tem precedência — a troca vale a partir do fim do share.
+    if (this.screenTrack) return;
+    const track =
+      source === "companion" ? this.companionVideoTrack : this.cameraTrack;
+    if (track) {
+      await this.publishVideoTrack(track);
+      this.sendState({ camera: true });
+    } else {
+      // Fonte escolhida não está disponível: deixa de enviar vídeo.
+      for (const peer of this.peers.values()) {
+        if (peer.videoSender) await peer.videoSender.replaceTrack(null).catch(() => {});
+      }
+      this.sendState({ camera: false });
+    }
+    this.refreshLocalVideo();
+  }
+
+  async stopCompanionCamera() {
+    if (this.companionSessionId) {
+      realtime.send({ t: "companion:stop", sessionId: this.companionSessionId });
+      this.companionSessionId = null;
+    }
+    this.disconnectCompanionPeer();
+    useAppStore.getState().setVoiceSession({
+      cameraOn: false,
+      companionStatus: "idle",
+      companionVideo: null,
+      companionCameraActive: false,
+      companionRequestPending: false,
+      companionSessionId: null,
+      companionCode: null,
+    });
+    // Restaura a webcam local se a chamada estava publicando o celular.
+    if (this.cameraTrack && !this.screenTrack) {
+      await this.publishVideoTrack(this.cameraTrack);
+      this.sendState({ camera: true });
+      useAppStore.getState().setVoiceSession({ cameraOn: true });
+    } else {
+      this.sendState({ camera: false });
+    }
+    this.refreshLocalVideo();
+  }
+
+  private disconnectCompanionPeer() {
+    const pc = this.companionPc;
+    this.companionPc = null;
+    this.companionPendingCandidates = [];
+    this.companionVideoTrack = null;
+    this.preferredCameraSource = "local";
+    this.cameraSourceExplicit = false;
+    if (pc) {
+      for (const sender of pc.getSenders()) sender.replaceTrack(null).catch(() => {});
+      pc.ontrack = null;
+      pc.onicecandidate = null;
+      pc.onconnectionstatechange = null;
+      pc.close();
+    }
+  }
+
+  private toggleCompanionScreen() {
+    const store = useAppStore.getState();
+    if (store.screenOn) {
+      void this.stopScreenShare();
+    } else {
+      void this.startScreenShare().catch(() => {});
+    }
+  }
+
   async startScreenShare() {
     if (this.screenTrack) return;
     let stream: MediaStream;
+    const quality = getDevicePrefs().streamQuality ?? "720p30";
+    const [width, height, frameRate] =
+      quality === "1080p60"
+        ? [1920, 1080, 60]
+        : quality === "1080p30"
+          ? [1920, 1080, 30]
+          : [1280, 720, 30];
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
+          width: { ideal: width },
+          height: { ideal: height },
+          frameRate: { ideal: frameRate },
         },
         audio: true,
       });
@@ -782,7 +1287,8 @@ class VoiceManager {
   }
 
   private refreshLocalVideo() {
-    const track = this.screenTrack ?? this.cameraTrack;
+    const track =
+      this.screenTrack ?? this.companionVideoTrack ?? this.cameraTrack;
     useAppStore
       .getState()
       .setVoiceSession({ localVideo: track ? new MediaStream([track]) : null });
@@ -794,27 +1300,162 @@ class VoiceManager {
       if (!this.reconnectDeadline) return;
       if (this.reconnectDeadline) clearTimeout(this.reconnectDeadline);
       this.reconnectDeadline = null;
-      useAppStore
-        .getState()
-        .setVoiceSession({ voiceConnectionStatus: "connecting" });
+      useAppStore.getState().setVoiceSession({
+        voiceConnectionStatus: "connecting",
+        voiceCallPhase: "reconnecting",
+      });
       this.sendJoin();
       return;
     }
 
-    useAppStore
-      .getState()
-      .setVoiceSession({ voiceConnectionStatus: "reconnecting" });
+    useAppStore.getState().setVoiceSession({
+      voiceConnectionStatus: "reconnecting",
+      voiceCallPhase: "reconnecting",
+    });
     this.voiceSessionId = null;
-    for (const id of [...this.peers.keys()]) this.destroyPeer(id);
     if (this.reconnectDeadline) clearTimeout(this.reconnectDeadline);
     this.reconnectDeadline = setTimeout(() => {
       if (!realtime.connected && this.roomKey) {
-        useAppStore
-          .getState()
-          .setVoiceSession({ voiceConnectionStatus: "failed" });
+        useAppStore.getState().setVoiceSession({
+          voiceConnectionStatus: "failed",
+          voiceCallPhase: "failed",
+        });
         this.teardown("realtime-timeout");
       }
     }, 20_000);
+  }
+
+  handleCallState(event: {
+    conversationId: number;
+    callId: string;
+    state: "ringing" | "connected" | "ended";
+    startedAt: string;
+    unansweredDeadline?: string;
+    reason?: string;
+  }) {
+    if (this.target?.conversationId !== event.conversationId) return false;
+    const startedAt = new Date(event.startedAt).getTime();
+    if (event.state === "ended") {
+      this.teardown(`call-${event.reason ?? "ended"}`);
+      useAppStore.getState().setVoiceSession({
+        voiceCallPhase: "ended",
+        voiceCallId: event.callId,
+        voiceCallStartedAt: Number.isFinite(startedAt) ? startedAt : null,
+        voiceCallEndReason: event.reason ?? "ended",
+      });
+      return true;
+    }
+    const store = useAppStore.getState();
+    store.setVoiceSession({
+      voiceCallId: event.callId,
+      voiceCallStartedAt: Number.isFinite(startedAt) ? startedAt : null,
+      voiceCallDeadlineAt: event.unansweredDeadline
+        ? new Date(event.unansweredDeadline).getTime()
+        : null,
+      voiceCallPhase: event.state,
+      voiceConnectionStatus:
+        event.state === "connected" ? "connected" : store.voiceConnectionStatus,
+      ...(event.state === "connected" && store.voiceCallConnectedAt == null
+        ? { voiceCallConnectedAt: Date.now() }
+        : {}),
+    });
+    if (event.state === "connected") this.markMetric("callConnectedAt");
+    return true;
+  }
+
+  declineCall(conversationId: number) {
+    realtime.send({ t: "call:decline", conversationId });
+  }
+
+  private startStatsMonitor() {
+    if (this.statsTimer) return;
+    void this.collectQualityStats();
+    this.statsTimer = setInterval(() => {
+      void this.collectQualityStats();
+    }, 5_000);
+  }
+
+  private async collectQualityStats() {
+    const samples: VoiceStatsSample[] = [];
+    await Promise.all(
+      [...this.peers.entries()].map(async ([userId, peer]) => {
+        const reports = await peer.pc.getStats();
+        let rttMs: number | null = null;
+        let candidateType: string | null = null;
+        reports.forEach(report => {
+          const candidatePair = report as RTCStats & {
+            type: string;
+            state?: string;
+            nominated?: boolean;
+            selected?: boolean;
+            currentRoundTripTime?: number;
+            localCandidateId?: string;
+          };
+          if (
+            candidatePair.type === "candidate-pair" &&
+            candidatePair.state === "succeeded" &&
+            (candidatePair.nominated || candidatePair.selected)
+          ) {
+            rttMs =
+              candidatePair.currentRoundTripTime == null
+                ? null
+                : candidatePair.currentRoundTripTime * 1_000;
+            const local = candidatePair.localCandidateId
+              ? reports.get(candidatePair.localCandidateId)
+              : null;
+            candidateType =
+              (local as (RTCStats & { candidateType?: string }) | undefined)
+                ?.candidateType ?? null;
+          }
+        });
+        reports.forEach(report => {
+          const inbound = report as RTCStats & {
+            type: string;
+            kind?: string;
+            mediaType?: string;
+            jitter?: number;
+            packetsLost?: number;
+            packetsReceived?: number;
+            bytesReceived?: number;
+            timestamp: number;
+          };
+          if (
+            inbound.type !== "inbound-rtp" ||
+            (inbound.kind ?? inbound.mediaType) !== "audio"
+          ) {
+            return;
+          }
+          const previous = this.previousInbound.get(userId);
+          const bitrateKbps =
+            previous &&
+            inbound.bytesReceived != null &&
+            inbound.timestamp > previous.timestamp
+              ? Math.max(
+                  0,
+                  ((inbound.bytesReceived - previous.bytesReceived) * 8) /
+                    (inbound.timestamp - previous.timestamp)
+                )
+              : null;
+          if (inbound.bytesReceived != null) {
+            this.previousInbound.set(userId, {
+              bytesReceived: inbound.bytesReceived,
+              timestamp: inbound.timestamp,
+            });
+          }
+          samples.push({
+            rttMs,
+            jitterMs: inbound.jitter == null ? null : inbound.jitter * 1_000,
+            packetsLost: Math.max(0, inbound.packetsLost ?? 0),
+            packetsReceived: Math.max(0, inbound.packetsReceived ?? 0),
+            bitrateKbps,
+            candidateType,
+          });
+        });
+      })
+    );
+    useAppStore
+      .getState()
+      .setVoiceSession({ voiceQuality: summarizeVoiceQuality(samples) });
   }
 
   async getDebugStats() {
@@ -854,6 +1495,8 @@ class VoiceManager {
           readyState: track.readyState,
         })),
       peers,
+      metrics: this.metrics,
+      quality: useAppStore.getState().voiceQuality,
     };
   }
 
@@ -898,9 +1541,13 @@ class VoiceManager {
   private teardown(reason: string) {
     if (this.cleaningUp) return;
     this.cleaningUp = true;
+    this.joinGeneration += 1;
     this.log("cleanup", reason);
     if (this.reconnectDeadline) clearTimeout(this.reconnectDeadline);
     this.reconnectDeadline = null;
+    if (this.statsTimer) clearInterval(this.statsTimer);
+    this.statsTimer = null;
+    this.previousInbound.clear();
     if (this.joinAck) {
       clearTimeout(this.joinAck.timer);
       this.joinAck.reject(new Error("A sessão de voz foi encerrada."));
@@ -914,7 +1561,12 @@ class VoiceManager {
     this.cameraTrack = null;
     this.screenTrack = null;
     this.screenAudioTrack = null;
+    this.disconnectCompanionPeer();
+    this.companionSessionId = null;
     const session = this.audioSession;
+    session?.outputStream.getAudioTracks().forEach(track => {
+      track.onended = null;
+    });
     this.audioSession = null;
     if (session) void session.close();
 
@@ -929,7 +1581,9 @@ class VoiceManager {
     this.voiceSessionId = null;
     this.myId = 0;
     this.knownParticipantIds.clear();
+    this.initialJoinSent = false;
     this.mutedBeforeDeafen = false;
+    this.pushToTalkPressed = false;
     this.cleaningUp = false;
   }
 }

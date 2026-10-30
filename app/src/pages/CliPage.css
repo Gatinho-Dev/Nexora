@@ -1,0 +1,2281 @@
+.nexora-cli-page {
+  --cli-bg: #f4f7fb;
+  --cli-surface: #ffffff;
+  --cli-surface-soft: #e9edf6;
+  --cli-ink: #11131a;
+  --cli-quiet: #535b69;
+  --cli-faint: #7c8492;
+  --cli-line: rgb(17 19 26 / 0.1);
+  --cli-cobalt: #4654d8;
+  --cli-cobalt-deep: #3542b9;
+  --cli-cobalt-soft: #e5e8ff;
+  --cli-terminal: #151822;
+  --cli-terminal-surface: #1d2230;
+  --cli-terminal-line: rgb(255 255 255 / 0.1);
+  --cli-terminal-muted: #8e98ad;
+  --cli-terminal-text: #edf0f7;
+  --cli-shadow: 0 18px 54px rgb(35 45 90 / 0.1);
+  min-height: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  background: var(--cli-bg);
+  color: var(--cli-ink);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable",
+    "Segoe UI", "Noto Sans", sans-serif;
+}
+
+.dark .nexora-cli-page {
+  --cli-bg: #11131a;
+  --cli-surface: #181b24;
+  --cli-surface-soft: #202430;
+  --cli-ink: #f4f7fb;
+  --cli-quiet: #b1b7c4;
+  --cli-faint: #8d95a5;
+  --cli-line: rgb(244 247 251 / 0.11);
+  --cli-cobalt: #7380ff;
+  --cli-cobalt-deep: #9aa3ff;
+  --cli-cobalt-soft: #272d54;
+  --cli-shadow: 0 22px 70px rgb(0 0 0 / 0.28);
+}
+
+.nexora-cli-page,
+.nexora-cli-page * {
+  box-sizing: border-box;
+}
+
+.nexora-cli-page a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.nexora-cli-page h1,
+.nexora-cli-page h2,
+.nexora-cli-page h3,
+.nexora-cli-page p,
+.nexora-cli-page ol {
+  margin: 0;
+}
+
+.nexora-cli-shell {
+  width: min(1180px, calc(100% - 48px));
+  margin-inline: auto;
+}
+
+.nexora-cli-skip-link {
+  position: fixed;
+  inset-block-start: 12px;
+  inset-inline-start: 12px;
+  z-index: 80;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--cli-ink);
+  color: var(--cli-bg) !important;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transform: translateY(-160%);
+  transition: transform 150ms ease;
+}
+
+.nexora-cli-skip-link:focus {
+  transform: translateY(0);
+}
+
+.nexora-cli-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 40;
+  border-block-end: 1px solid var(--cli-line);
+  background: color-mix(in srgb, var(--cli-bg) 78%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+.nexora-cli-header-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  min-height: 72px;
+  gap: 24px;
+}
+
+.nexora-cli-brand,
+.nexora-cli-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.02rem;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+}
+
+.nexora-cli-brand {
+  min-height: 44px;
+}
+
+.nexora-cli-brand-icon,
+.nexora-cli-footer-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.nexora-cli-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.nexora-cli-nav a,
+.nexora-cli-mobile-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  color: var(--cli-quiet);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease;
+}
+
+.nexora-cli-nav a:hover,
+.nexora-cli-nav a:focus-visible,
+.nexora-cli-nav a.is-active,
+.nexora-cli-mobile-nav a:hover,
+.nexora-cli-mobile-nav a:focus-visible {
+  background: var(--cli-surface-soft);
+  color: var(--cli-ink);
+}
+
+.nexora-cli-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nexora-cli-login-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--cli-line);
+  border-radius: 999px;
+  color: var(--cli-ink);
+  font-size: 0.84rem;
+  font-weight: 700;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.nexora-cli-login-link:hover {
+  border-color: color-mix(in srgb, var(--cli-cobalt) 45%, var(--cli-line));
+  background: var(--cli-cobalt-soft);
+}
+
+.nexora-cli-menu-button,
+.nexora-cli-mobile-nav {
+  display: none;
+}
+
+.nexora-cli-hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(4rem, 8vw, 6.5rem) 0 5.25rem;
+  background:
+    radial-gradient(circle at 79% 22%, rgb(70 84 216 / 0.13), transparent 32%),
+    radial-gradient(circle at 20% 80%, rgb(70 84 216 / 0.08), transparent 27%);
+}
+
+.nexora-cli-hero::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0.42;
+  background-image:
+    linear-gradient(rgb(70 84 216 / 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(70 84 216 / 0.055) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 86%);
+}
+
+.dark .nexora-cli-hero::before {
+  opacity: 0.22;
+}
+
+.nexora-cli-hero-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(420px, 1.08fr);
+  align-items: center;
+  gap: clamp(2.5rem, 7vw, 7rem);
+}
+
+.nexora-cli-hero-copy {
+  max-width: 570px;
+}
+
+.nexora-cli-hero-status,
+.nexora-cli-kicker {
+  color: var(--cli-cobalt-deep);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.nexora-cli-hero-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-block-end: 20px;
+  color: var(--cli-quiet);
+  letter-spacing: 0.11em;
+}
+
+.nexora-cli-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #35a866;
+  box-shadow: 0 0 0 4px rgb(53 168 102 / 0.12);
+}
+
+.nexora-cli-hero h1 {
+  max-width: 8ch;
+  font-size: clamp(3.6rem, 7vw, 6.4rem);
+  font-weight: 780;
+  letter-spacing: -0.075em;
+  line-height: 0.95;
+}
+
+.nexora-cli-hero-subtitle {
+  margin-block-start: 22px;
+  color: var(--cli-ink);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  font-weight: 680;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.nexora-cli-hero-description {
+  max-width: 52ch;
+  margin-block-start: 14px;
+  color: var(--cli-quiet);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.nexora-cli-download-control,
+.nexora-cli-download-fallback {
+  position: relative;
+  display: flex;
+  width: min(100%, 430px);
+  min-height: 64px;
+  margin-block-start: 30px;
+  border-radius: 14px;
+  background: var(--cli-cobalt);
+  color: #fff;
+  box-shadow: 0 12px 28px rgb(70 84 216 / 0.23);
+  isolation: isolate;
+}
+
+.nexora-cli-download-control {
+  align-items: stretch;
+}
+
+.nexora-cli-download-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 14px 0 0 14px;
+  background: transparent;
+  color: #fff;
+  text-align: start;
+  cursor: pointer;
+}
+
+.nexora-cli-download-main:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.nexora-cli-download-main > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.nexora-cli-download-main strong {
+  overflow: hidden;
+  font-size: 0.98rem;
+  font-weight: 760;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexora-cli-download-main small {
+  overflow: hidden;
+  color: rgb(255 255 255 / 0.72);
+  font-size: 0.69rem;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexora-cli-download-arrow {
+  display: grid;
+  flex: 0 0 54px;
+  place-items: center;
+  border: 0;
+  border-inline-start: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 0 14px 14px 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.nexora-cli-download-arrow:hover,
+.nexora-cli-download-arrow:focus-visible {
+  background: rgb(255 255 255 / 0.12);
+}
+
+.nexora-cli-download-arrow svg {
+  transition: transform 180ms ease;
+}
+
+.nexora-cli-download-arrow svg.is-open {
+  transform: rotate(180deg);
+}
+
+.nexora-cli-download-control.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.nexora-cli-download-control.is-disabled .nexora-cli-download-main {
+  cursor: not-allowed;
+}
+
+.nexora-cli-download-control.is-disabled .nexora-cli-download-arrow {
+  pointer-events: none;
+}
+
+.nexora-cli-download-fallback {
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+.nexora-cli-download-fallback:hover {
+  background: var(--cli-cobalt-deep);
+}
+
+.nexora-cli-download-fallback > span {
+  display: grid;
+  gap: 3px;
+}
+
+.nexora-cli-download-fallback strong {
+  font-size: 0.96rem;
+}
+
+.nexora-cli-download-fallback small {
+  color: rgb(255 255 255 / 0.74);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.nexora-cli-spin {
+  animation: nexora-cli-spin 1s linear infinite;
+}
+
+@keyframes nexora-cli-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.nexora-cli-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-block-start: 14px;
+  color: var(--cli-faint);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.nexora-cli-meta-version {
+  color: var(--cli-cobalt-deep);
+  font-weight: 800;
+}
+
+.nexora-cli-meta-divider {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--cli-faint);
+}
+
+.nexora-cli-mobile-notice,
+.nexora-cli-inline-error,
+.nexora-cli-cache-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 52ch;
+  margin-block-start: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--cli-line);
+  border-radius: 10px;
+  color: var(--cli-quiet);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.nexora-cli-mobile-notice svg {
+  flex: 0 0 auto;
+  margin-block-start: 1px;
+  color: var(--cli-cobalt-deep);
+}
+
+.nexora-cli-inline-error {
+  border-color: rgb(210 75 81 / 0.3);
+  color: #bd4e59;
+}
+
+.dark .nexora-cli-inline-error {
+  color: #ff9aa0;
+}
+
+.nexora-cli-cache-notice {
+  color: var(--cli-faint);
+}
+
+.nexora-cli-hero-preview {
+  position: relative;
+  min-width: 0;
+}
+
+.nexora-cli-preview-orbit {
+  position: absolute;
+  border: 1px solid rgb(70 84 216 / 0.2);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.orbit-one {
+  width: 115%;
+  aspect-ratio: 1;
+  inset: -16% -18% auto auto;
+}
+
+.orbit-two {
+  width: 80%;
+  aspect-ratio: 1;
+  inset: auto auto -24% -14%;
+  border-color: rgb(70 84 216 / 0.12);
+}
+
+.nexora-cli-terminal {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.13);
+  border-radius: 18px;
+  background: var(--cli-terminal);
+  box-shadow:
+    0 30px 80px rgb(17 19 26 / 0.28),
+    inset 0 1px 0 rgb(255 255 255 / 0.08);
+  color: var(--cli-terminal-text);
+  transform: perspective(1300px) rotateY(-3deg) rotateX(1deg);
+}
+
+.nexora-cli-terminal-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 0 16px;
+  border-block-end: 1px solid var(--cli-terminal-line);
+  background: rgb(255 255 255 / 0.035);
+  color: var(--cli-terminal-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+}
+
+.nexora-cli-terminal-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.nexora-cli-terminal-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4a5160;
+}
+
+.nexora-cli-terminal-dots span:first-child {
+  background: #e17a83;
+}
+.nexora-cli-terminal-dots span:nth-child(2) {
+  background: #e3b45d;
+}
+.nexora-cli-terminal-dots span:nth-child(3) {
+  background: #61bd87;
+}
+
+.nexora-cli-terminal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nexora-cli-terminal-prompt {
+  color: #7f8aff;
+}
+
+.nexora-cli-terminal-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: 7px;
+  color: #6ec58e;
+}
+
+.nexora-cli-terminal-body {
+  display: grid;
+  grid-template-columns: 38% 62%;
+  min-height: 354px;
+}
+
+.nexora-cli-terminal-sidebar {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px 12px;
+  border-inline-end: 1px solid var(--cli-terminal-line);
+  background: rgb(255 255 255 / 0.025);
+}
+
+.nexora-cli-terminal-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--cli-terminal-line);
+  border-radius: 7px;
+  color: var(--cli-terminal-muted);
+  font-size: 0.63rem;
+}
+
+.nexora-cli-terminal-search kbd {
+  margin-inline-start: auto;
+  color: #687185;
+  font-size: 0.55rem;
+}
+
+.nexora-cli-terminal-section {
+  display: grid;
+  gap: 3px;
+  margin-block-start: 24px;
+}
+
+.nexora-cli-terminal-section-muted {
+  margin-block-start: 22px;
+}
+
+.nexora-cli-terminal-label {
+  display: block;
+  margin-block-end: 6px;
+  color: #737d91;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.nexora-cli-terminal-friend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 3px 5px;
+  border-radius: 6px;
+  color: #c7ccda;
+  font-size: 0.68rem;
+}
+
+.nexora-cli-terminal-friend:hover {
+  background: rgb(255 255 255 / 0.05);
+}
+
+.nexora-cli-terminal-avatar,
+.nexora-cli-terminal-message-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #4b58cc, #8992ff);
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.nexora-cli-terminal-friend i,
+.nexora-cli-terminal-online i {
+  width: 5px;
+  height: 5px;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  background: #5bc383;
+  box-shadow: 0 0 0 3px rgb(91 195 131 / 0.1);
+}
+
+.nexora-cli-terminal-friend b {
+  display: grid;
+  min-width: 15px;
+  height: 15px;
+  margin-inline-start: auto;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--cli-cobalt);
+  color: #fff;
+  font-size: 0.54rem;
+}
+
+.nexora-cli-terminal-sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-block-start: auto;
+  padding: 10px 5px 2px;
+  border-block-start: 1px solid var(--cli-terminal-line);
+  color: #aeb5c5;
+  font-size: 0.64rem;
+}
+
+.nexora-cli-terminal-sidebar-footer > div {
+  display: grid;
+  gap: 2px;
+}
+
+.nexora-cli-terminal-sidebar-footer small {
+  color: #697388;
+  font-size: 0.56rem;
+}
+
+.nexora-cli-terminal-chat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.nexora-cli-terminal-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 10px 16px;
+  border-block-end: 1px solid var(--cli-terminal-line);
+}
+
+.nexora-cli-terminal-chat-header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.nexora-cli-terminal-chat-header strong {
+  font-size: 0.78rem;
+}
+
+.nexora-cli-terminal-online {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #778298;
+  font-size: 0.58rem;
+}
+
+.nexora-cli-terminal-messages {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 17px;
+  padding: 16px;
+}
+
+.nexora-cli-terminal-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #687286;
+  font-size: 0.57rem;
+  text-align: center;
+}
+
+.nexora-cli-terminal-day::before,
+.nexora-cli-terminal-day::after {
+  flex: 1;
+  height: 1px;
+  background: var(--cli-terminal-line);
+  content: "";
+}
+
+.nexora-cli-terminal-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.nexora-cli-terminal-message-avatar {
+  border-radius: 7px;
+  background: linear-gradient(135deg, #b66c9d, #f0b184);
+}
+
+.nexora-cli-terminal-message > div {
+  min-width: 0;
+}
+
+.nexora-cli-terminal-message-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.nexora-cli-terminal-message-meta strong {
+  color: #dfe3ed;
+  font-size: 0.68rem;
+}
+
+.nexora-cli-terminal-message-meta time {
+  color: #626d81;
+  font-size: 0.56rem;
+}
+
+.nexora-cli-terminal-message p {
+  margin-block-start: 3px;
+  color: #b5bdcc;
+  font-size: 0.7rem;
+}
+
+.nexora-cli-terminal-system {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-block-start: auto;
+  color: #6b7488;
+  font-size: 0.59rem;
+}
+
+.nexora-cli-terminal-composer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 14px 14px;
+  padding: 9px 10px;
+  border: 1px solid var(--cli-terminal-line);
+  border-radius: 7px;
+  color: #687286;
+  font-size: 0.63rem;
+}
+
+.nexora-cli-preview-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-block-start: 18px;
+  color: var(--cli-faint);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.nexora-cli-preview-caption-line {
+  width: 28px;
+  height: 1px;
+  background: var(--cli-cobalt);
+}
+
+.nexora-cli-ribbon {
+  border-block: 1px solid var(--cli-line);
+  background: color-mix(in srgb, var(--cli-surface) 48%, transparent);
+}
+
+.nexora-cli-ribbon-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 56px;
+  color: var(--cli-quiet);
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.nexora-cli-ribbon-separator {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--cli-cobalt);
+}
+
+.nexora-cli-section {
+  padding: 7.5rem 0;
+}
+
+.nexora-cli-section-heading {
+  max-width: 610px;
+  margin-block-end: 42px;
+}
+
+.nexora-cli-section-heading.is-left {
+  margin-block-end: 0;
+}
+
+.nexora-cli-section-heading h2,
+.nexora-cli-releases-hero h1 {
+  margin-block-start: 12px;
+  color: var(--cli-ink);
+  font-size: clamp(2.2rem, 4.4vw, 3.7rem);
+  font-weight: 760;
+  letter-spacing: -0.06em;
+  line-height: 1.02;
+}
+
+.nexora-cli-section-heading > p:not(.nexora-cli-kicker) {
+  max-width: 55ch;
+  margin-block-start: 16px;
+  color: var(--cli-quiet);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.nexora-cli-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.nexora-cli-feature-card {
+  display: flex;
+  min-height: 192px;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 24px;
+  border: 1px solid var(--cli-line);
+  border-radius: 18px;
+  background: var(--cli-surface);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.05) inset;
+}
+
+.nexora-cli-feature-card.is-cobalt {
+  grid-column: span 5;
+  min-height: 260px;
+  border-color: transparent;
+  background: var(--cli-cobalt);
+  color: #fff;
+  box-shadow: 0 18px 40px rgb(70 84 216 / 0.2);
+}
+
+.nexora-cli-feature-card.is-surface {
+  grid-column: span 3;
+}
+
+.nexora-cli-feature-card.is-ink {
+  grid-column: span 4;
+  background: var(--cli-ink);
+  color: var(--cli-bg);
+}
+
+.nexora-cli-feature-card.is-outline {
+  grid-column: span 5;
+  background: transparent;
+}
+
+.nexora-cli-feature-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  margin-block-end: 30px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--cli-cobalt-soft);
+  color: var(--cli-cobalt-deep);
+}
+
+.nexora-cli-feature-card.is-cobalt .nexora-cli-feature-icon {
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+}
+
+.nexora-cli-feature-card.is-ink .nexora-cli-feature-icon {
+  background: rgb(255 255 255 / 0.13);
+  color: var(--cli-cobalt);
+}
+
+.nexora-cli-feature-card h3 {
+  font-size: 1.08rem;
+  font-weight: 750;
+  letter-spacing: -0.025em;
+}
+
+.nexora-cli-feature-card p {
+  max-width: 31ch;
+  margin-block-start: 8px;
+  color: var(--cli-quiet);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.nexora-cli-feature-card.is-cobalt p,
+.nexora-cli-feature-card.is-ink p {
+  color: rgb(255 255 255 / 0.7);
+}
+
+.nexora-cli-download-menu {
+  position: absolute;
+  inset-block-start: calc(100% + 10px);
+  inset-inline-start: 0;
+  z-index: 60;
+  width: min(390px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--cli-line);
+  border-radius: 16px;
+  background: var(--cli-surface);
+  box-shadow: 0 24px 60px rgb(17 19 26 / 0.2);
+  color: var(--cli-ink);
+  text-align: start;
+  animation: nexora-cli-menu-in 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes nexora-cli-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.nexora-cli-download-menu-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 17px 17px 14px;
+  border-block-end: 1px solid var(--cli-line);
+}
+
+.nexora-cli-download-menu-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.nexora-cli-download-menu-heading strong {
+  font-size: 0.92rem;
+}
+
+.nexora-cli-download-menu-heading span:not(.nexora-cli-menu-version) {
+  color: var(--cli-faint);
+  font-size: 0.68rem;
+}
+
+.nexora-cli-menu-version {
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: var(--cli-cobalt-soft);
+  color: var(--cli-cobalt-deep);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.nexora-cli-download-menu-groups {
+  max-height: min(420px, 55vh);
+  overflow-y: auto;
+  padding: 5px 9px 9px;
+}
+
+.nexora-cli-download-group {
+  padding: 10px 0 4px;
+}
+
+.nexora-cli-download-group + .nexora-cli-download-group {
+  border-block-start: 1px solid var(--cli-line);
+}
+
+.nexora-cli-download-group-title,
+.nexora-cli-release-platform-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--cli-quiet);
+  font-size: 0.69rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nexora-cli-download-group-title > span:first-child,
+.nexora-cli-release-platform-title > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.nexora-cli-recommended-badge,
+.nexora-cli-latest-badge,
+.nexora-cli-prerelease-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #3c9c64;
+  font-size: 0.61rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
+.nexora-cli-download-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 50px;
+  margin-block-start: 4px;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  transition:
+    background-color 130ms ease,
+    border-color 130ms ease;
+}
+
+.nexora-cli-download-item:hover,
+.nexora-cli-download-item:focus-visible,
+.nexora-cli-download-item.is-recommended {
+  border-color: rgb(70 84 216 / 0.2);
+  background: var(--cli-cobalt-soft);
+}
+
+.nexora-cli-download-item-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.nexora-cli-download-item-copy strong {
+  overflow: hidden;
+  font-size: 0.78rem;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexora-cli-download-item-copy small {
+  overflow: hidden;
+  color: var(--cli-faint);
+  font-size: 0.63rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexora-cli-download-item > svg {
+  flex: 0 0 auto;
+  color: var(--cli-cobalt-deep);
+}
+
+.nexora-cli-download-item-check {
+  color: #3c9c64 !important;
+}
+
+.nexora-cli-menu-note {
+  margin: 0 17px 12px;
+  color: var(--cli-faint);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.nexora-cli-menu-releases {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 17px;
+  border-block-start: 1px solid var(--cli-line);
+  color: var(--cli-cobalt-deep);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.nexora-cli-menu-releases:hover,
+.nexora-cli-menu-releases:focus-visible {
+  background: var(--cli-cobalt-soft);
+}
+
+.nexora-cli-install-section {
+  background: color-mix(in srgb, var(--cli-surface) 48%, transparent);
+}
+
+.nexora-cli-install-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.28fr);
+  gap: 18px;
+}
+
+.nexora-cli-install-assets,
+.nexora-cli-install-guide {
+  border: 1px solid var(--cli-line);
+  border-radius: 18px;
+  background: var(--cli-surface);
+}
+
+.nexora-cli-install-assets {
+  align-self: start;
+  padding: 10px;
+}
+
+.nexora-cli-install-platform + .nexora-cli-install-platform {
+  margin-block-start: 12px;
+  padding-block-start: 12px;
+  border-block-start: 1px solid var(--cli-line);
+}
+
+.nexora-cli-install-platform-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px 7px;
+  color: var(--cli-quiet);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.nexora-cli-install-recommended {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #3c9c64;
+  font-size: 0.59rem;
+  font-weight: 750;
+}
+
+.nexora-cli-install-asset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--cli-ink);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color 130ms ease,
+    border-color 130ms ease;
+}
+
+.nexora-cli-install-asset:hover,
+.nexora-cli-install-asset:focus-visible,
+.nexora-cli-install-asset.is-selected {
+  border-color: rgb(70 84 216 / 0.2);
+  background: var(--cli-cobalt-soft);
+}
+
+.nexora-cli-install-asset > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.nexora-cli-install-asset strong {
+  overflow: hidden;
+  font-size: 0.77rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexora-cli-install-asset small {
+  color: var(--cli-faint);
+  font-size: 0.65rem;
+}
+
+.nexora-cli-install-asset-check {
+  display: grid;
+  flex: 0 0 auto;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--cli-surface-soft);
+  color: var(--cli-cobalt-deep);
+}
+
+.nexora-cli-install-asset.is-selected .nexora-cli-install-asset-check {
+  background: var(--cli-cobalt);
+  color: #fff;
+}
+
+.nexora-cli-install-guide {
+  padding: 20px;
+}
+
+.nexora-cli-install-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-block-end: 18px;
+  border-block-end: 1px solid var(--cli-line);
+}
+
+.nexora-cli-install-selected > div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.nexora-cli-install-selected span {
+  color: var(--cli-faint);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.nexora-cli-install-selected strong {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexora-cli-install-selected a {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  background: var(--cli-cobalt);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.nexora-cli-install-selected a:hover {
+  background: var(--cli-cobalt-deep);
+}
+
+.nexora-cli-install-steps {
+  display: grid;
+  gap: 18px;
+  padding: 22px 0 0;
+  list-style: none;
+}
+
+.nexora-cli-install-steps li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 11px;
+}
+
+.nexora-cli-install-step-number {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--cli-line);
+  border-radius: 50%;
+  color: var(--cli-cobalt-deep);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.nexora-cli-install-steps strong {
+  font-size: 0.87rem;
+}
+
+.nexora-cli-install-steps p {
+  margin-block-start: 4px;
+  color: var(--cli-quiet);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.nexora-cli-install-steps code {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  margin-block-start: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--cli-line);
+  border-radius: 8px;
+  background: var(--cli-terminal);
+  color: #dce1ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.nexora-cli-install-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block-start: 22px;
+  padding: 10px 11px;
+  border-radius: 9px;
+  background: var(--cli-cobalt-soft);
+  color: var(--cli-cobalt-deep);
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.nexora-cli-install-empty,
+.nexora-cli-releases-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 48px 20px;
+  border: 1px dashed var(--cli-line);
+  border-radius: 16px;
+  color: var(--cli-quiet);
+  text-align: center;
+}
+
+.nexora-cli-install-empty svg,
+.nexora-cli-releases-empty svg {
+  color: var(--cli-cobalt-deep);
+}
+
+.nexora-cli-install-empty strong {
+  color: var(--cli-ink);
+}
+
+.nexora-cli-install-empty span {
+  max-width: 45ch;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.nexora-cli-login-section {
+  --login-ink: var(--cli-bg);
+  --login-muted: #c0c7d5;
+  --login-accent: #a6adff;
+  background: var(--cli-ink);
+  color: var(--login-ink);
+}
+
+.dark .nexora-cli-login-section {
+  --login-ink: #1b1f2b;
+  --login-muted: #535b69;
+  --login-accent: #3542b9;
+}
+
+.nexora-cli-login-section .nexora-cli-section-heading h2,
+.nexora-cli-login-section
+  .nexora-cli-section-heading
+  > p:not(.nexora-cli-kicker) {
+  color: var(--login-ink);
+}
+
+.nexora-cli-login-section .nexora-cli-kicker {
+  color: var(--login-accent);
+}
+
+.nexora-cli-login-grid,
+.nexora-cli-update-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(3rem, 9vw, 8rem);
+}
+
+.nexora-cli-login-visual {
+  position: relative;
+  min-height: 310px;
+  padding: 32px;
+  border: 1px solid color-mix(in srgb, var(--login-ink) 14%, transparent);
+  border-radius: 20px;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--login-ink) 8%, transparent),
+    color-mix(in srgb, var(--login-ink) 2%, transparent)
+  );
+  box-shadow: inset 0 1px 0
+    color-mix(in srgb, var(--login-ink) 10%, transparent);
+}
+
+.nexora-cli-login-visual::after {
+  position: absolute;
+  inset: 18% 12% auto auto;
+  width: 110px;
+  height: 110px;
+  border: 1px solid color-mix(in srgb, var(--login-accent) 32%, transparent);
+  border-radius: 50%;
+  content: "";
+}
+
+.nexora-cli-login-command {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--login-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  font-weight: 650;
+}
+
+.nexora-cli-login-command span {
+  color: var(--login-accent);
+}
+
+.nexora-cli-login-flow {
+  display: grid;
+  gap: 10px;
+  margin-block-start: 72px;
+  color: var(--login-muted);
+  font-size: 0.76rem;
+}
+
+.nexora-cli-login-flow div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nexora-cli-login-flow span {
+  color: var(--login-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.65rem;
+}
+
+.nexora-cli-login-points {
+  display: grid;
+  gap: 12px;
+  margin-block-start: 28px;
+}
+
+.nexora-cli-login-points div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--login-muted);
+  font-size: 0.8rem;
+}
+
+.nexora-cli-login-points svg {
+  flex: 0 0 auto;
+  color: var(--login-accent);
+}
+
+.nexora-cli-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-block-start: 28px;
+  color: var(--login-accent);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.nexora-cli-text-link:hover {
+  color: var(--login-ink);
+}
+
+.nexora-cli-update-section {
+  background: color-mix(in srgb, var(--cli-surface) 45%, transparent);
+}
+
+.nexora-cli-update-card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 92px;
+  padding: 18px;
+  border: 1px solid var(--cli-line);
+  border-radius: 16px;
+  background: var(--cli-surface);
+  box-shadow: var(--cli-shadow);
+}
+
+.nexora-cli-update-icon,
+.nexora-cli-official-mark,
+.nexora-cli-releases-error-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--cli-cobalt-soft);
+  color: var(--cli-cobalt-deep);
+}
+
+.nexora-cli-update-card > div:nth-child(2) {
+  display: grid;
+  gap: 4px;
+}
+
+.nexora-cli-update-card span {
+  color: var(--cli-faint);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+.nexora-cli-update-card strong {
+  font-size: 1rem;
+}
+
+.nexora-cli-update-check {
+  margin-inline-start: auto;
+  color: #3c9c64;
+}
+
+.nexora-cli-official-section {
+  padding-block-start: 0;
+}
+
+.nexora-cli-official-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 25px;
+  border: 1px solid var(--cli-line);
+  border-radius: 20px;
+  background: var(--cli-surface);
+}
+
+.nexora-cli-official-card h2 {
+  margin-block-start: 7px;
+  font-size: 1.35rem;
+  letter-spacing: -0.04em;
+}
+
+.nexora-cli-official-card p:not(.nexora-cli-kicker) {
+  max-width: 60ch;
+  margin-block-start: 7px;
+  color: var(--cli-quiet);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.nexora-cli-official-actions,
+.nexora-cli-releases-actions {
+  display: grid;
+  gap: 8px;
+  min-width: 166px;
+}
+
+.nexora-cli-official-actions a,
+.nexora-cli-releases-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--cli-line);
+  border-radius: 9px;
+  color: var(--cli-cobalt-deep);
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.nexora-cli-official-actions a:hover,
+.nexora-cli-releases-actions a:hover {
+  border-color: rgb(70 84 216 / 0.35);
+  background: var(--cli-cobalt-soft);
+}
+
+.nexora-cli-footer {
+  border-block-start: 1px solid var(--cli-line);
+}
+
+.nexora-cli-footer-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 18px;
+  min-height: 96px;
+  color: var(--cli-faint);
+  font-size: 0.72rem;
+}
+
+.nexora-cli-footer-brand {
+  color: var(--cli-ink);
+  font-size: 0.84rem;
+}
+
+.nexora-cli-footer-row > p {
+  text-align: center;
+}
+
+.nexora-cli-footer-row > a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--cli-quiet);
+  font-weight: 700;
+}
+
+.nexora-cli-footer-row > a:hover {
+  color: var(--cli-ink);
+}
+
+.nexora-cli-releases-hero {
+  padding: 5.5rem 0 4.5rem;
+  background:
+    radial-gradient(circle at 80% 20%, rgb(70 84 216 / 0.12), transparent 30%),
+    var(--cli-bg);
+}
+
+.nexora-cli-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-block-end: 42px;
+  color: var(--cli-quiet);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.nexora-cli-back-link:hover {
+  color: var(--cli-ink);
+}
+
+.nexora-cli-releases-hero h1 {
+  max-width: 11ch;
+}
+
+.nexora-cli-releases-hero > .nexora-cli-shell > p:not(.nexora-cli-kicker) {
+  max-width: 52ch;
+  margin-block-start: 17px;
+  color: var(--cli-quiet);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.nexora-cli-releases-actions {
+  display: flex;
+  flex-wrap: wrap;
+  margin-block-start: 26px;
+}
+
+.nexora-cli-releases-actions a {
+  min-height: 42px;
+  padding-inline: 13px;
+}
+
+.nexora-cli-releases-section {
+  padding-block-start: 4.5rem;
+}
+
+.nexora-cli-releases-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-block-end: 18px;
+  color: var(--cli-faint);
+  font-size: 0.75rem;
+}
+
+.nexora-cli-releases-toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nexora-cli-release-count {
+  color: var(--cli-ink);
+  font-weight: 750;
+}
+
+.nexora-cli-cache-badge {
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--cli-cobalt-soft);
+  color: var(--cli-cobalt-deep);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.nexora-cli-release-list {
+  display: grid;
+  gap: 14px;
+}
+
+.nexora-cli-release-card {
+  padding: 24px;
+  border: 1px solid var(--cli-line);
+  border-radius: 18px;
+  background: var(--cli-surface);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.05) inset;
+}
+
+.nexora-cli-release-card.is-latest {
+  border-color: rgb(70 84 216 / 0.4);
+  box-shadow:
+    0 0 0 3px rgb(70 84 216 / 0.07),
+    var(--cli-shadow);
+}
+
+.nexora-cli-release-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.nexora-cli-release-version-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.nexora-cli-release-version-row h2 {
+  font-size: 1.45rem;
+  font-weight: 760;
+  letter-spacing: -0.04em;
+}
+
+.nexora-cli-latest-badge {
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: rgb(60 156 100 / 0.12);
+}
+
+.nexora-cli-prerelease-badge {
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: rgb(196 143 63 / 0.14);
+  color: #a26d21;
+}
+
+.nexora-cli-release-date {
+  margin-block-start: 6px;
+  color: var(--cli-faint);
+  font-size: 0.73rem;
+}
+
+.nexora-cli-release-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cli-cobalt-deep);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.nexora-cli-release-github:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.nexora-cli-release-notes {
+  max-width: 90ch;
+  margin-block-start: 18px;
+  color: var(--cli-quiet);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.nexora-cli-release-platforms {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-block-start: 22px;
+}
+
+.nexora-cli-release-platform {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--cli-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--cli-bg) 60%, transparent);
+}
+
+.nexora-cli-release-platform-title {
+  font-size: 0.65rem;
+}
+
+.nexora-cli-release-platform-title > span:last-child {
+  color: var(--cli-faint);
+  font-size: 0.61rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.nexora-cli-release-assets {
+  display: grid;
+  gap: 5px;
+  margin-block-start: 10px;
+}
+
+.nexora-cli-release-asset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition:
+    background-color 130ms ease,
+    border-color 130ms ease;
+}
+
+.nexora-cli-release-asset:hover,
+.nexora-cli-release-asset:focus-visible {
+  border-color: rgb(70 84 216 / 0.2);
+  background: var(--cli-cobalt-soft);
+}
+
+.nexora-cli-release-asset > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.nexora-cli-release-asset strong {
+  overflow: hidden;
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexora-cli-release-asset small {
+  overflow: hidden;
+  color: var(--cli-faint);
+  font-size: 0.6rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nexora-cli-release-asset > svg {
+  flex: 0 0 auto;
+  color: var(--cli-cobalt-deep);
+}
+
+.nexora-cli-release-empty {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-block-start: 20px;
+  padding: 13px;
+  border-radius: 10px;
+  background: var(--cli-surface-soft);
+  color: var(--cli-quiet);
+  font-size: 0.78rem;
+}
+
+.nexora-cli-releases-loading {
+  display: grid;
+  gap: 14px;
+}
+
+.nexora-cli-loading-bar,
+.nexora-cli-loading-card {
+  border-radius: 14px;
+  background: linear-gradient(
+    90deg,
+    var(--cli-surface-soft),
+    var(--cli-surface),
+    var(--cli-surface-soft)
+  );
+  background-size: 200% 100%;
+  animation: nexora-cli-shimmer 1.5s ease-in-out infinite;
+}
+
+.nexora-cli-loading-bar {
+  width: 220px;
+  height: 14px;
+}
+
+.nexora-cli-loading-card {
+  height: 190px;
+}
+
+.nexora-cli-releases-loading > span {
+  color: var(--cli-faint);
+  font-size: 0.75rem;
+}
+
+@keyframes nexora-cli-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.nexora-cli-releases-error {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 15px;
+  padding: 22px;
+  border: 1px solid rgb(210 75 81 / 0.25);
+  border-radius: 16px;
+  background: color-mix(in srgb, #d84b53 7%, var(--cli-surface));
+}
+
+.nexora-cli-releases-error-icon {
+  background: rgb(210 75 81 / 0.12);
+  color: #c54b56;
+}
+
+.nexora-cli-releases-error h2 {
+  font-size: 1rem;
+}
+
+.nexora-cli-releases-error p {
+  margin-block-start: 4px;
+  color: var(--cli-quiet);
+  font-size: 0.8rem;
+}
+
+.nexora-cli-releases-error > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  background: var(--cli-cobalt);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+@media (max-width: 960px) {
+  .nexora-cli-hero-grid {
+    grid-template-columns: minmax(0, 0.9fr) minmax(340px, 1.1fr);
+    gap: 2.5rem;
+  }
+
+  .nexora-cli-terminal {
+    transform: none;
+  }
+
+  .nexora-cli-feature-card.is-surface {
+    grid-column: span 4;
+  }
+
+  .nexora-cli-feature-card.is-outline,
+  .nexora-cli-feature-card.is-cobalt {
+    grid-column: span 6;
+  }
+
+  .nexora-cli-install-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .nexora-cli-shell {
+    width: min(100% - 32px, 560px);
+  }
+
+  .nexora-cli-header-row {
+    grid-template-columns: 1fr auto;
+    min-height: 64px;
+  }
+
+  .nexora-cli-nav,
+  .nexora-cli-login-link {
+    display: none;
+  }
+
+  .nexora-cli-menu-button {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border: 1px solid var(--cli-line);
+    border-radius: 11px;
+    background: var(--cli-surface);
+    color: var(--cli-ink);
+    cursor: pointer;
+  }
+
+  .nexora-cli-mobile-nav {
+    display: block;
+    border-block-start: 1px solid var(--cli-line);
+    background: var(--cli-bg);
+  }
+
+  .nexora-cli-mobile-nav .nexora-cli-shell {
+    display: grid;
+    gap: 3px;
+    padding-block: 9px 14px;
+  }
+
+  .nexora-cli-mobile-nav a {
+    min-height: 42px;
+    border-radius: 9px;
+  }
+
+  .nexora-cli-hero {
+    padding: 4.25rem 0 3.75rem;
+  }
+
+  .nexora-cli-hero-grid,
+  .nexora-cli-login-grid,
+  .nexora-cli-update-grid {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+
+  .nexora-cli-hero h1 {
+    font-size: clamp(3.45rem, 17vw, 5.5rem);
+  }
+
+  .nexora-cli-hero-description {
+    font-size: 0.94rem;
+  }
+
+  .nexora-cli-download-control,
+  .nexora-cli-download-fallback {
+    width: 100%;
+  }
+
+  .nexora-cli-hero-preview {
+    width: calc(100% + 8px);
+    margin-inline-start: -4px;
+  }
+
+  .nexora-cli-terminal-body {
+    grid-template-columns: 40% 60%;
+    min-height: 300px;
+  }
+
+  .nexora-cli-terminal-messages {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .nexora-cli-terminal-sidebar {
+    padding-inline: 8px;
+  }
+
+  .nexora-cli-ribbon-inner {
+    flex-wrap: wrap;
+    gap: 9px 12px;
+    min-height: 72px;
+    padding-block: 14px;
+    font-size: 0.68rem;
+  }
+
+  .nexora-cli-section {
+    padding: 5.25rem 0;
+  }
+
+  .nexora-cli-section-heading {
+    margin-block-end: 28px;
+  }
+
+  .nexora-cli-section-heading h2,
+  .nexora-cli-releases-hero h1 {
+    font-size: clamp(2.25rem, 12vw, 3.25rem);
+  }
+
+  .nexora-cli-feature-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .nexora-cli-feature-card,
+  .nexora-cli-feature-card.is-cobalt,
+  .nexora-cli-feature-card.is-surface,
+  .nexora-cli-feature-card.is-ink,
+  .nexora-cli-feature-card.is-outline {
+    grid-column: span 1;
+    min-height: 188px;
+    padding: 18px;
+  }
+
+  .nexora-cli-feature-card.is-cobalt,
+  .nexora-cli-feature-card.is-ink {
+    grid-column: span 2;
+    min-height: 205px;
+  }
+
+  .nexora-cli-install-guide {
+    padding: 16px;
+  }
+
+  .nexora-cli-install-selected {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .nexora-cli-install-selected a {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .nexora-cli-login-visual {
+    min-height: 250px;
+    padding: 24px;
+  }
+
+  .nexora-cli-login-flow {
+    margin-block-start: 48px;
+  }
+
+  .nexora-cli-official-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 19px;
+  }
+
+  .nexora-cli-official-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .nexora-cli-official-actions a {
+    flex: 1 1 180px;
+    justify-content: center;
+  }
+
+  .nexora-cli-footer-row {
+    grid-template-columns: 1fr;
+    justify-items: start;
+    gap: 10px;
+    padding-block: 24px;
+  }
+
+  .nexora-cli-footer-row > p {
+    text-align: start;
+  }
+
+  .nexora-cli-footer-row > a {
+    justify-content: flex-start;
+  }
+
+  .nexora-cli-releases-hero {
+    padding: 4rem 0 3.5rem;
+  }
+
+  .nexora-cli-back-link {
+    margin-block-end: 32px;
+  }
+
+  .nexora-cli-releases-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .nexora-cli-release-card {
+    padding: 18px;
+  }
+
+  .nexora-cli-release-card-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .nexora-cli-release-platforms {
+    grid-template-columns: 1fr;
+  }
+
+  .nexora-cli-releases-error {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .nexora-cli-releases-error > a {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 430px) {
+  .nexora-cli-download-main {
+    padding-inline: 12px;
+  }
+
+  .nexora-cli-download-arrow {
+    flex-basis: 48px;
+  }
+
+  .nexora-cli-download-main strong {
+    font-size: 0.88rem;
+  }
+
+  .nexora-cli-download-main small {
+    font-size: 0.63rem;
+  }
+
+  .nexora-cli-download-menu {
+    inset-inline-start: 0;
+    width: 100%;
+  }
+
+  .nexora-cli-terminal-title {
+    gap: 5px;
+  }
+
+  .nexora-cli-terminal-live {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nexora-cli-spin,
+  .nexora-cli-loading-bar,
+  .nexora-cli-loading-card,
+  .nexora-cli-download-menu {
+    animation: none;
+  }
+}

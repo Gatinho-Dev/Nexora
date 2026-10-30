@@ -82,13 +82,17 @@ export async function createSession(input: {
 }
 
 /** Busca sessão válida (não revogada, não expirada) por sid. */
-export async function resolveActiveSession(sid: string) {
+export async function resolveActiveSession(
+  sid: string,
+  token?: string,
+) {
   const [row] = await getDb()
     .select()
     .from(schema.accountSessions)
     .where(eq(schema.accountSessions.id, sid))
     .limit(1);
   if (!row) return null;
+  if (token && row.tokenHash !== hashToken(token)) return null;
   if (row.revokedAt) return null;
   if (new Date(row.expiresAt).getTime() < Date.now()) return null;
   touchLastSeenThrottled(sid);
@@ -191,7 +195,52 @@ export async function revokeAllOthers(
   return ids;
 }
 
+/** Revoga todas as sessões do usuário, inclusive a atual. Usado após recuperação de senha. */
+export async function revokeAllSessions(userId: number): Promise<string[]> {
+  const rows = await getDb()
+    .select({ id: schema.accountSessions.id })
+    .from(schema.accountSessions)
+    .where(
+      and(
+        eq(schema.accountSessions.userId, userId),
+        isNull(schema.accountSessions.revokedAt),
+      ),
+    );
+  if (rows.length === 0) return [];
+  const ids = rows.map(row => row.id);
+  await getDb()
+    .update(schema.accountSessions)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(schema.accountSessions.userId, userId),
+        isNull(schema.accountSessions.revokedAt),
+      ),
+    );
+  void logSafetyEvent({
+    event: "sessions_revoked_all",
+    targetUserId: userId,
+    metadata: { count: ids.length },
+  }).catch(() => {});
+  return ids;
+}
+
 /** Lista sessões ativas do usuário (revogadas/expiradas fora). */
+/**
+ * Mascara o IP exibido ao usuário (ex.: 203.0.xxx.xxx / 2804:xxxx::).
+ * O IP completo nunca é enviado ao cliente — apenas uma pista aproximada.
+ */
+function maskIpForDisplay(ip: string | null): string | null {
+  if (!ip) return null;
+  if (ip.includes(":")) {
+    const groups = ip.split(":");
+    return `${groups[0]}:xxxx::`;
+  }
+  const octets = ip.split(".");
+  if (octets.length !== 4) return "IP mascarado";
+  return `${octets[0]}.${octets[1]}.xxx.xxx`;
+}
+
 export async function listActiveSessions(userId: number) {
   const rows = await getDb()
     .select({
@@ -214,10 +263,39 @@ export async function listActiveSessions(userId: number) {
     )
     .orderBy(sql`${schema.accountSessions.lastSeenAt} DESC`)
     .limit(50);
-  return rows;
+  return rows.map(row => ({
+    ...row,
+    ipAddress: maskIpForDisplay(row.ipAddress),
+  }));
 }
 
 /** Job periódico: remove sessões expiradas/revogadas antigas (>7 dias). */
+/** Remove transient authentication artifacts after their TTL. */
+export function startAuthArtifactCleanupJob(): void {
+  setInterval(
+    () => {
+      const now = new Date();
+      void getDb()
+        .delete(schema.emailActionTokens)
+        .where(lt(schema.emailActionTokens.expiresAt, now))
+        .catch(() => {});
+      void getDb()
+        .delete(schema.webauthnChallenges)
+        .where(lt(schema.webauthnChallenges.expiresAt, now))
+        .catch(() => {});
+      void getDb()
+        .delete(schema.qrLoginSessions)
+        .where(lt(schema.qrLoginSessions.expiresAt, now))
+        .catch(() => {});
+      void getDb()
+        .delete(schema.securityEvents)
+        .where(lt(schema.securityEvents.createdAt, new Date(Date.now() - 180 * 86_400_000)))
+        .catch(() => {});
+    },
+    60 * 60 * 1000,
+  ).unref();
+}
+
 export function startSessionCleanupJob(): void {
   setInterval(
     () => {

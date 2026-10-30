@@ -7,7 +7,7 @@ import { env } from "../../lib/env";
  *
  * Endpoints (verificados ao vivo em 2026-08):
  * - OIDC discovery: apis.roblox.com/oauth/.well-known/openid-configuration
- *   authorize /oauth/v1/authorize · token /oauth/v2/token · userinfo /oauth/v1/userinfo
+ *   authorize /oauth/v1/authorize · token /oauth/v1/token · userinfo /oauth/v1/userinfo
  * - Presence (legacy público, sem cookies): POST presence.roblox.com/v1/presence/users
  *   → aceita BATCH de userIds. Documentado como legacy nesta integração.
  * - Metadados: GET games.roblox.com/v1/games?universeIds=
@@ -29,7 +29,11 @@ const HOSTS = new Set([
 export class RobloxApiError extends Error {
   status: number;
   retryAfterMs: number | null;
-  constructor(status: number, message: string, retryAfterMs: number | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    retryAfterMs: number | null = null
+  ) {
     super(message);
     this.status = status;
     this.retryAfterMs = retryAfterMs;
@@ -51,7 +55,11 @@ async function robloxFetch(url: string, init?: RequestInit): Promise<Response> {
     });
     if (res.status === 429) {
       const ra = Number(res.headers.get("retry-after") ?? "") || null;
-      throw new RobloxApiError(429, "Rate limit do Roblox.", ra ? ra * 1000 : null);
+      throw new RobloxApiError(
+        429,
+        "Rate limit do Roblox.",
+        ra ? ra * 1000 : null
+      );
     }
     return res;
   } catch (e) {
@@ -90,15 +98,24 @@ export function buildAuthorizeUrl(input: {
     nonce: input.nonce,
     code_challenge: challenge,
     code_challenge_method: "S256",
-    prompt: "consent",
+    // Roblox requires both screens for this third-party OIDC flow. OIDC prompt
+    // values share one space-delimited parameter; sending either value alone
+    // yields account_selection_required or consent_required respectively.
+    prompt: "select_account consent",
   });
+  const url = new URL("https://apis.roblox.com/oauth/v1/authorize");
+  url.search = params.toString();
   return {
-    url: `https://apis.roblox.com/oauth/v1/authorize?${params}`,
+    url: url.toString(),
     challenge,
   };
 }
 
-export function generatePkcePair(): { verifier: string; nonce: string; state: string } {
+export function generatePkcePair(): {
+  verifier: string;
+  nonce: string;
+  state: string;
+} {
   return {
     verifier: randomBytes(32).toString("base64url"),
     nonce: randomBytes(16).toString("base64url"),
@@ -113,7 +130,7 @@ const TokenResponse = z.object({
 });
 
 async function tokenRequest(body: URLSearchParams) {
-  const res = await robloxFetch("https://apis.roblox.com/oauth/v2/token", {
+  const res = await robloxFetch("https://apis.roblox.com/oauth/v1/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -134,16 +151,11 @@ async function tokenRequest(body: URLSearchParams) {
   return parsed.data;
 }
 
-export function exchangeCode(input: {
-  code: string;
-  codeVerifier: string;
-}) {
+export function exchangeCode(input: { code: string; codeVerifier: string }) {
   return tokenRequest(
     new URLSearchParams({
       grant_type: "authorization_code",
       code: input.code,
-      client_id: env.robloxClientId,
-      client_secret: env.robloxClientSecret,
       redirect_uri: env.robloxRedirectUri,
       code_verifier: input.codeVerifier,
     })
@@ -155,8 +167,6 @@ export function refreshTokens(refreshToken: string) {
     new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      client_id: env.robloxClientId,
-      client_secret: env.robloxClientSecret,
     })
   );
 }
@@ -165,7 +175,7 @@ export function refreshTokens(refreshToken: string) {
 export async function revokeToken(token: string): Promise<boolean> {
   try {
     const res = await robloxFetch(
-      "https://apis.roblox.com/oauth/v2/revoke",
+      "https://apis.roblox.com/oauth/v1/token/revoke",
       {
         method: "POST",
         headers: {
@@ -187,22 +197,87 @@ export async function revokeToken(token: string): Promise<boolean> {
 
 export const RobloxUserInfo = z.object({
   sub: z.string().min(1),
-  preferred_username: z.string().min(1),
-  name: z.string().optional(),
-  nickname: z.string().optional(),
-  picture: z.string().url().optional(),
-  profile: z.string().url().optional(),
+  preferred_username: z.string().min(1).nullable().optional(),
+  name: z.string().min(1).nullable().optional(),
+  nickname: z.string().min(1).nullable().optional(),
+  // O Roblox pode retornar `picture: null`; isso não invalida a identidade
+  // OAuth e não deve fazer o callback cair no erro genérico.
+  picture: z.string().url().nullable().optional(),
+  profile: z.string().url().nullable().optional(),
 });
 export type RobloxUserInfoT = z.infer<typeof RobloxUserInfo>;
 
-export async function fetchUserInfo(accessToken: string): Promise<RobloxUserInfoT> {
+export async function fetchUserInfo(
+  accessToken: string
+): Promise<RobloxUserInfoT> {
   const res = await robloxFetch("https://apis.roblox.com/oauth/v1/userinfo", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new RobloxApiError(res.status, "Userinfo falhou.");
   const parsed = RobloxUserInfo.safeParse(await res.json().catch(() => null));
-  if (!parsed.success) throw new RobloxApiError(res.status || 500, "Userinfo inválida.");
+  if (!parsed.success)
+    throw new RobloxApiError(res.status || 500, "Userinfo inválida.");
   return parsed.data;
+}
+
+const RobloxPublicUser = z.object({
+  id: z.number().int().positive(),
+  name: z.string().min(1),
+  displayName: z.string().min(1).optional(),
+});
+
+async function fetchPublicUser(userId: string) {
+  if (!/^\d+$/.test(userId)) return null;
+  try {
+    const res = await robloxFetch(
+      `https://users.roblox.com/v1/users/${userId}`
+    );
+    if (!res.ok) return null;
+    const parsed = RobloxPublicUser.safeParse(
+      await res.json().catch(() => null)
+    );
+    return parsed.success && String(parsed.data.id) === userId
+      ? parsed.data
+      : null;
+  } catch {
+    // Esta consulta apenas enriquece o perfil. O `sub` ainda é uma prova de
+    // identidade válida se o endpoint público estiver indisponível.
+    return null;
+  }
+}
+
+/**
+ * O `sub` do userinfo é a identidade estável confirmada pelo OAuth. Alguns
+ * apps recebem somente esse campo quando `profile` não foi habilitado no
+ * painel do Roblox; nesse caso, completamos nome público sem invalidar uma
+ * autorização legítima.
+ */
+export async function resolveRobloxIdentity(accessToken: string): Promise<{
+  providerUserId: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  profileUrl: string;
+}> {
+  const info = await fetchUserInfo(accessToken);
+  const publicUser = info.preferred_username
+    ? null
+    : await fetchPublicUser(info.sub);
+  const username =
+    info.preferred_username ?? publicUser?.name ?? `roblox-${info.sub}`;
+  return {
+    providerUserId: info.sub,
+    username,
+    displayName:
+      info.name ??
+      info.nickname ??
+      publicUser?.displayName ??
+      publicUser?.name ??
+      null,
+    avatarUrl: info.picture ?? null,
+    profileUrl:
+      info.profile ?? `https://www.roblox.com/users/${info.sub}/profile`,
+  };
 }
 
 // ── Presence (legacy público, batch) ─────────────────────────
@@ -249,17 +324,23 @@ const PresenceResponse = z.object({
 export async function fetchPresenceBatch(
   robloxUserIds: number[]
 ): Promise<RobloxPresenceEntry[]> {
-  const res = await robloxFetch("https://presence.roblox.com/v1/presence/users", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userIds: robloxUserIds.slice(0, 100) }),
-  });
+  const res = await robloxFetch(
+    "https://presence.roblox.com/v1/presence/users",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIds: robloxUserIds.slice(0, 100) }),
+    }
+  );
   if (!res.ok) {
     throw new RobloxApiError(res.status, `Presence falhou (${res.status}).`);
   }
   const parsed = PresenceResponse.safeParse(await res.json().catch(() => null));
   if (!parsed.success) {
-    throw new RobloxApiError(res.status || 500, "Resposta de presence inválida.");
+    throw new RobloxApiError(
+      res.status || 500,
+      "Resposta de presence inválida."
+    );
   }
   return parsed.data.userPresences.map(p => ({
     robloxUserId: String(p.userId),
@@ -283,7 +364,9 @@ export const GameMetadata = z.object({
         id: z.number(),
         rootPlaceId: z.number().nullable().optional(),
         name: z.string().nullable().optional(),
-        creator: z.object({ name: z.string().nullable().optional() }).optional(),
+        creator: z
+          .object({ name: z.string().nullable().optional() })
+          .optional(),
       })
     )
     .min(1),
@@ -333,7 +416,9 @@ export async function fetchUniverseCloudV2(universeId: number): Promise<{
   }
 }
 
-export async function fetchGameThumbnail(universeId: number): Promise<string | null> {
+export async function fetchGameThumbnail(
+  universeId: number
+): Promise<string | null> {
   const res = await robloxFetch(
     `https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds=${universeId}&size=768x432&format=Png&isCircular=false`
   );

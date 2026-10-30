@@ -13,8 +13,13 @@ import { findUserByUnionId } from "../queries/users";
  */
 
 export async function authenticateRequest(headers: Headers) {
+  // Nexora CLI (device flow) autentica via Authorization: Bearer com o mesmo
+  // JWT de sessão; navegadores usam o cookie. O Bearer tem precedência.
+  const bearer = headers.get("authorization");
+  const bearerToken =
+    bearer && bearer.startsWith("Bearer ") ? bearer.slice(7) : null;
   const cookies = cookie.parse(headers.get("cookie") || "");
-  const token = cookies[Session.cookieName];
+  const token = bearerToken ?? cookies[Session.cookieName];
   if (!token) {
     throw Errors.forbidden("Invalid authentication token.");
   }
@@ -22,7 +27,7 @@ export async function authenticateRequest(headers: Headers) {
   if (!claim) {
     throw Errors.forbidden("Invalid authentication token.");
   }
-  const session = await resolveActiveSession(claim.sid);
+  const session = await resolveActiveSession(claim.sid, token);
   if (!session) {
     throw Errors.forbidden("Sessão encerrada. Faça login novamente.");
   }

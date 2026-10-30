@@ -1,10 +1,24 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route, useParams } from "react-router";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { CiderProvider } from "@/cider/provider";
 
 const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const CompanionPage = lazy(() => import("./pages/CompanionPage"));
+const MobileCameraPage = lazy(() => import("./pages/MobileCameraPage"));
+const CliLoginPage = lazy(() => import("./pages/CliLoginPage"));
+const CliPage = lazy(() => import("./pages/CliPage"));
+const CliReleasesPage = lazy(() => import("./pages/CliReleasesPage"));
+// Player do Cider: rota de tela cheia, fora do AppLayout, como o /cli.
+const CiderPage = lazy(() => import("./pages/CiderPage"));
+const CiderMiniBar = lazy(() =>
+  import("@/cider/CiderMiniBar").then(module => ({ default: module.CiderMiniBar }))
+);
 const NotFound = lazy(() => import("./pages/NotFound"));
 const AppLayout = lazy(() =>
   import("./pages/AppLayout").then(module => ({ default: module.AppLayout }))
@@ -40,6 +54,7 @@ const NexoraAdminPanel = lazy(() =>
     default: module.NexoraAdminPanel,
   }))
 );
+const ExplorePage = lazy(() => import("./pages/ExplorePage"));
 const InvitePage = lazy(() =>
   import("./pages/InvitePage").then(module => ({ default: module.InvitePage }))
 );
@@ -62,6 +77,8 @@ const PrivacyPage = lazy(() =>
 const TermsPage = lazy(() =>
   import("./pages/LegalDocs").then(module => ({ default: module.TermsPage }))
 );
+const LiveLobby = lazy(() => import("./pages/LiveLobby"));
+const LiveRoomPage = lazy(() => import("./pages/LiveRoomPage"));
 
 function PageLoader() {
   return (
@@ -90,9 +107,20 @@ function Deferred({ children }: { children: ReactNode }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }
 
+/**
+ * Raiz das rotas.
+ *
+ * O `CiderProvider` fica **aqui**, acima do `<Routes>`, e não dentro de
+ * `/cider`: o `<iframe>` do YouTube precisa continuar tocando quando o usuário
+ * sai do player para o Nexora, e trocar de rota desmontaria o player junto.
+ * O `CiderMiniBar` é a janela para o mesmo motor — ele só aparece fora de
+ * `/cider` e não cria um segundo player.
+ */
 export default function App() {
   return (
-    <Routes>
+    <CiderProvider>
+      <CiderMiniBar />
+      <Routes>
       <Route
         path="/"
         element={
@@ -114,6 +142,99 @@ export default function App() {
         element={
           <Deferred>
             <Register />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <Deferred>
+            <ForgotPassword />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <Deferred>
+            <ResetPassword />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/verify-email"
+        element={
+          <Deferred>
+            <VerifyEmail />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/companion"
+        element={
+          <Deferred>
+            <CompanionPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/mobile-camera"
+        element={
+          <Deferred>
+            <MobileCameraPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/cli"
+        element={
+          <Deferred>
+            <CliPage />
+          </Deferred>
+        }
+      />
+      {/*
+        O asterisco é necessário: as telas do Cider (Explorar, Biblioteca,
+        Configurações…) são rotas aninhadas roteadas pelo próprio `CiderApp`,
+        então a rota da Nexora precisa casar `/cider/...` inteiro.
+      */}
+      <Route
+        path="/cider/*"
+        element={
+          <Deferred>
+            <CiderPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/cli/releases"
+        element={
+          <Deferred>
+            <CliReleasesPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/cli/login"
+        element={
+          <Deferred>
+            <CliLoginPage />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/live"
+        element={
+          <Deferred>
+            <LiveLobby />
+          </Deferred>
+        }
+      />
+      <Route
+        path="/live/:roomCode"
+        element={
+          <Deferred>
+            <LiveRoomPage />
           </Deferred>
         }
       />
@@ -213,6 +334,14 @@ export default function App() {
           }
         />
         <Route
+          path="/explore"
+          element={
+            <Deferred>
+              <ExplorePage />
+            </Deferred>
+          }
+        />
+        <Route
           path="/nexora-admin"
           element={
             <Deferred>
@@ -245,14 +374,15 @@ export default function App() {
           }
         />
       </Route>
-      <Route
-        path="*"
-        element={
-          <Deferred>
-            <NotFound />
-          </Deferred>
-        }
-      />
-    </Routes>
+        <Route
+          path="*"
+          element={
+            <Deferred>
+              <NotFound />
+            </Deferred>
+          }
+        />
+      </Routes>
+    </CiderProvider>
   );
 }

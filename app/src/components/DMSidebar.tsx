@@ -1,15 +1,33 @@
 import { useLocation, useNavigate, useParams } from "react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  Compass,
+  Disc3,
+  Inbox,
+  Plus,
+  Search,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+import type {
+  RichPresenceActivityDTO,
+} from "@contracts/types";
 import { trpc } from "@/providers/trpc";
-import { BadgeCheck, ShieldCheck, Users, Inbox, UserPlus, Phone } from "lucide-react";
-import { useAppStore } from "@/store/useAppStore";
-import { Avatar } from "./Avatar";
 import { UserPanel } from "./UserPanel";
 import { cn } from "@/lib/utils";
-import { NexoraAppIcon } from "@/components/NexoraBrand";
-import { CreateGroupModal } from "./groups/CreateGroupModal";
-import { GroupAvatar } from "./groups/GroupAvatar";
-import { groupDisplayName } from "@/lib/groupDisplayName";
+import { NewMessageDialog } from "./private/NewMessageDialog";
+import { DMListItem } from "./private/DMListItem";
+import { OfficialDMListItem } from "./private/OfficialDMListItem";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { organizePrivateInbox, buildPrivateInboxEntries, type PrivateInboxEntry } from "@/lib/privateInbox";
+import { useAppStore } from "@/store/useAppStore";
 
 export function DMSidebar({
   onOpenProfile,
@@ -19,279 +37,376 @@ export function DMSidebar({
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
-  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [newMessageOpen, setNewMessageOpen] = useState(false);
+  const setQuickSwitcherOpen = useAppStore(state => state.setQuickSwitcherOpen);
   const activeConversationId = params.conversationId
     ? Number(params.conversationId)
     : null;
   const conversations = trpc.dm.list.useQuery(undefined, {
-    placeholderData: prev => prev,
+    placeholderData: previous => previous,
   });
-  const officialUnread = trpc.official.unreadCount.useQuery(undefined, {
-    refetchInterval: 60_000,
+  const friends = trpc.friend.list.useQuery(undefined, {
+    placeholderData: previous => previous,
   });
   const authority = trpc.admin.authority.useQuery();
-  const unreadConversations = useAppStore(s => s.unreadConversations);
-  const voiceParticipants = useAppStore(s => s.voiceParticipants);
+  // Só o comunicado mais recente é necessário para montar a prévia e ordenar a
+  // conversa oficial; `unreadCount` vem na mesma resposta.
+  const official = trpc.official.list.useQuery(
+    { limit: 1 },
+    { refetchInterval: 60_000, staleTime: 30_000 }
+  );
+  const acceptedFriendIds = useMemo(
+    () =>
+      new Set(
+        (friends.data ?? [])
+          .filter(friend => friend.status === "ACCEPTED")
+          .map(friend => friend.user.id)
+      ),
+    [friends.data]
+  );
+  const { requests, spam } = organizePrivateInbox(conversations.data ?? []);
+  const officialState = useMemo(() => {
+    const latest = official.data?.items[0];
+    return {
+      activityAt: latest ? new Date(latest.publishedAt).getTime() : 0,
+      unread: official.data?.unreadCount ?? 0,
+      preview: latest?.title ?? "Mensagem oficial da Nexora",
+    };
+  }, [official.data]);
+  const { pinned, recent } = buildPrivateInboxEntries(
+    conversations.data ?? [],
+    officialState
+  );
+  const directUserIds = useMemo(
+    () => [
+      ...new Set(
+        (conversations.data ?? [])
+          .filter(conversation => !conversation.isGroup)
+          .flatMap(conversation =>
+            conversation.otherUser ? [conversation.otherUser.id] : []
+          )
+      ),
+    ],
+    [conversations.data]
+  );
+  const activitySummaries = trpc.integrations.presenceSummary.useQuery(
+    { userIds: directUserIds },
+    {
+      enabled: directUserIds.length > 0,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+    }
+  );
+  const directMessageCount = pinned.length + recent.length;
   const officialActive = location.pathname === "/channels/@me/official";
+  const friendsActive =
+    location.pathname === "/channels/@me" ||
+    location.pathname === "/channels/@me/friends";
+  const requestsActive = location.pathname === "/channels/@me/requests";
 
   return (
     <aside
-      aria-label="Mensagens diretas"
-      className="flex h-full w-60 flex-col border-r border-black/20 bg-sidebar select-none"
+      aria-label="Navegação privada"
+      className="flex h-full w-60 shrink-0 flex-col border-r border-black/20 bg-sidebar select-none"
     >
-      <div className="flex h-12 items-center gap-2 border-b border-white/5 px-3">
-        <button
-          onClick={() => navigate("/channels/@me")}
-          className={cn(
-            "flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors",
-            !activeConversationId
-              ? "bg-act text-foreground"
-              : "text-muted2 hover:bg-hov hover:text-bodyx"
-          )}
-        >
-          <Users className="h-4 w-4" /> Amigos
-        </button>
-        <button
-          onClick={() => setCreateGroupOpen(true)}
-          className={cn(
-            "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors",
-            "text-muted2 hover:bg-hov hover:text-bodyx"
-          )}
-          aria-label="Criar grupo"
-          title="Criar grupo"
-        >
-          <UserPlus className="h-4 w-4" />
-          <span className="hidden xl:inline">Criar grupo</span>
-        </button>
+      <div className="flex h-12 items-center border-b border-white/5 px-2.5">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-input px-3 text-left text-[11px] font-semibold text-muted2 shadow-sm transition-colors hover:bg-hov hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
+              aria-label="Encontre ou comece uma conversa"
+            >
+              <Search className="h-3.5 w-3.5 shrink-0 text-faint" />
+              <span className="truncate">Encontre ou comece uma conversa</span>
+              <kbd className="ml-auto hidden rounded bg-black/10 px-1.5 py-0.5 text-[9px] text-faint dark:bg-white/5 xl:inline">
+                Ctrl K
+              </kbd>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-60">
+            <DropdownMenuItem onSelect={() => navigate("/channels/@me")}>
+              <Users className="h-4 w-4 text-faint" aria-hidden="true" />
+              Amigos
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate("/channels/@me/requests")}>
+              <Inbox className="h-4 w-4 text-faint" aria-hidden="true" />
+              Solicitações de mensagens
+              {requests.length + spam.length > 0 && (
+                <span className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--mention-badge)] px-1 text-[10px] font-bold text-white">
+                  {requests.length + spam.length}
+                </span>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate("/explore")}>
+              <Compass className="h-4 w-4 text-faint" aria-hidden="true" />
+              Explorar comunidades
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => setQuickSwitcherOpen(true)}>
+              <Search className="h-4 w-4 text-faint" aria-hidden="true" />
+              Buscar conversas e pessoas
+              <DropdownMenuShortcut>Ctrl K</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            {authority.data?.canAccess && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => navigate("/nexora-admin")}>
+                  <ShieldCheck className="h-4 w-4 text-faint" aria-hidden="true" />
+                  Painel Nexora
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        <p className="px-2 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-faint">
-          Mensagens diretas
-        </p>
-        <button
-          onClick={() => navigate("/channels/@me/official")}
-          className={cn(
-            "group mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
-            officialActive
-              ? "bg-act text-foreground"
-              : "text-muted2 hover:bg-hov hover:text-bodyx"
-          )}
-          aria-current={officialActive ? "page" : undefined}
-        >
-          <div className="relative shrink-0">
-            <NexoraAppIcon className="h-8 w-8" />
-            <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 border-[#2B2D31] bg-[#5865F2] text-white">
-              <BadgeCheck className="h-2.5 w-2.5" strokeWidth={3} />
-            </span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <p className="truncate text-xs font-bold text-foreground">Nexora</p>
-              <span
-                className="rounded-[3px] bg-[#5865F2] px-1 py-0.5 text-[8px] font-extrabold uppercase tracking-wider text-white"
-                title="Conta oficial e verificada da Nexora"
-              >
-                Oficial
-              </span>
-            </div>
-            <p className="truncate text-[11px] text-muted2/70">
-              Comunicados da plataforma
-            </p>
-          </div>
-          {(officialUnread.data?.count ?? 0) > 0 && (
-            <span className="flex h-4 min-w-4 items-center justify-center rounded-full border border-rail bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
-              {(officialUnread.data?.count ?? 0) > 99
-                ? "99+"
-                : officialUnread.data?.count}
-            </span>
-          )}
-        </button>
+      <nav className="space-y-0.5 px-2 py-2" aria-label="Área privada">
+        <PrivateNavItem
+          icon={<Users />}
+          label="Amigos"
+          active={friendsActive}
+          onClick={() => navigate("/channels/@me")}
+        />
+        <PrivateNavItem
+          icon={<Inbox />}
+          label="Solicitações de mensagens"
+          active={requestsActive}
+          badge={requests.length + spam.length}
+          onClick={() => navigate("/channels/@me/requests")}
+        />
+        <PrivateNavItem
+          icon={<Disc3 />}
+          label="Cider"
+          active={location.pathname.startsWith("/cider")}
+          onClick={() => navigate("/cider")}
+        />
         {authority.data?.canAccess && (
-          <button
+          <PrivateNavItem
+            icon={<ShieldCheck />}
+            label="Painel Nexora"
+            active={location.pathname === "/nexora-admin"}
             onClick={() => navigate("/nexora-admin")}
-            className={cn(
-              "mb-2 flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors",
-              location.pathname === "/nexora-admin"
-                ? "border-[#5865F2]/40 bg-[#5865F2]/15 text-[#c9cdfb]"
-                : "border-transparent text-muted2 hover:border-white/[0.06] hover:bg-hov hover:text-white"
-            )}
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#5865F2]/15 text-[#9aa5ff]">
-              <ShieldCheck className="h-4 w-4" />
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-xs font-semibold">
-                Painel Nexora
-              </span>
-              <span className="block truncate text-[10px] text-[#8f96a1]">
-                Administração da plataforma
-              </span>
-            </span>
-          </button>
+          />
         )}
-        {conversations.isLoading ? (
-          <p className="px-2 py-2 text-xs text-muted2">
-            Carregando conversas...
-          </p>
-        ) : conversations.data?.length === 0 ? (
-          <p className="px-2 py-2 text-xs text-muted2">
-            Nenhuma conversa. Adicione amigos para começar na Nexora!
-          </p>
-        ) : (
-          <>
-            {/* Message requests */}
-            {(conversations.data?.filter(c => c.isRequest).length ?? 0) > 0 && (
+      </nav>
+
+      <div className="flex min-h-0 flex-1 flex-col border-t border-white/5">
+        <div className="flex h-9 shrink-0 items-center justify-between px-3.5 pt-1">
+          <span className="text-[11px] font-semibold text-faint">
+            Mensagens diretas
+          </span>
+          <button
+            type="button"
+            onClick={() => setNewMessageOpen(true)}
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted2 transition-colors hover:bg-hov hover:text-foreground"
+            aria-label="Nova mensagem"
+            title="Nova mensagem"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2"
+          aria-label="Lista de mensagens diretas"
+        >
+          {conversations.isLoading && !conversations.data ? (
+            <DMSidebarSkeleton />
+          ) : conversations.isError ? (
+            <div className="mx-2 mt-4 rounded-xl border border-border px-3 py-5 text-center">
+              <p className="text-xs font-semibold text-bodyx">
+                Falha ao carregar conversas
+              </p>
               <button
                 type="button"
-                onClick={() => navigate("/channels/@me/requests")}
-                className={cn(
-                  "mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
-                  location.pathname === "/channels/@me/requests"
-                    ? "bg-act text-foreground"
-                    : "text-muted2 hover:bg-hov hover:text-bodyx"
-                )}
+                onClick={() => conversations.refetch()}
+                className="mt-3 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-muted2 hover:bg-hov hover:text-foreground"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/5">
-                  <Inbox className="h-4 w-4" />
-                </span>
-                <span className="min-w-0 flex-1 truncate text-xs font-bold">
-                  Solicitações
-                </span>
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground border border-rail">
-                  {conversations.data!.filter(c => c.isRequest).length}
-                </span>
+                Tentar novamente
               </button>
-            )}
-            <p className="px-2 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-faint">
-              Mensagens
-            </p>
-            <div className="space-y-0.5">
-              {conversations.data
-                ?.filter(c => !c.isRequest)
-                .map(conv => {
-                  const isGroup = conv.isGroup === true;
-                  const other = conv.otherUser;
-                  const unread = unreadConversations[conv.id] ?? 0;
-                  return (
-                    <div
-                      key={conv.id}
-                      className={cn(
-                        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors group",
-                        activeConversationId === conv.id
-                          ? "bg-act text-foreground font-medium"
-                          : "text-muted2 hover:bg-hov hover:text-bodyx"
-                      )}
-                    >
-                      {isGroup ? (
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/channels/@me/${conv.id}`)}
-                          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
-                          aria-label={`Abrir grupo`}
-                        >
-                          <GroupAvatar
-                            users={conv.members}
-                            src={conv.avatarUrl}
-                            name={groupDisplayName(conv)}
-                            size="sm"
-                          />
-                        </button>
-                      ) : other?.id ? (
-                        <button
-                          type="button"
-                          onClick={() => onOpenProfile?.(other.id)}
-                          className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7383FF]"
-                          aria-label={`Ver perfil de ${other.name ?? other.username ?? "usuário"}`}
-                          title="Ver perfil"
-                        >
-                          <Avatar
-                            userId={other.id}
-                            name={other.name ?? other.username}
-                            src={other.avatar}
-                            size="sm"
-                            showStatus
-                            statusOverride={other.status ?? "online"}
-                          />
-                        </button>
-                      ) : (
-                        <Avatar name="Conversa" size="sm" />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/channels/@me/${conv.id}`)}
-                        className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none"
-                        aria-label={
-                          isGroup
-                            ? `Abrir grupo ${groupDisplayName(conv)}`
-                            : `Abrir conversa com ${other?.name ?? other?.username ?? "usuário"}`
-                        }
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className={cn(
-                              "flex items-center gap-1 truncate text-xs font-semibold group-hover:text-white transition-colors",
-                              unread > 0 && "text-foreground font-bold"
-                            )}
-                          >
-                            {isGroup && (
-                              <span
-                                className="inline-flex shrink-0"
-                                title="Grupo"
-                                aria-label="Grupo"
-                              >
-                                <Users
-                                  className="h-3 w-3 text-faint"
-                                  aria-hidden
-                                />
-                              </span>
-                            )}
-                            <span className="truncate">
-                              {isGroup
-                                ? groupDisplayName(conv)
-                                : (other?.name ?? other?.username ?? "Conversa")}
-                            </span>
-                          </p>
-                          {conv.lastMessage && (
-                            <p className="truncate text-[11px] text-muted2/70">
-                              {isGroup &&
-                              conv.lastMessage.authorId !== undefined
-                                ? `${conv.members.find(m => m.id === conv.lastMessage!.authorId)?.name ?? ""}: `
-                                : ""}
-                              {conv.lastMessage.content || "📎 Anexo enviado"}
-                            </p>
-                          )}
-                        </div>
-                        {unread > 0 && (
-                          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground border border-rail">
-                            {unread > 99 ? "99+" : unread}
-                          </span>
-                        )}
-                        {(voiceParticipants[`dm:${conv.id}`]?.length ?? 0) >
-                          0 && (
-                          <span
-                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-500/90"
-                            title="Chamada em andamento"
-                            aria-label="Chamada em andamento"
-                          >
-                            <Phone className="h-2.5 w-2.5 text-white" />
-                          </span>
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
             </div>
-          </>
-        )}
+          ) : directMessageCount === 0 ? (
+            <>
+              {/* Mesmo sem nenhuma conversa, os comunicados oficiais continuam
+                  visíveis — é por eles que o usuário acompanha a plataforma. */}
+              <div className="pt-1">
+                <OfficialDMListItem
+                  active={officialActive}
+                  unread={officialState.unread}
+                  preview={officialState.preview}
+                />
+              </div>
+              <div className="mx-2 mt-2 rounded-xl border border-dashed border-border px-3 py-5 text-center">
+                <p className="text-xs font-semibold text-bodyx">
+                  Nenhuma conversa ainda
+                </p>
+                <p className="mt-1 text-[11px] leading-4 text-muted2">
+                  Inicie uma DM pelo botão acima ou crie um grupo com seus amigos.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setNewMessageOpen(true)}
+                  className="mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-primary/90"
+                >
+                  Nova mensagem
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {pinned.length > 0 && (
+                <ConversationGroup
+                  label="Fixadas"
+                  items={pinned}
+                  activeConversationId={activeConversationId}
+                  officialActive={officialActive}
+                  acceptedFriendIds={acceptedFriendIds}
+                  activitySummaries={activitySummaries.data}
+                  onOpenProfile={onOpenProfile}
+                />
+              )}
+              <ConversationGroup
+                label={pinned.length > 0 ? "Recentes" : undefined}
+                items={recent}
+                activeConversationId={activeConversationId}
+                officialActive={officialActive}
+                acceptedFriendIds={acceptedFriendIds}
+                activitySummaries={activitySummaries.data}
+                onOpenProfile={onOpenProfile}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       <UserPanel />
-
-      <CreateGroupModal
-        open={createGroupOpen}
-        onOpenChange={setCreateGroupOpen}
+      <NewMessageDialog
+        open={newMessageOpen}
+        onOpenChange={setNewMessageOpen}
       />
     </aside>
+  );
+}
+
+function ConversationGroup({
+  label,
+  items,
+  activeConversationId,
+  officialActive,
+  acceptedFriendIds,
+  activitySummaries,
+  onOpenProfile,
+}: {
+  label?: string;
+  items: PrivateInboxEntry[];
+  activeConversationId: number | null;
+  officialActive: boolean;
+  acceptedFriendIds: Set<number>;
+  activitySummaries?: Record<number, RichPresenceActivityDTO | null>;
+  onOpenProfile?: (userId: number) => void;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section aria-label={label ?? "Conversas"} className="mb-1">
+      {label && (
+        <p className="px-3 pb-1 pt-2 text-[10px] font-semibold text-faint">
+          {label}
+        </p>
+      )}
+      <div className="space-y-0.5">
+        {items.map(entry => {
+          // Comunicados oficiais compartilham a ordenação das DMs, mas não
+          // aceitam pin, silêncio ou descarte.
+          if (entry.kind === "official") {
+            return (
+              <OfficialDMListItem
+                key="official-nexora"
+                active={officialActive}
+                unread={entry.unread}
+                preview={entry.preview}
+              />
+            );
+          }
+          const conversation = entry.conversation;
+          return (
+            <DMListItem
+              key={conversation.id}
+              conversation={conversation}
+              active={activeConversationId === conversation.id}
+              isFriend={
+                !!conversation.otherUser &&
+                acceptedFriendIds.has(conversation.otherUser.id)
+              }
+              initialActivity={
+                conversation.otherUser
+                  ? activitySummaries?.[conversation.otherUser.id]
+                  : null
+              }
+              onOpenProfile={onOpenProfile}
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function PrivateNavItem({
+  icon,
+  label,
+  active,
+  badge = 0,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-[13px] font-semibold transition-colors [&_svg]:h-4 [&_svg]:w-4",
+        active
+          ? "bg-act text-foreground"
+          : "text-muted2 hover:bg-hov hover:text-bodyx"
+      )}
+    >
+      {icon}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {badge > 0 && <CountBadge count={badge} />}
+    </button>
+  );
+}
+
+function CountBadge({ count }: { count: number }) {
+  return (
+    <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--mention-badge)] px-1 text-[10px] font-bold text-white">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+function DMSidebarSkeleton() {
+  return (
+    <div className="space-y-1 px-1 py-1" aria-label="Carregando conversas">
+      {[1, 2, 3, 4, 5, 6].map(item => (
+        <div
+          key={item}
+          className="flex animate-pulse items-center gap-2.5 rounded-lg px-2 py-1.5"
+        >
+          <div className="h-8 w-8 rounded-full bg-white/[0.07]" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="h-2.5 w-2/3 rounded bg-white/[0.07]" />
+            <div className="h-2 w-4/5 rounded bg-white/[0.045]" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

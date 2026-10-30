@@ -50,13 +50,18 @@ export async function insertSystemMessage(
   conversationId: number,
   authorId: number,
   content: string,
+  tag = "system",
 ) {
-  await executor.insert(schema.messages).values({
-    conversationId,
-    authorId,
-    content: content.slice(0, 4000),
-    tag: "system",
-  });
+  const [{ id }] = await executor
+    .insert(schema.messages)
+    .values({
+      conversationId,
+      authorId,
+      content: content.slice(0, 4000),
+      tag: tag.slice(0, 24),
+    })
+    .$returningId();
+  return id;
 }
 
 export async function userName(userId: number): Promise<string> {

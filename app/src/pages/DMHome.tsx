@@ -9,11 +9,17 @@ import { useAppStore } from "@/store/useAppStore";
 import { trpc } from "@/providers/trpc";
 import { Avatar } from "@/components/Avatar";
 import { cn } from "@/lib/utils";
-import { Search, UserPlus, Users, UsersRound } from "lucide-react";
+import { BellOff, Inbox, MessageSquarePlus, Pin, Search, UserPlus, Users } from "lucide-react";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
-import { CreateGroupModal } from "@/components/groups/CreateGroupModal";
+import { NewMessageDialog } from "@/components/private/NewMessageDialog";
 import { GroupAvatar } from "@/components/groups/GroupAvatar";
 import { groupDisplayName } from "@/lib/groupDisplayName";
+import { UnreadIndicator } from "@/components/private/UnreadIndicator";
+import { DMConversationMenu } from "@/components/private/DMConversationMenu";
+import {
+  isConversationMutedAt,
+  resolveConversationUnread,
+} from "@/lib/privateInbox";
 
 /**
  * Home: desktop mantém sidebar+friends; no celular vira uma tela de
@@ -39,9 +45,16 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
   const navigate = useNavigate();
   const setQuickSwitcher = useAppStore(s => s.setQuickSwitcherOpen);
   const conversations = trpc.dm.list.useQuery();
+  const friends = trpc.friend.list.useQuery();
   const me = trpc.auth.me.useQuery().data;
   const unreadConversations = useAppStore(s => s.unreadConversations);
-  const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [newMessageOpen, setNewMessageOpen] = useState(false);
+  const [renderedAt] = useState(() => Date.now());
+  const acceptedFriendIds = new Set(
+    (friends.data ?? [])
+      .filter(friend => friend.status === "ACCEPTED")
+      .map(friend => friend.user.id),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-chat text-foreground">
@@ -58,14 +71,14 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
           onClick={() => navigate("/channels/@me/friends")}
         />
         <QuickAction
-          icon={<UsersRound className="h-5 w-5" />}
-          label="Criar grupo"
-          onClick={() => setCreateGroupOpen(true)}
+          icon={<Inbox className="h-5 w-5" />}
+          label="Solicitações"
+          onClick={() => navigate("/channels/@me/requests")}
         />
         <QuickAction
-          icon={<Users className="h-5 w-5" />}
-          label="Comunidades"
-          onClick={() => window.dispatchEvent(new CustomEvent("nexora:open-servers"))}
+          icon={<MessageSquarePlus className="h-5 w-5" />}
+          label="Nova conversa"
+          onClick={() => setNewMessageOpen(true)}
         />
       </div>
 
@@ -93,35 +106,45 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
             <NexoraAppIcon className="h-12 w-12 opacity-40" />
             <p className="text-sm font-semibold">Nenhuma conversa ainda</p>
             <p className="max-w-[240px] text-xs text-muted2">
-              Adicione amigos ou crie um grupo para conversar com várias pessoas ao mesmo tempo.
+              Selecione uma pessoa para uma DM ou várias para conversar em grupo.
             </p>
             <button
-              onClick={() => setCreateGroupOpen(true)}
+              onClick={() => setNewMessageOpen(true)}
               className="mt-1 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary/90"
             >
-              Criar grupo
+              Nova conversa
             </button>
           </li>
         )}
         {conversations.data?.filter(c => !c.isRequest).map(conv => {
           const isGroup = conv.isGroup === true;
           const other = conv.otherUser;
-          const unread = unreadConversations[conv.id] ?? 0;
+          const unread = resolveConversationUnread(
+            unreadConversations[conv.id],
+            conv.unreadCount,
+          );
           const last = conv.lastMessage;
           const time = last ? formatTime(last.createdAt) : "";
-          return (
-            <li key={conv.id}>
+          const isMuted = isConversationMutedAt(conv, renderedAt);
+          const displayName = isGroup
+            ? groupDisplayName(conv)
+            : (conv.friendNickname ?? other?.name ?? other?.username ?? "Conversa");
+          const row = (
+            <div
+              className={cn(
+                "relative flex min-h-[68px] w-full items-center rounded-xl pr-3 text-left transition-colors active:bg-hov",
+                unread > 0 && "bg-white/[0.035]",
+              )}
+            >
+              <UnreadIndicator visible={unread > 0} className="self-stretch" />
               <button
                 onClick={() => navigate(`/channels/@me/${conv.id}`)}
                 aria-label={
                   isGroup
-                    ? `Abrir grupo ${groupDisplayName(conv)}`
-                    : `Abrir conversa com ${other?.name ?? other?.username ?? "usuário"}`
+                    ? `Abrir grupo ${displayName}`
+                    : `Abrir conversa com ${displayName}`
                 }
-                className={cn(
-                  "flex min-h-[64px] w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors active:bg-white/[0.06]",
-                  unread > 0 && "bg-white/[0.03]"
-                )}
+                className="flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-1 text-left focus-visible:outline-none"
               >
                 {isGroup ? (
                   <GroupAvatar
@@ -158,8 +181,10 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
                       </span>
                     )}
                     <span className="truncate">
-                      {isGroup ? groupDisplayName(conv) : (other?.name ?? other?.username ?? "Conversa")}
+                      {displayName}
                     </span>
+                    {isMuted && <BellOff className="h-3 w-3 shrink-0 text-faint" aria-label="Silenciada" />}
+                    {conv.pinnedAt && <Pin className="h-3 w-3 shrink-0 text-primary" aria-label="Fixada" />}
                   </span>
                   <span className="mt-0.5 block truncate text-xs text-muted2">
                     {last
@@ -171,23 +196,33 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
                         : "Nova conversa"}
                   </span>
                 </span>
-                <span className="flex shrink-0 flex-col items-end gap-1">
+                <span className="flex shrink-0 flex-col items-end gap-1 pl-1">
                   {time && <span className="text-[10px] text-faint">{time}</span>}
-                  {unread > 0 && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-bold text-white">
+                  {isGroup && unread > 0 && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--mention-badge)] px-1.5 text-[11px] font-bold text-white">
                       {unread > 99 ? "99+" : unread}
                     </span>
                   )}
                 </span>
               </button>
+            </div>
+          );
+          return (
+            <li key={conv.id}>
+              <DMConversationMenu
+                conversation={conv}
+                mode="context"
+                onOpenProfile={onOpenProfile}
+                isFriend={!!other && acceptedFriendIds.has(other.id)}
+              >
+                {row}
+              </DMConversationMenu>
             </li>
           );
         })}
       </ul>
 
-      {onOpenProfile ? null : null}
-
-      <CreateGroupModal open={createGroupOpen} onOpenChange={setCreateGroupOpen} />
+      <NewMessageDialog open={newMessageOpen} onOpenChange={setNewMessageOpen} />
     </div>
   );
 }

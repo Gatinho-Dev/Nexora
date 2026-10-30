@@ -8,6 +8,9 @@ export type DevicePrefs = {
   inputSensitivityMode?: "automatic" | "manual";
   inputSensitivity?: number;
   audioProcessing?: "off" | "standard" | "clearvoice";
+  echoCancellation?: boolean;
+  noiseSuppression?: boolean;
+  autoGainControl?: boolean;
   pushToTalkKeybind?: string;
   streamQuality?: "720p30" | "1080p30" | "1080p60";
 };
@@ -15,12 +18,20 @@ export type DevicePrefs = {
 export const DEFAULT_DEVICE_PREFS: Required<
   Pick<
     DevicePrefs,
-    "inputSensitivityMode" | "inputSensitivity" | "audioProcessing"
+    | "inputSensitivityMode"
+    | "inputSensitivity"
+    | "audioProcessing"
+    | "echoCancellation"
+    | "noiseSuppression"
+    | "autoGainControl"
   >
 > = {
   inputSensitivityMode: "automatic",
   inputSensitivity: 28,
   audioProcessing: "standard",
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
 };
 
 export const DEFAULT_PUSH_TO_TALK_KEYBIND: undefined = undefined;

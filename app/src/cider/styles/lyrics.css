@@ -1,0 +1,725 @@
+/*
+ * Cider 2 — letras.
+ *
+ * A maior parte das cores, tamanhos e intensidades vem das variáveis definidas
+ * por `lyricsCssVariables()` (`--lyrics-*`), então os presets (Elegant, Karaoke,
+ * Glow, Cinema…) e o editor de estilo mandam aqui sem que este arquivo precise
+ * conhecer cada opção.
+ *
+ * Regra de animação: nada de trocar classe CSS no meio da música — o estado
+ * visual de cada palavra é interpolado por estilo inline (`AnimatedWord`). Aqui
+ * só definimos a estrutura, a hierarquia entre linhas e as transições de linha.
+ */
+
+.lyrics-scope {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+}
+
+.lyrics-scope[data-variant="fullscreen"],
+.lyrics-scope[data-variant="immersive"] {
+  gap: 18px;
+}
+
+/*
+ * Letra em tela cheia: é a leitura, não o painel.
+ *
+ * A coluna ocupa a altura toda (o painel de 520 px do `bridge.css` não vale
+ * aqui), a fonte é grande e a máscara é mais alta — no Apple Music dá para ler
+ * quatro ou cinco linhas e a linha cantada fica no meio, com as seguintes
+ * desbotando para baixo.
+ */
+.cider-root .lyrics-scope[data-variant="fullscreen"] {
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  gap: 6px;
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  padding: 8px 0;
+  gap: clamp(14px, 1.6vh, 26px);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 14%,
+    #000 68%,
+    transparent 100%
+  );
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-spacer {
+  flex: 1 1 auto;
+  height: 10%;
+  min-height: 4%;
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line {
+  font-size: clamp(28px, 1.6vw + 18px, 50px);
+  line-height: 1.24;
+  letter-spacing: -0.022em;
+  font-weight: 700;
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-state="active"] {
+  transform: none;
+}
+
+/* Na tela cheia as duas direções são distinguíveis, como no Apple Music: o
+   trecho já cantado continua aceso (veja a regra de `past` mais abaixo) e o que
+   ainda vem é uma sombra mais apagada. */
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-state="upcoming"] {
+  opacity: 0.3;
+}
+
+/* A linha cantada segue pintada na tela cheia, mas ganha de volta um resto da
+   sombra da linha ativa: aqui o fundo é a capa desfocada, e a sombra é o que
+   separa a letra clara de um trecho claro da capa. */
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-state="past"] {
+  text-shadow: 0 2px calc(var(--lyrics-shadow, 0.35) * 10px) rgba(0, 0, 0, 0.34);
+}
+
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-footer {
+  font-size: 11px;
+  opacity: 0.42;
+  padding: 0 2px 2px;
+}
+
+/*
+ * Painel lateral.
+ *
+ * Aqui a letra **ocupa a altura toda**: o painel vai até o fim da janela e a
+ * lista estica junto, com os espaçadores mantendo a linha ativa no meio — o
+ * arranjo do painel de letras do Apple Music. Sem isso, uma letra curta se
+ * acomoda no topo, o resto do painel fica vazio e a letra parece "acabar" no
+ * meio da tela.
+ *
+ * O prefixo `.cider-root` (e a especificidade extra) é necessário porque o
+ * `bridge.css` limita a letra a 520 px para o layout de página.
+ */
+.cider-root .lyrics-scope[data-variant="panel"] {
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  gap: 4px;
+}
+
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-lines {
+  flex: 1 1 auto;
+  padding: 2px 0 8px;
+  gap: calc(var(--cider-space-4) * 1.2);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 13%,
+    #000 74%,
+    transparent 100%
+  );
+}
+
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-spacer {
+  flex: 1 1 auto;
+  height: 14%;
+  min-height: 8%;
+}
+
+/* A letra do painel é grande, mas acompanha a largura: em telas estreitas 36 px
+   deixariam três palavras por linha. */
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-line {
+  font-size: clamp(25px, 1.1vw + 16px, 36px);
+  line-height: 1.3;
+}
+
+/* No painel a letra não pisca em neon: ela fica legível, e o acento do Cider
+   entra no halo da palavra cantada (veja `useLyrics`). */
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-line[data-state="active"] {
+  transform: none;
+}
+
+/* O crédito da fonte no painel é uma linha discreta no rodapé, como no desktop
+   — sem competir com a letra. */
+.cider-root .lyrics-scope[data-variant="panel"] .lyrics-footer {
+  padding: 0 2px 4px;
+  font-size: var(--cider-text-xs);
+  opacity: 0.72;
+}
+
+.lyrics-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lyrics-empty {
+  padding: 4px 0;
+  align-items: flex-start;
+}
+
+.lyrics-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: var(--cider-text-xs);
+  color: var(--cider-text-muted);
+}
+
+.lyrics-lines {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--cider-space-3) * 1.4);
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  max-height: 100%;
+  padding: 24px 4px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 14%,
+    #000 82%,
+    transparent 100%
+  );
+}
+
+.lyrics-lines[data-align="center"] {
+  text-align: center;
+}
+
+.lyrics-lines[data-align="right"] {
+  text-align: right;
+}
+
+.lyrics-spacer {
+  flex: none;
+  height: 28%;
+}
+
+.lyrics-line {
+  /* Referência das bolinhas da contagem, que ficam acima do texto. */
+  position: relative;
+  margin: 0;
+  font-family: var(--lyrics-family, var(--cider-font));
+  font-size: var(--lyrics-size, 34px);
+  font-weight: var(--lyrics-weight, 600);
+  line-height: var(--lyrics-line-height, 1.35);
+  letter-spacing: var(--lyrics-letter-spacing, 0em);
+  color: var(--cider-text);
+  opacity: var(--lyrics-inactive-opacity, 0.4);
+  filter: blur(calc(var(--lyrics-blur, 1px) * 0.5));
+  transform: translate3d(0, 0, 0);
+  transform-origin: left center;
+  transition:
+    opacity calc(var(--lyrics-decay, 400ms) * 0.6) var(--cider-ease-out),
+    filter calc(var(--lyrics-decay, 400ms) * 0.6) var(--cider-ease-out),
+    transform var(--cider-duration-slow) var(--cider-ease-out);
+  cursor: default;
+}
+
+.lyrics-line[title] {
+  cursor: pointer;
+}
+
+.lyrics-line[data-state="upcoming"] {
+  opacity: calc(var(--lyrics-inactive-opacity, 0.4) * 0.75);
+}
+
+.lyrics-line[data-state="approaching"] {
+  opacity: calc(var(--lyrics-inactive-opacity, 0.4) + 0.18);
+  filter: blur(calc(var(--lyrics-blur, 1px) * 0.4));
+  transform: translate3d(0, calc(var(--lyrics-slide, 6px) * 0.4), 0);
+}
+
+.lyrics-line[data-state="active"] {
+  opacity: 1;
+  filter: none;
+  transform: translate3d(0, 0, 0) scale(1.005);
+  text-shadow: 0 2px calc(var(--lyrics-shadow, 0.35) * 14px) rgba(0, 0, 0, 0.42);
+}
+
+/*
+ * Linha já cantada: continua **pintada**.
+ *
+ * Depois de passar, a linha não volta ao cinza nem desbota: o trecho cantado
+ * permanece na cor de leitura (branco no fundo escuro, preto no claro) e só o
+ * que ainda vem é que está apagado — é a leitura da referência do Apple Music.
+ * Por isso `opacity` cheio e sem desfoque: qualquer resto de transparência ou
+ * blur aqui desfaria a tinta da palavra (veja `AnimatedWord`).
+ */
+.lyrics-line[data-state="past"] {
+  opacity: 1;
+  filter: none;
+}
+
+/*
+ * Contagem da espera: as três bolinhas antes de a voz entrar.
+ *
+ * Elas ficam **acima** da linha esperada e fora do fluxo: se entrassem no fluxo,
+ * a linha inteira desceria toda vez que a contagem aparecesse (e subiria de
+ * volta no fim), o que faria a letra pular justamente no momento em que a pessoa
+ * está esperando a voz chegar. O tamanho é em `em`, então as bolinhas acompanham
+ * o preset e o lugar onde a letra está sendo desenhada.
+ */
+.lyrics-countin {
+  position: absolute;
+  bottom: calc(100% + 0.1em);
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.26em;
+  line-height: 0;
+}
+
+.lyrics-countin-dot {
+  width: 0.26em;
+  height: 0.26em;
+  border-radius: var(--cider-radius-full);
+}
+
+/* A contagem acompanha o alinhamento da letra (o preset pode centrar ou alinhar
+   à direita). */
+.lyrics-lines[data-align="center"] .lyrics-countin {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.lyrics-lines[data-align="right"] .lyrics-countin {
+  left: auto;
+  right: 0;
+}
+
+/*
+ * A linha que está sendo esperada fica com a opacidade cheia.
+ *
+ * As bolinhas vivem dentro dela, e a opacidade de um pai vale para toda a
+ * subárvore — não há como "desfazer" isso no filho. Como o esmaecimento das
+ * linhas que ainda vêm é justo onde a contagem aparece, a linha esperada abre
+ * exceção: o **texto** continua apagado pelo próprio estado de cada palavra
+ * (`AnimatedWord`), mas as bolinhas aparecem de verdade.
+ */
+.cider-root .lyrics-scope[data-variant="fullscreen"] .lyrics-line[data-count-in="true"],
+.cider-root .lyrics-line[data-count-in="true"] {
+  opacity: 1;
+}
+
+.lyrics-line[data-instrumental="true"] {
+  font-style: italic;
+  color: var(--cider-text-faint);
+}
+
+.lyrics-word {
+  display: inline-block;
+  white-space: pre;
+}
+
+/*
+ * Palavra enfatizada (cantada devagar).
+ *
+ * O tempo da palavra vem da fonte, então "devagar" não é palpite: a palavra é
+ * marcada quando dura bem mais que as vizinhas da mesma linha (veja
+ * `LyricsView`). O halo extra é o mesmo mecanismo da palavra ativa — só que
+ * mais forte e por mais tempo, que é o que faz a palavra "relate" da Sabrina
+ * Carpenter brilhar enquanto ela a estica, em vez de acender e apagar.
+ */
+.lyrics-word[data-emphasis="true"][data-state="active"] {
+  z-index: 1;
+}
+
+/* Redução de movimento também vale para o preenchimento: sem transição, a
+   palavra troca de cor de uma vez, sem varredura. */
+
+/* Quando o tempo é estimado (a fonte só manda o tempo da linha), deixamos isso
+   visível — de forma discreta, sem poluir a leitura. */
+.lyrics-word[data-estimated="true"] {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--cider-text-faint) 35%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
+
+/*
+ * Subletra: o canto de apoio que a fonte escreve entre parênteses.
+ *
+ * "... can you keep it up? (It up)" não vira uma fila de texto: o apoio ganha
+ * um bloco próprio **embaixo** da letra, bem menor, que é como o Apple Music
+ * desenha e como a música soa — voz principal na frente, resposta atrás.
+ *
+ * O bloco vive dentro da própria linha (e não numa linha separada do
+ * documento), então ele rola, esmaece e acende junto com ela, e a palavra do
+ * apoio continua com o seu tempo. O tamanho é relativo à linha, para a subletra
+ * acompanhar o preset escolhido.
+ */
+.lyrics-backing {
+  display: block;
+  margin-top: 0.14em;
+  font-size: 0.42em;
+  line-height: 1.3;
+  /* A letra grande usa `-0.02em`; num corpo pequeno isso é ilegível. */
+  letter-spacing: 0;
+}
+
+.lyrics-punctuation {
+  opacity: 0.85;
+}
+
+.lyrics-plainline {
+  position: relative;
+  display: inline-block;
+}
+
+/* Máscara de progresso para letras sem tempo por palavra: o texto “acende” da
+   esquerda para a direita conforme a linha é cantada, na mesma cor de leitura
+   das palavras (a cor vem inline, porque depende do fundo). */
+.progress-mask {
+  position: absolute;
+  inset: 0 auto 0 0;
+  overflow: hidden;
+  white-space: pre;
+  pointer-events: none;
+  transition: width 120ms linear;
+}
+
+.lyrics-plain {
+  margin: 0;
+  padding: 4px 2px;
+  font-family: var(--lyrics-family, var(--cider-font));
+  font-size: calc(var(--lyrics-size, 34px) * 0.5);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--cider-text-muted);
+  overflow-y: auto;
+}
+
+.lyrics-footer {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ *
+ * Estados de carregamento e indisponibilidade                          *
+ * ------------------------------------------------------------------ */
+
+.lyrics-skeleton {
+  display: grid;
+  gap: 10px;
+}
+
+.lyrics-unavailable {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 18px;
+  align-items: start;
+  padding: 18px;
+  border: 1px solid var(--cider-border);
+  border-radius: var(--cider-radius-lg);
+  background:
+    radial-gradient(
+      100% 120% at 0% 0%,
+      color-mix(in srgb, var(--cider-accent) calc(var(--lyrics-bg-intensity, 0.4) * 22%), transparent) 0%,
+      transparent 62%
+    ),
+    color-mix(in srgb, var(--cider-bg-elevated) 88%, transparent);
+}
+
+.lyrics-unavailable-art {
+  width: 120px;
+  height: 120px;
+  border-radius: var(--cider-radius-md);
+  background-size: cover;
+  background-position: center;
+  box-shadow: var(--cider-shadow-lg);
+}
+
+/* ------------------------------------------------------------------ *
+ * Tela cheia                                                          *
+ * ------------------------------------------------------------------ */
+
+.lyrics-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--cider-bg);
+}
+
+.lyrics-fullscreen-scrim {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(calc(28px + var(--lyrics-bg-intensity, 0.4) * 40px)) saturate(1.2);
+  transform: scale(1.15);
+  opacity: calc(0.18 + var(--lyrics-bg-intensity, 0.4) * 0.5);
+  pointer-events: none;
+}
+
+.lyrics-fullscreen-head,
+.lyrics-fullscreen-foot {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 22px;
+}
+
+.lyrics-fullscreen-body {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 24px;
+  padding: 0 22px 12px;
+  min-height: 0;
+}
+
+.lyrics-fullscreen-body .lyrics-scope {
+  min-height: 0;
+}
+
+@media (max-width: 1024px) {
+  .lyrics-fullscreen-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lyrics-unavailable {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Redução de movimento: nada de slide, blur ou escala. */
+@media (prefers-reduced-motion: reduce) {
+  .lyrics-line,
+  .lyrics-word {
+    transition: none !important;
+    filter: none !important;
+    transform: none !important;
+  }
+
+  .lyrics-lines {
+    scroll-behavior: auto;
+  }
+}
+
+:root[data-reduce-motion="true"] .lyrics-line,
+:root[data-reduce-motion="true"] .lyrics-word {
+  transition: none !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+/* ------------------------------------------------------------------ *
+ * Tela cheia de letras (a que abre ao clicar na capa)                  *
+ * ------------------------------------------------------------------ *
+ * Arranjo da imagem de referência: ✕ no canto superior esquerdo, a capa com
+ * os controles logo abaixo num bloco à esquerda, a letra grande à direita, e o
+ * fundo sendo a própria capa **muito** desfocada — as cores da música passando
+ * atrás de tudo, sem detalhe nenhum.
+ *
+ * O fundo vive numa camada própria (`.lyrics-screen-bg`) com `blur(90px)`: um
+ * filtro nessa ordem de grandeza "derrete" a capa em manchas grandes, que é o
+ * efeito da referência. O `scale(1.18)` é obrigatório junto, porque o desfoque
+ * come as bordas e sobraria um degradê transparente no contorno.
+ */
+.lyrics-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  overflow: hidden;
+  color: #fff;
+  animation: lyrics-screen-in var(--cider-duration-base) var(--cider-ease-out) both;
+}
+
+@keyframes lyrics-screen-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.lyrics-screen-bg {
+  position: absolute;
+  inset: -8%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(90px) saturate(160%) brightness(0.92);
+  transform: scale(1.18);
+  pointer-events: none;
+}
+
+.lyrics-screen-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 110% at 20% 0%, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.55) 70%),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.34));
+  pointer-events: none;
+}
+
+.lyrics-screen-close {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--cider-radius-full);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: background var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.lyrics-screen-close:hover { background: rgba(255, 255, 255, 0.2); }
+
+.lyrics-screen-body {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(24px, 3.6vw, 72px);
+  height: 100%;
+  padding: clamp(56px, 7vh, 88px) clamp(28px, 4.5vw, 84px) clamp(24px, 4vh, 56px);
+  min-height: 0;
+}
+
+.lyrics-screen-left {
+  display: grid;
+  align-content: center;
+  justify-items: stretch;
+  gap: 12px;
+  width: 100%;
+  max-width: min(520px, 100%);
+  margin: 0 auto;
+}
+
+.lyrics-screen-art {
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--cider-radius-lg);
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+}
+
+.lyrics-screen-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lyrics-screen-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.lyrics-screen-text { min-width: 0; }
+
+.lyrics-screen-title {
+  font-size: var(--cider-text-md);
+  font-weight: var(--cider-weight-bold);
+  line-height: 1.3;
+}
+
+.lyrics-screen-artist {
+  font-size: var(--cider-text-sm);
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.35;
+}
+
+.lyrics-screen-tools { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+
+.lyrics-screen-tool {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--cider-radius-full);
+  background: none;
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  transition: background var(--cider-duration-fast) var(--cider-ease-out);
+}
+
+.lyrics-screen-tool:hover:not(:disabled) { background: rgba(255, 255, 255, 0.14); }
+.lyrics-screen-tool[aria-pressed="true"] { color: #fff; }
+.lyrics-screen-tool.big { width: 52px; height: 52px; color: #fff; }
+.lyrics-screen-tool:disabled { opacity: 0.4; cursor: default; }
+
+.lyrics-screen-progress { display: grid; gap: 4px; }
+
+.lyrics-screen-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Na tela cheia o progresso é branco: o cinza do tema desapareceria sobre uma
+   capa clara desfocada. */
+.lyrics-screen .progress-track { background: rgba(255, 255, 255, 0.26); }
+.lyrics-screen .progress-fill { background: rgba(255, 255, 255, 0.92); }
+.lyrics-screen .progress-handle { background: #fff; }
+
+.lyrics-screen-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 0.8vw, 14px);
+  margin-top: 2px;
+}
+
+.lyrics-screen-volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(340px, 82%);
+  margin: 4px auto 0;
+}
+
+.lyrics-screen-volume .volume-range { flex: 1 1 auto; min-width: 0; }
+
+.lyrics-screen-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  min-height: 0;
+}
+
+.lyrics-screen-message {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: var(--cider-text-md);
+}
+
+/* Em telas estreitas a capa vai para cima e a letra embaixo: as duas colunas
+   lado a lado não caberiam sem espremer a letra a três palavras por linha. */
+@media (max-width: 980px) {
+  .lyrics-screen-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    padding-top: 64px;
+  }
+  .lyrics-screen-left { max-width: 260px; }
+  .lyrics-screen-right { min-height: 0; }
+}

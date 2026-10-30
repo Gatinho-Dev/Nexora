@@ -23,6 +23,10 @@ import {
  * Observação: o backend ainda não retorna `currentSessionId` na lista
  * (AccountSession), portanto nenhuma sessão recebe badge de
  * "sessão atual" — apenas a lista, encerramento individual e em massa.
+ *
+ * O backend identifica a sessão atual e mascara o endereço IP antes de
+ * enviá-lo ao cliente. A lista permite encerrar sessões individuais ou todas
+ * as outras.
  */
 
 const DEVICE_ICONS: Record<AccountSession["deviceType"], typeof Monitor> = {
@@ -121,10 +125,10 @@ export function DevicesSection() {
                     )}
                   </p>
                   <p className="mt-0.5 truncate text-[11px] text-muted2">
-                    IP: {session.ipAddress ?? "Não disponível"}
+                    {session.browser} · {session.os} · IP {session.ipAddress ?? "não disponível"}
                   </p>
                   <p className="mt-0.5 text-[11px] text-faint">
-                    Última atividade: {formatLastSeen(session.lastSeenAt)}
+                    Criada em {formatLastSeen(session.createdAt)} · Última atividade: {formatLastSeen(session.lastSeenAt)}
                   </p>
 
                   {!session.isCurrent && (

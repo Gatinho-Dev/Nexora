@@ -2,7 +2,8 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { env } from "./env";
 
 /**
- * Criptografia simétrica para tokens de integrações em repouso.
+ * Criptografia simétrica para dados sensíveis em repouso
+ * (tokens de integrações, segredo TOTP, notas privadas).
  * Chave derivada do APP_SECRET (AES-256-GCM). Nunca logar output/input.
  */
 

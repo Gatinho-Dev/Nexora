@@ -50,13 +50,6 @@ import {
   UploadCloud,
   Eye,
   EyeOff,
-  Bold,
-  Italic,
-  Underline,
-  Strikethrough,
-  Code,
-  FileCode,
-  Quote,
   Camera,
   ImageIcon,
   FileText,
@@ -66,6 +59,17 @@ import {
   BarChart3,
   LoaderCircle,
 } from "lucide-react";
+import {
+  ComposerSelectionToolbar,
+  type ComposerFormatAction,
+} from "./ComposerSelectionToolbar";
+import {
+  formatMarkdownCodeBlock,
+  formatMarkdownLink,
+  formatMarkdownQuote,
+  toggleMarkdownWrapper,
+  type FormattingResult,
+} from "@/lib/composerFormatting";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -106,31 +110,6 @@ function isMediaCleared(f: PendingFile): boolean {
   );
 }
 
-type ToolbarAction =
-  | "bold"
-  | "italic"
-  | "underline"
-  | "strike"
-  | "spoiler"
-  | "code"
-  | "codeblock"
-  | "quote";
-
-const TOOLBAR_ACTIONS: {
-  icon: typeof Bold;
-  label: string;
-  action: ToolbarAction;
-}[] = [
-  { icon: Bold, label: "Negrito (**negrito**)", action: "bold" },
-  { icon: Italic, label: "Itálico (*itálico*)", action: "italic" },
-  { icon: Underline, label: "Sublinhado (__sublinhado__)", action: "underline" },
-  { icon: Strikethrough, label: "Tachado (~~tachado~~)", action: "strike" },
-  { icon: EyeOff, label: "Spoiler (||texto||)", action: "spoiler" },
-  { icon: Code, label: "Código inline (`código`)", action: "code" },
-  { icon: FileCode, label: "Bloco de código", action: "codeblock" },
-  { icon: Quote, label: "Citação (> texto)", action: "quote" },
-];
-
 type Props = {
   channelId?: number;
   conversationId?: number;
@@ -155,7 +134,8 @@ export function MessageInput({
   const [spoilerIds, setSpoilerIds] = useState<number[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [toolbarVisible, setToolbarVisible] = useState(false);
+  const [selection, setSelection] = useState<{ start: number; end: number } | null>(null);
+  const selectionRef = useRef<{ start: number; end: number } | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -233,7 +213,6 @@ export function MessageInput({
       }
     }, 0);
     return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey]);
 
   const saveDraft = (value: string) => {
@@ -266,6 +245,18 @@ export function MessageInput({
     }
   };
 
+  // ── Selection detection for Markdown toolbar ──────────────────
+  const captureSelection = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const next =
+      el.selectionStart !== el.selectionEnd
+        ? { start: el.selectionStart, end: el.selectionEnd }
+        : null;
+    selectionRef.current = next;
+    setSelection(next);
+  };
+
   // ── Upload com progresso (XHR) ──────────────────────────────
   const [uploadingItems, setUploadingItems] = useState<
     { tempId: number; name: string; progress: number; xhr: XMLHttpRequest }[]
@@ -282,6 +273,7 @@ export function MessageInput({
   const [recordSeconds, setRecordSeconds] = useState(0);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingSendRef = useRef<{ key: string; nonce: string } | null>(null);
 
   const send = trpc.message.send.useMutation({
     onError: e => toast.error(e.message),
@@ -291,8 +283,20 @@ export function MessageInput({
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 200) + "px";
+    // Measuring `scrollHeight` inside the picker row can inherit its temporary
+    // Suspense height. Estimate visual lines from the actual input width so an
+    // empty composer always remains compact and long drafts still expand.
+    const charsPerLine = Math.max(24, Math.floor((el.clientWidth || 320) / 8));
+    const visualLines = Math.max(
+      1,
+      text
+        .split("\n")
+        .reduce(
+          (total, line) => total + Math.max(1, Math.ceil(line.length / charsPerLine)),
+          0,
+        ),
+    );
+    el.style.height = `${Math.min(192, 36 + (visualLines - 1) * 20)}px`;
   }, [text]);
 
   // Focus on reply
@@ -322,6 +326,7 @@ export function MessageInput({
 
   const handleChange = (value: string) => {
     setText(value);
+    requestAnimationFrame(captureSelection);
     saveDraft(value);
     emitTyping();
     const el = textareaRef.current;
@@ -486,6 +491,8 @@ export function MessageInput({
       {
         onSuccess: () => {
           setText("");
+          selectionRef.current = null;
+          setSelection(null);
           clearDraft();
         },
       },
@@ -536,45 +543,33 @@ export function MessageInput({
   };
 
   // ── Markdown toolbar ────────────────────────────────────────
-  const applyFormat = (before: string, after: string = before) => {
+  const commitFormatting = (result: FormattingResult | null) => {
     const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart ?? text.length;
-    const end = el.selectionEnd ?? start;
-    const selected = text.slice(start, end);
-    const next =
-      text.slice(0, start) + before + selected + after + text.slice(end);
-    setText(next);
+    if (!el || !result) return;
+    setText(result.text);
+    saveDraft(result.text);
+    const nextRange = { start: result.start, end: result.end };
+    selectionRef.current = nextRange;
+    setSelection(nextRange);
     requestAnimationFrame(() => {
       el.focus();
-      if (selected) {
-        el.setSelectionRange(
-          start + before.length,
-          start + before.length + selected.length
-        );
-      } else {
-        const pos = start + before.length;
-        el.setSelectionRange(pos, pos);
-      }
+      el.setSelectionRange(result.start, result.end);
     });
+  };
+
+  const applyFormat = (before: string, after: string = before) => {
+    const range = selectionRef.current;
+    if (!range) return;
+    commitFormatting(toggleMarkdownWrapper(text, range, before, after));
   };
 
   const applyQuote = () => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart ?? text.length;
-    const end = el.selectionEnd ?? start;
-    const selected = text.slice(start, end) || "";
-    const quoted = (selected || "").replace(/^/gm, "> ");
-    const next = text.slice(0, start) + quoted + text.slice(end);
-    setText(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(start + quoted.length, start + quoted.length);
-    });
+    const range = selectionRef.current;
+    if (!range) return;
+    commitFormatting(formatMarkdownQuote(text, range));
   };
 
-  const runToolbarAction = (action: ToolbarAction) => {
+  const runToolbarAction = (action: ComposerFormatAction) => {
     switch (action) {
       case "bold":
         applyFormat("**");
@@ -597,6 +592,9 @@ export function MessageInput({
       case "codeblock":
         applyCodeBlock();
         break;
+      case "link":
+        applyLink();
+        break;
       case "quote":
         applyQuote();
         break;
@@ -604,19 +602,15 @@ export function MessageInput({
   };
 
   const applyCodeBlock = () => {
-    const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart ?? text.length;
-    const end = el.selectionEnd ?? start;
-    const selected = text.slice(start, end);
-    const block = "```\n" + selected + "\n```";
-    const next = text.slice(0, start) + block + text.slice(end);
-    setText(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      // Cursor right after the opening fence so the user can type the language
-      el.setSelectionRange(start + 3, start + 3);
-    });
+    const range = selectionRef.current;
+    if (!range) return;
+    commitFormatting(formatMarkdownCodeBlock(text, range));
+  };
+
+  const applyLink = () => {
+    const range = selectionRef.current;
+    if (!range) return;
+    commitFormatting(formatMarkdownLink(text, range));
   };
 
   const doSend = () => {
@@ -626,6 +620,14 @@ export function MessageInput({
       toast.error("Verificando mídia... Aguarde a análise de segurança.");
       return;
     }
+    // One nonce per logical message: a retry after a lost response reuses it
+    // so the server returns the original message instead of duplicating it.
+    const attachmentIds = files.map(f => f.id);
+    const spoilers = spoilerIds.filter(id => files.some(f => f.id === id));
+    const payloadKey = JSON.stringify([channelId, conversationId, content, replyingTo?.id, threadId, attachmentIds, spoilers]);
+    if (!pendingSendRef.current || pendingSendRef.current.key !== payloadKey) {
+      pendingSendRef.current = { key: payloadKey, nonce: crypto.randomUUID() };
+    }
     send.mutate(
       {
         channelId,
@@ -633,11 +635,13 @@ export function MessageInput({
         content,
         replyToId: replyingTo?.id,
         threadId,
-        attachmentIds: files.map(f => f.id),
-        spoilerIds: spoilerIds.filter(id => files.some(f => f.id === id)),
+        attachmentIds,
+        spoilerIds: spoilers,
+        clientNonce: pendingSendRef.current.nonce,
       },
       {
         onSuccess: () => {
+          pendingSendRef.current = null;
           setText("");
           clearDraft();
           setFiles([]);
@@ -908,6 +912,9 @@ export function MessageInput({
       window.removeEventListener("dragleave", handleDragLeave);
       window.removeEventListener("drop", handleDrop);
     };
+    // Global drag listeners are registered once; uploadFiles only uses stable
+    // refs, state setters and configuration for the lifetime of this composer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Audio recording ─────────────────────────────────────────
@@ -1294,34 +1301,6 @@ export function MessageInput({
         </div>
       )}
 
-      {/* Markdown formatting toolbar */}
-      {toolbarVisible && !recording && !recordedUrl && (
-        <div
-          className="mb-1 flex flex-wrap items-center gap-0.5 rounded-t-lg bg-sidebar px-2 py-1"
-          role="toolbar"
-          aria-label="Formatação de texto"
-        >
-          {TOOLBAR_ACTIONS.map(({ icon: Icon, label, action }) => (
-            <button
-              key={label}
-              type="button"
-              title={label}
-              aria-label={label}
-              onMouseDown={e => {
-                e.preventDefault();
-                runToolbarAction(action);
-              }}
-              className="rounded p-1.5 text-muted2 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ))}
-          <span className="ml-auto hidden pr-1 text-[10px] font-bold uppercase tracking-wider text-faint sm:block">
-            Markdown
-          </span>
-        </div>
-      )}
-
       {/* Voice recording controls */}
       {recording || recordedUrl ? (
         <div className="flex items-center gap-3 rounded-xl bg-sidebar border border-white/10 px-4 py-3 text-white shadow-lg">
@@ -1391,11 +1370,14 @@ export function MessageInput({
       ) : (
         <div
           className={cn(
-            "relative flex min-h-11 items-end gap-1.5 rounded-lg bg-[#383A40] border border-transparent px-3.5 py-2 transition-colors focus-within:border-[#5865F2]",
-            (replyingTo || files.length > 0 || toolbarVisible) &&
+            "relative flex min-h-11 items-end gap-1.5 rounded-lg border border-transparent bg-input px-3.5 py-2 transition-colors focus-within:border-primary",
+            (replyingTo || files.length > 0) &&
               "rounded-t-none border-t-0"
           )}
         >
+          {selection && !recording && !recordedUrl && (
+            <ComposerSelectionToolbar onAction={runToolbarAction} />
+          )}
           {/* Slash command autocomplete */}
           {slashOpen && slashMatches.length > 0 && !pendingCommand && (
             <SlashCommandMenu
@@ -1513,7 +1495,7 @@ export function MessageInput({
           <textarea
             ref={textareaRef}
             rows={1}
-            className="flex-1 bg-transparent outline-none resize-none text-sm text-bodyx py-1.5 max-h-48 placeholder:text-faint disabled:opacity-50"
+            className="min-h-9 max-h-48 flex-1 resize-none bg-transparent py-1.5 text-sm text-bodyx outline-none placeholder:text-faint disabled:opacity-50"
             placeholder={
               pendingCommand
                 ? pendingCommand.args?.[0]?.placeholder ?? "Argumentos do comando…"
@@ -1524,6 +1506,7 @@ export function MessageInput({
             value={text}
             disabled={disabled || uploading}
             onChange={e => handleChange(e.target.value)}
+            onSelect={captureSelection}
             onKeyDown={onKeyDown}
             onPaste={e => {
               // Colar imagem do clipboard → preview/upload como anexo.
@@ -1533,13 +1516,9 @@ export function MessageInput({
                 void uploadFiles(pasted);
               }
             }}
-            onFocus={() => setToolbarVisible(true)}
             onBlur={e => {
-              if (
-                !e.currentTarget.value &&
-                !e.relatedTarget?.closest?.("[role=toolbar]")
-              ) {
-                setToolbarVisible(false);
+              if (!e.relatedTarget?.closest?.("[role=toolbar]")) {
+                requestAnimationFrame(captureSelection);
               }
             }}
           />
@@ -1637,7 +1616,7 @@ export function MessageInput({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="p-1.5 text-[#5865F2] hover:text-[#5865F2] transition-colors disabled:opacity-40"
+                    className="p-1.5 text-primary transition-colors hover:text-primary/80 disabled:opacity-40"
                     disabled={disabled || send.isPending || uploading}
                     onClick={doSend}
                   >

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Users } from "lucide-react";
 import { Seo } from "@/lib/seo";
+import { PartnerBadge } from "@/components/server/PartnerBadge";
 
 export function InvitePage() {
   const params = useParams();
@@ -89,11 +90,13 @@ export function InvitePage() {
             </>
           ) : info.data ? (
             <>
-              <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
-                <Users className="h-4 w-4" />
-                {info.data.memberCount}{" "}
-                {info.data.memberCount === 1 ? "membro" : "membros"}
-              </p>
+               <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+                 <Users className="h-4 w-4" />
+                 {info.data.memberCount}{" "}
+                 {info.data.memberCount === 1 ? "membro" : "membros"}
+                 {info.data.server.partnered && <PartnerBadge className="ml-1 size-4" />}
+               </p>
+
               {info.data.server.description && (
                 <p className="text-sm text-muted-foreground">
                   {info.data.server.description}

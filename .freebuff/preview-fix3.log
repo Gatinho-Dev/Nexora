@@ -1,0 +1,172 @@
+◇ injected env (8) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[realtime] WebSocket server attached at /ws
+[companion] WebSocket gateway attached at /ws/companion
+[live] WebSocket gateway attached at /ws/live
+[live-companion] WebSocket gateway attached at /ws/live-companion
+Server running on http://localhost:3000/
+[safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+params: queued,RESTART_RECOVERY,processing
+    at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+    at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+    at async Promise.allSettled (index 1) {
+  query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+  params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+  cause: Error: Table 'nexora.media_deep_reviews' doesn't exist
+      at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+      at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+      at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+      at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+      at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+      at async Promise.allSettled (index 1) {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+    sqlState: '42S02',
+    sqlMessage: "Table 'nexora.media_deep_reviews' doesn't exist",
+    sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+  }
+}
+21:08:44 [tsx] change in ./api/boot.ts Restarting...
+◇ injected env (8) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+/home/daniel/Downloads/app/app/api/boot.ts:543
+app.route("/api/cli", cliAuth);
+                      ^
+
+ReferenceError: cliAuth is not defined
+    at <anonymous> (/home/daniel/Downloads/app/app/api/boot.ts:543:23)
+    at ModuleJob.run (node:internal/modules/esm/module_job:569:25)
+    at async node:internal/modules/esm/loader:650:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v26.7.0
+21:08:56 [tsx] change in ./api/boot.ts Rerunning...
+◇ injected env (8) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[realtime] WebSocket server attached at /ws
+[companion] WebSocket gateway attached at /ws/companion
+[live] WebSocket gateway attached at /ws/live
+[live-companion] WebSocket gateway attached at /ws/live-companion
+Server running on http://localhost:3000/
+[safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+params: queued,RESTART_RECOVERY,processing
+    at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+    at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+    at async Promise.allSettled (index 1) {
+  query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+  params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+  cause: Error: Table 'nexora.media_deep_reviews' doesn't exist
+      at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+      at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+      at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+      at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+      at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+      at async Promise.allSettled (index 1) {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+    sqlState: '42S02',
+    sqlMessage: "Table 'nexora.media_deep_reviews' doesn't exist",
+    sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+  }
+}
+21:09:08 [tsx] change in ./api/boot.ts Restarting...
+◇ injected env (8) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[realtime] WebSocket server attached at /ws
+[companion] WebSocket gateway attached at /ws/companion
+[live] WebSocket gateway attached at /ws/live
+[live-companion] WebSocket gateway attached at /ws/live-companion
+Server running on http://localhost:3000/
+[safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+params: queued,RESTART_RECOVERY,processing
+    at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+    at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+    at async Promise.allSettled (index 1) {
+  query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+  params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+  cause: Error: Table 'nexora.media_deep_reviews' doesn't exist
+      at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+      at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+      at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+      at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+      at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+      at async Promise.allSettled (index 1) {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+    sqlState: '42S02',
+    sqlMessage: "Table 'nexora.media_deep_reviews' doesn't exist",
+    sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+  }
+}
+21:22:14 [tsx] change in ./api/realtime.ts Restarting...
+◇ injected env (8) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+[realtime] WebSocket server attached at /ws
+[companion] WebSocket gateway attached at /ws/companion
+[live] WebSocket gateway attached at /ws/live
+[live-companion] WebSocket gateway attached at /ws/live-companion
+Server running on http://localhost:3000/
+[safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+params: queued,RESTART_RECOVERY,processing
+    at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+    at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+    at async Promise.allSettled (index 1) {
+  query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+  params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+  cause: Error: Table 'nexora.media_deep_reviews' doesn't exist
+      at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+      at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+      at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+      at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+      at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+      at async Promise.allSettled (index 1) {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+    sqlState: '42S02',
+    sqlMessage: "Table 'nexora.media_deep_reviews' doesn't exist",
+    sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+  }
+}
+22:21:14 [tsx] change in ./api/auth/middleware.ts Restarting...
+◇ injected env (8) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[realtime] WebSocket server attached at /ws
+[companion] WebSocket gateway attached at /ws/companion
+[live] WebSocket gateway attached at /ws/live
+[live-companion] WebSocket gateway attached at /ws/live-companion
+Server running on http://localhost:3000/
+[safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+params: queued,RESTART_RECOVERY,processing
+    at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+    at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+    at async Promise.allSettled (index 1) {
+  query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+  params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+  cause: Error: Table 'nexora.media_deep_reviews' doesn't exist
+      at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+      at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+      at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+      at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+      at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+      at async Promise.allSettled (index 1) {
+    code: 'ER_NO_SUCH_TABLE',
+    errno: 1146,
+    sqlState: '42S02',
+    sqlMessage: "Table 'nexora.media_deep_reviews' doesn't exist",
+    sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+  }
+}

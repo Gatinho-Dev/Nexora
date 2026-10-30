@@ -5,12 +5,13 @@ import {
   asc,
   desc,
   eq,
+  inArray,
   like,
   lt,
   or,
   sql,
 } from "drizzle-orm";
-import type { AdminAuditLogDTO } from "@contracts/types";
+import type { AdminAuditLogDTO, AdminPartnerServerDTO } from "@contracts/types";
 import {
   createRouter,
   adminQuery,
@@ -37,7 +38,7 @@ import {
   revoke,
 } from "./services/badgeService";
 import { toPublicUser } from "./utils/permissions";
-import { broadcastToAll } from "./realtime";
+import { broadcastToAll, broadcastToServer } from "./realtime";
 import {
   addInternalNote,
   confirmViolation,
@@ -94,6 +95,67 @@ async function writeAudit(database: AuditDatabase, input: {
     targetUserId: input.targetUserId ?? null,
     metadata: input.metadata ?? null,
   });
+}
+
+async function partnerServerRows({
+  query,
+  partneredOnly = false,
+}: {
+  query?: string;
+  partneredOnly?: boolean;
+} = {}): Promise<AdminPartnerServerDTO[]> {
+  const db = getDb();
+  const normalizedQuery = query?.trim().toLowerCase();
+  const pattern = normalizedQuery
+    ? `%${normalizedQuery.replace(/[\\%_]/g, "\\$&")}%`
+    : null;
+  const rows = await db
+    .select({ server: schema.servers, owner: schema.users })
+    .from(schema.servers)
+    .leftJoin(schema.users, eq(schema.users.id, schema.servers.ownerId))
+    .where(
+      and(
+        partneredOnly ? eq(schema.servers.partnered, true) : undefined,
+        pattern
+          ? or(
+              like(sql`LOWER(${schema.servers.name})`, pattern),
+              like(sql`CAST(${schema.servers.id} AS CHAR)`, pattern),
+              like(sql`LOWER(COALESCE(${schema.servers.description}, ''))`, pattern),
+              like(sql`LOWER(COALESCE(${schema.users.name}, ''))`, pattern),
+              like(sql`LOWER(COALESCE(${schema.users.username}, ''))`, pattern)
+            )
+          : undefined
+      )
+    )
+    .orderBy(desc(schema.servers.id))
+    .limit(100);
+  const serverIds = rows.map(row => row.server.id);
+  const memberCounts = serverIds.length
+    ? await db
+        .select({
+          serverId: schema.serverMembers.serverId,
+          total: sql<number>`COUNT(*)`,
+        })
+        .from(schema.serverMembers)
+        .where(inArray(schema.serverMembers.serverId, serverIds))
+        .groupBy(schema.serverMembers.serverId)
+    : [];
+  const countByServer = new Map(
+    memberCounts.map(row => [row.serverId, Number(row.total)])
+  );
+  return rows.map(({ server, owner }) => ({
+    id: server.id,
+    name: server.name,
+    iconUrl: server.iconUrl,
+    ownerId: server.ownerId,
+    ownerName: owner?.name ?? null,
+    ownerUsername: owner?.username ?? null,
+    memberCount: countByServer.get(server.id) ?? 0,
+    partnered: server.partnered,
+    publicDiscovery: server.publicDiscovery,
+    isFeatured: server.isFeatured,
+    createdAt: server.createdAt,
+  }));
 }
 
 /**
@@ -513,10 +575,17 @@ export const adminRouter = createRouter({
       if (!authority) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Sem permissão." });
       }
-      const [user, badge] = await Promise.all([
+      // Não exponha detalhes de infraestrutura quando a consulta de autorização
+      // falhar. A resposta genérica também evita que um admin descubra a
+      // existência de registros por meio de mensagens de banco de dados.
+      const lookup = await Promise.all([
         getDb().query.users.findFirst({ where: eq(schema.users.id, input.userId) }),
         getDb().query.badges.findFirst({ where: eq(schema.badges.id, input.badgeId) }),
-      ]);
+      ]).catch(() => null);
+      if (!lookup) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário ou badge não encontrado." });
+      }
+      const [user, badge] = lookup;
       if (!user) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado." });
       }
@@ -740,8 +809,75 @@ export const adminRouter = createRouter({
     return result;
   }),
 
-  /** Define parceria de servidor (alimenta Partnered Server Owner). */
-  setServerPartnership: adminQuery
+  searchServers: adminQuery
+    .input(
+      z.object({
+        query: z.string().trim().max(80).optional(),
+        limit: z.number().int().min(1).max(25).default(12),
+      })
+    )
+    .query(async ({ input }): Promise<AdminPartnerServerDTO[]> => {
+      const rows = await partnerServerRows({ query: input.query });
+      return rows.slice(0, input.limit);
+    }),
+
+  listPartnerServers: adminQuery.query(async (): Promise<AdminPartnerServerDTO[]> => {
+    return partnerServerRows({ partneredOnly: true });
+  }),
+
+  setServerFeatured: ownerQuery
+    .input(
+      z.object({
+        serverId: z.number().int().positive(),
+        featured: z.boolean(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const server = await getDb().query.servers.findFirst({
+        where: eq(schema.servers.id, input.serverId),
+      });
+      if (!server) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Servidor não encontrado." });
+      }
+      if (input.featured && !server.publicDiscovery) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Ative a descoberta pública antes de destacar este servidor.",
+        });
+      }
+      if (input.featured) {
+        const blocked = await getDb().query.moderationCases.findFirst({
+          where: and(
+            eq(schema.moderationCases.targetType, "server"),
+            eq(schema.moderationCases.targetId, server.id),
+            eq(schema.moderationCases.status, "confirmed")
+          ),
+        });
+        if (blocked) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Resolva a moderação deste servidor antes de destacá-lo.",
+          });
+        }
+      }
+      await getDb().transaction(async tx => {
+        await tx
+          .update(schema.servers)
+          .set({ isFeatured: input.featured })
+          .where(eq(schema.servers.id, input.serverId));
+        await writeAudit(tx, {
+          actorUserId: ctx.user.id,
+          action: input.featured ? "server.feature" : "server.unfeature",
+          entityType: "server",
+          entityId: input.serverId,
+          metadata: { publicDiscovery: server.publicDiscovery },
+        });
+      });
+      broadcastToAll({ t: "discovery:refresh" });
+      return { ok: true as const };
+    }),
+
+  setServerPartnership: ownerQuery
     .input(
       z.object({
         serverId: z.number().int().positive(),
@@ -763,26 +899,49 @@ export const adminRouter = createRouter({
       if (!server) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Servidor não encontrado." });
       }
-      await getDb()
-        .update(schema.servers)
-        .set({
-          partnered: input.partnered,
-          partneredAt: input.partnered ? new Date() : null,
-        })
-        .where(eq(schema.servers.id, input.serverId));
-      await recordEvent(
+      if (server.partnered === input.partnered) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: input.partnered
+            ? "Este servidor já é parceiro."
+            : "Este servidor já está fora do programa de parceiros.",
+        });
+      }
+      const partneredAt = input.partnered ? new Date() : null;
+      await getDb().transaction(async tx => {
+        await tx
+          .update(schema.servers)
+          .set({ partnered: input.partnered, partneredAt })
+          .where(eq(schema.servers.id, input.serverId));
+        await writeAudit(tx, {
+          actorUserId: ctx.user.id,
+          action: input.partnered ? "server.partner" : "server.unpartner",
+          entityType: "server",
+          entityId: input.serverId,
+          targetUserId: server.ownerId,
+          metadata: { badgeEvaluationPending: true },
+        });
+      });
+      const badgeEvaluation = await recordEvent(
         input.partnered ? "SERVER_PARTNERED" : "SERVER_UNPARTNERED",
         server.ownerId,
-        { serverId: server.id, serverName: server.name },
+        { serverId: server.id, serverName: server.name }
       );
-      await writeAudit(getDb(), {
-        actorUserId: ctx.user.id,
-        action: input.partnered ? "server.partner" : "server.unpartner",
-        entityType: "server",
-        entityId: server.id,
-        targetUserId: server.ownerId,
+      await broadcastToServer(input.serverId, {
+        t: "server:refresh",
+        serverId: input.serverId,
       });
-      return { ok: true as const };
+      broadcastToAll({ t: "discovery:refresh" });
+      return {
+        ok: true as const,
+        server: {
+          id: server.id,
+          name: server.name,
+          partnered: input.partnered,
+          partneredAt,
+        },
+        badgeEvaluation,
+      };
     }),
 
   /** Registra bug report aceito (Bug Hunter). */
@@ -1039,6 +1198,12 @@ export const adminRouter = createRouter({
         violationId: detail.linkedViolationId,
         metadata: { note: input.note ?? null, days: input.days ?? null },
       });
+      if (
+        detail.targetType === "server" &&
+        ["confirm", "false_positive", "close_no_action"].includes(input.decision)
+      ) {
+        broadcastToAll({ t: "discovery:refresh" });
+      }
       return { ok: true };
     }),
 

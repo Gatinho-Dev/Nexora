@@ -7,6 +7,7 @@ import { MessageItem } from "./MessageItem";
 import { IconHash } from "../icons/channelIcons";
 import { MessageInput } from "./MessageInput";
 import { useChatUIStore } from "@/store/useChatUIStore";
+import { useSearchParams } from "react-router";
 import {
   Loader2,
   ArrowDown,
@@ -27,13 +28,17 @@ type Props = {
   members?: { id: number; username: string | null; name: string | null }[];
   myId: number;
   canManageMessages?: boolean;
+  canPinMessages?: boolean;
   /** Reservado para recibos de leitura (feature em desenvolvimento). */
   showReadReceipts?: boolean;
+  firstUnreadMessageId?: number | null;
   channelType?: string;
   canPublish?: boolean;
   sendDisabled?: boolean;
   onOpenProfile?: (userId: number) => void;
   header: React.ReactNode;
+  /** Surface kept mounted above the timeline (for example an active DM call). */
+  topPanel?: React.ReactNode;
 };
 
 export function ChatArea({
@@ -45,12 +50,18 @@ export function ChatArea({
   members = [],
   myId,
   canManageMessages = false,
+  canPinMessages = false,
   sendDisabled = false,
   showReadReceipts = false,
+  firstUnreadMessageId = null,
   onOpenProfile,
   header,
+  topPanel,
 }: Props) {
   const utils = trpc.useUtils();
+  const [searchParams] = useSearchParams();
+  // Notificações de menção levam a ?message=<id>; esse alvo tem prioridade.
+  const targetMessageId = Number(searchParams.get("message")) || null;
   const key = channelId ? channelKey(channelId) : dmKey(conversationId!);
   const messages = useAppStore(s => s.messages[key]);
   const hasMore = useAppStore(s => s.hasMore[key] ?? false);
@@ -68,6 +79,43 @@ export function ChatArea({
   const stickToBottom = useRef(true);
   const setReplyingTo = useChatUIStore(s => s.setReplyingTo);
   const setEditing = useChatUIStore(s => s.setEditing);
+  const unreadQuery = trpc.message.unread.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
+  const unreadState = channelId
+    ? unreadQuery.data?.channelDetails[channelId]
+    : unreadQuery.data?.conversationDetails[conversationId!];
+  const [localReadState, setLocalReadState] = useState(() => ({
+    key,
+    messageId: 0,
+  }));
+  const locallyReadThrough =
+    localReadState.key === key ? localReadState.messageId : 0;
+  const visibleUnreadState =
+    unreadState && unreadState.latestMessageId > locallyReadThrough
+      ? unreadState
+      : null;
+
+  const markReadThrough = useCallback(
+    (lastMessageId: number) => {
+      if (!lastMessageId) return;
+      setLocalReadState({ key, messageId: lastMessageId });
+      utils.client.message.markRead
+        .mutate({ channelId, conversationId, lastMessageId })
+        .then(() => {
+          if (channelId) useAppStore.getState().clearUnreadChannel(channelId);
+          if (conversationId) {
+            useAppStore.getState().clearUnreadConversation(conversationId);
+          }
+          void utils.message.unread.invalidate();
+        })
+        .catch(() => {
+          setLocalReadState({ key, messageId: 0 });
+          void utils.message.unread.invalidate();
+        });
+    },
+    [channelId, conversationId, key, utils],
+  );
 
   const scrollToBottom = (instant = false) => {
     const el = scrollRef.current;
@@ -81,9 +129,14 @@ export function ChatArea({
 
   // Load messages + track current view
   useEffect(() => {
+    if (!unreadQuery.isSuccess) return;
     let cancelled = false;
-    // Nova conversa: começa colada no presente, sem contador herdado.
-    stickToBottom.current = true;
+    const initialUnreadMessageId = targetMessageId
+      ? undefined
+      : (unreadState?.firstUnreadMessageId ?? firstUnreadMessageId ?? undefined);
+    const anchorMessageId = targetMessageId ?? initialUnreadMessageId;
+    // Com alvo ou unread real, começamos no ponto; sem nenhum, no presente.
+    stickToBottom.current = !anchorMessageId;
     seenCountRef.current = 0;
     const timeout = setTimeout(() => {
       if (!cancelled) {
@@ -97,21 +150,32 @@ export function ChatArea({
     setEditing(null);
 
     utils.client.message.list
-      .query({ channelId, conversationId, limit: 50 })
+      .query({
+        channelId,
+        conversationId,
+        limit: anchorMessageId ? 100 : 50,
+        around: anchorMessageId,
+      })
       .then(res => {
         if (cancelled) return;
         useAppStore.getState().setMessages(key, res.messages, res.hasMore);
         setLoading(false);
-        const last = res.messages.at(-1);
-        if (last) {
-          utils.client.message.markRead
-            .mutate({ channelId, conversationId, lastMessageId: last.id })
-            .catch(() => {});
-        }
-        if (channelId) useAppStore.getState().clearUnreadChannel(channelId);
-        if (conversationId)
-          useAppStore.getState().clearUnreadConversation(conversationId);
-        requestAnimationFrame(() => scrollToBottom(true));
+        requestAnimationFrame(() => {
+          if (targetMessageId) {
+            document
+              .getElementById(`msg-${targetMessageId}`)
+              ?.scrollIntoView({ block: "center", behavior: "auto" });
+            return;
+          }
+          if (initialUnreadMessageId) {
+            const boundary = document.getElementById(
+              `unread-${initialUnreadMessageId}`,
+            );
+            boundary?.scrollIntoView({ block: "center", behavior: "auto" });
+            return;
+          }
+          scrollToBottom(true);
+        });
       })
       .catch(err => {
         if (!cancelled) {
@@ -126,7 +190,35 @@ export function ChatArea({
       setCurrentView({});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, conversationId, reloadTick]);
+  }, [channelId, conversationId, reloadTick, unreadQuery.isSuccess, targetMessageId]);
+
+  // Uma conversa em segundo plano continua não lida até voltar ao foco. Só
+  // marcamos como lida se o usuário já estava no presente do histórico.
+  useEffect(() => {
+    const markVisibleMessagesAsRead = () => {
+      if (
+        !stickToBottom.current ||
+        document.visibilityState !== "visible" ||
+        !document.hasFocus()
+      ) {
+        return;
+      }
+
+      const last = useAppStore.getState().messages[key]?.at(-1);
+      if (!last) return;
+      markReadThrough(last.id);
+    };
+
+    window.addEventListener("focus", markVisibleMessagesAsRead);
+    document.addEventListener("visibilitychange", markVisibleMessagesAsRead);
+    return () => {
+      window.removeEventListener("focus", markVisibleMessagesAsRead);
+      document.removeEventListener(
+        "visibilitychange",
+        markVisibleMessagesAsRead,
+      );
+    };
+  }, [key, markReadThrough]);
 
   // Typing indicator expiry tick
   useEffect(() => {
@@ -150,6 +242,23 @@ export function ChatArea({
     }
   }, [messages?.length]);
 
+  // Uma mensagem recém-renderizada só vira lida quando o usuário realmente
+  // está no presente, com a aba visível e focada.
+  useEffect(() => {
+    if (
+      !visibleUnreadState?.latestMessageId ||
+      !stickToBottom.current ||
+      document.visibilityState !== "visible" ||
+      !document.hasFocus()
+    ) {
+      return;
+    }
+    const frame = requestAnimationFrame(() =>
+      markReadThrough(visibleUnreadState.latestMessageId),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [markReadThrough, messages?.length, visibleUnreadState?.latestMessageId]);
+
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
@@ -159,6 +268,13 @@ export function ChatArea({
     if (isAtBottom) {
       seenCountRef.current = messages?.length ?? 0;
       setNewBelowCount(0);
+      if (
+        visibleUnreadState?.latestMessageId &&
+        document.visibilityState === "visible" &&
+        document.hasFocus()
+      ) {
+        markReadThrough(visibleUnreadState.latestMessageId);
+      }
     }
 
     if (
@@ -188,8 +304,8 @@ export function ChatArea({
     const el = document.getElementById(`msg-${messageId}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("bg-[#5865F2]/20");
-      setTimeout(() => el.classList.remove("bg-[#5865F2]/20"), 1500);
+      el.classList.add("bg-primary/10");
+      setTimeout(() => el.classList.remove("bg-primary/10"), 1500);
     }
   }, []);
 
@@ -199,12 +315,40 @@ export function ChatArea({
       .map(([, entry]) => entry.name);
   }, [typingMap, myId, now]);
 
-  // Última mensagem própria (não-sistema) para o recibo "Visto por N".
+  // Barra fixa logo abaixo do header, alimentada pelo read state do backend.
+  const unreadBar = useMemo(() => {
+    if (!visibleUnreadState) return null;
+    const count = visibleUnreadState.count;
+    return (
+      <div className="relative flex min-h-9 items-center gap-3 border-b border-[#4654D8]/45 bg-[#4654D8] px-4 text-white shadow-[0_1px_0_rgb(255_255_255/0.08)_inset] select-none">
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold">
+          {count === 1 ? "1 mensagem nova" : `${count} mensagens novas`}
+          {visibleUnreadState.firstUnreadAt
+            ? ` desde ${formatUnreadSince(visibleUnreadState.firstUnreadAt)}`
+            : ""}
+        </span>
+        <button
+          onClick={() => markReadThrough(visibleUnreadState.latestMessageId)}
+          className="shrink-0 rounded-md px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/15 active:scale-[0.98]"
+        >
+          Marcar como lida
+        </button>
+      </div>
+    );
+  }, [markReadThrough, visibleUnreadState]);
+
+  // Última mensagem própria (não-evento) para o recibo "Visto por N".
   const lastOwnMessageId = useMemo(() => {
     if (!showReadReceipts || !messages) return null;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (m.authorId === myId && m.tag !== "system") return m.id;
+      if (
+        m.authorId === myId &&
+        m.tag !== "system" &&
+        m.tag !== "call"
+      ) {
+        return m.id;
+      }
     }
     return null;
   }, [messages, myId, showReadReceipts]);
@@ -212,6 +356,8 @@ export function ChatArea({
   return (
     <main className="flex-1 flex flex-col min-w-0 h-full bg-chat relative select-text">
       {header}
+      {topPanel}
+      {unreadBar}
 
       {/* Messages area */}
       <div
@@ -235,7 +381,7 @@ export function ChatArea({
                   setLoading(true);
                   setReloadTick(t => t + 1);
                 }}
-                className="rounded-md bg-[#5865F2] hover:bg-[#4752C4] px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
               >
                 Tentar de novo
               </button>
@@ -261,12 +407,12 @@ export function ChatArea({
           <div className="pb-2">
             {loadingOlder && (
               <div className="flex justify-center py-3">
-                <Loader2 className="h-5 w-5 animate-spin text-[#5865F2]" />
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
               </div>
             )}
             {!hasMore && messages.length > 10 && (
               <div className="px-4 pt-8 pb-3 select-none">
-                <div className="h-12 w-12 rounded-2xl bg-[#5865F2]/20 text-[#5865F2] flex items-center justify-center mb-3">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <IconHash className="h-7 w-7 text-faint" />
                 </div>
                 <h2 className="font-bold text-xl text-foreground">
@@ -283,8 +429,10 @@ export function ChatArea({
               canManageMessages,
               channelType,
               canPublish,
+              canPinMessages,
               jumpTo,
-              onOpenProfile
+              onOpenProfile,
+              visibleUnreadState?.firstUnreadMessageId ?? null,
             )}
           </div>
         )}
@@ -298,12 +446,14 @@ export function ChatArea({
             setNewBelowCount(0);
             scrollToBottom();
           }}
-          className="absolute bottom-16 right-6 z-20 flex items-center gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white px-3.5 py-2 rounded-full text-xs font-semibold shadow-xl transition-colors"
+          className="absolute bottom-16 right-6 z-20 flex items-center gap-2 rounded-full bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-xl transition-colors hover:bg-primary/90"
         >
           <ArrowDown className="h-3.5 w-3.5" />
           <span>
             {newBelowCount > 0
-              ? `${newBelowCount} nova${newBelowCount === 1 ? "" : "s"} mensagem${newBelowCount === 1 ? "" : "s"}`
+              ? newBelowCount === 1
+                ? "1 nova mensagem"
+                : `${newBelowCount} novas mensagens`
               : "Ir para o presente"}
           </span>
         </button>
@@ -318,22 +468,22 @@ export function ChatArea({
       <div className="h-5 px-4 text-xs font-medium text-muted2 flex items-center select-none">
         {typingUsers.length === 1 && (
           <span className="flex items-center gap-1.5 text-muted2">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#5865F2] animate-ping" />
-            <strong className="text-[#5865F2]">{typingUsers[0]}</strong> está
+            <span className="h-1.5 w-1.5 animate-ping rounded-full bg-primary" />
+            <strong className="text-primary">{typingUsers[0]}</strong> está
             digitando...
           </span>
         )}
         {typingUsers.length === 2 && (
           <span className="flex items-center gap-1.5 text-muted2">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#5865F2] animate-ping" />
-            <strong className="text-[#5865F2]">{typingUsers[0]}</strong> e{" "}
-            <strong className="text-[#5865F2]">{typingUsers[1]}</strong> estão
+            <span className="h-1.5 w-1.5 animate-ping rounded-full bg-primary" />
+            <strong className="text-primary">{typingUsers[0]}</strong> e{" "}
+            <strong className="text-primary">{typingUsers[1]}</strong> estão
             digitando...
           </span>
         )}
         {typingUsers.length > 2 && (
           <span className="flex items-center gap-1.5 text-muted2">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#5865F2] animate-ping" />
+            <span className="h-1.5 w-1.5 animate-ping rounded-full bg-primary" />
             Várias pessoas estão digitando na Nexora...
           </span>
         )}
@@ -358,8 +508,10 @@ function renderMessages(
   canManage: boolean,
   channelType: string | undefined,
   canPublish: boolean | undefined,
+  canPinMessages: boolean,
   jumpTo: (id: number) => void,
-  onOpenProfile?: (userId: number) => void
+  onOpenProfile?: (userId: number) => void,
+  unreadBoundary?: number | null,
 ) {
   const items: React.ReactNode[] = [];
   let lastDay = "";
@@ -367,6 +519,24 @@ function renderMessages(
   let lastTime = 0;
 
   for (const msg of messages) {
+    if (msg.id === unreadBoundary) {
+      items.push(
+        <div
+          id={`unread-${msg.id}`}
+          key={`unread-${msg.id}`}
+          className="flex items-center gap-3 px-4 py-2 select-none"
+          role="separator"
+          aria-label="Novas mensagens"
+        >
+          <div className="h-px flex-1 bg-[#7383FF]/70" />
+          <span className="text-[11px] font-semibold text-[#7383FF]">
+            Novas mensagens
+          </span>
+          <div className="h-px flex-1 bg-[#7383FF]/70" />
+        </div>,
+      );
+      lastAuthor = -1;
+    }
     const date = new Date(msg.createdAt);
     const day = date.toLocaleDateString("pt-BR", {
       day: "numeric",
@@ -394,7 +564,8 @@ function renderMessages(
       lastAuthor === msg.authorId &&
       date.getTime() - lastTime < 5 * 60 * 1000 &&
       !msg.replyTo &&
-      msg.tag !== "system";
+      msg.tag !== "system" &&
+      msg.tag !== "call";
     items.push(
       <MessageItem
         key={msg.id}
@@ -404,17 +575,36 @@ function renderMessages(
         canManageMessages={canManage}
         channelType={channelType}
         canPublish={canPublish}
+        canPinMessages={canPinMessages}
         onJumpTo={jumpTo}
         onOpenProfile={onOpenProfile}
       />
     );
-    // Eventos de sistema não participam do agrupamento visual.
-    if (msg.tag !== "system") {
+    // Eventos de sistema/chamada não participam do agrupamento visual.
+    if (msg.tag !== "system" && msg.tag !== "call") {
       lastAuthor = msg.authorId;
       lastTime = date.getTime();
     }
   }
   return items;
+}
+
+function formatUnreadSince(value: string | Date) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const sameDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  return sameDay
+    ? date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
 }
 
 function SkeletonChatLoader() {

@@ -71,6 +71,7 @@ export const env = {
   adminUnionIds: csv("NEXORA_ADMIN_UNION_IDS"),
   adminUserIds: numericCsv("NEXORA_ADMIN_USER_IDS"),
   appOrigin: process.env.APP_ORIGIN?.replace(/\/$/, "") ?? "",
+  appBaseUrl: process.env.APP_BASE_URL?.replace(/\/$/, "") ?? "",
   publicApiUrl: process.env.PUBLIC_API_URL?.replace(/\/$/, "") ?? "",
   // ── OpenRouter (ÚNICO gateway de IA da plataforma) ──────────
   // Nunca use API direta da NVIDIA: todo tráfego passa por aqui.
@@ -114,7 +115,12 @@ export const env = {
     process.env.SEXUAL_MINOR_INITIAL_SUSPENSION_DAYS ?? 3,
   ),
 
-  allowedOrigins: (process.env.ALLOWED_ORIGINS ?? process.env.APP_ORIGIN ?? "")
+  allowedOrigins: (
+    process.env.ALLOWED_ORIGINS ??
+    process.env.APP_ORIGIN ??
+    process.env.APP_BASE_URL ??
+    ""
+  )
     .split(",")
     .map(origin => origin.trim().replace(/\/$/, ""))
     .filter(Boolean),
@@ -131,4 +137,67 @@ export const env = {
     30_000,
     Number(process.env.ROBLOX_PRESENCE_INTERVAL_MS ?? 60_000)
   ),
+
+  // ── Nexora Rich Presence: providers OAuth oficiais ─────────
+  spotifyClientId: process.env.SPOTIFY_CLIENT_ID ?? "",
+  spotifyClientSecret: process.env.SPOTIFY_CLIENT_SECRET ?? "",
+  spotifyRedirectUri:
+    process.env.SPOTIFY_REDIRECT_URI ??
+    "https://nexorachat.cloud/api/integrations/spotify/callback",
+  spotifyIntegrationEnabled: process.env.SPOTIFY_INTEGRATION_ENABLED !== "false",
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  googleRedirectUri:
+    process.env.GOOGLE_REDIRECT_URI ??
+    "https://nexorachat.cloud/api/integrations/youtube/callback",
+  youtubeIntegrationEnabled: process.env.YOUTUBE_INTEGRATION_ENABLED !== "false",
+  twitchClientId: process.env.TWITCH_CLIENT_ID ?? "",
+  twitchClientSecret: process.env.TWITCH_CLIENT_SECRET ?? "",
+  twitchRedirectUri:
+    process.env.TWITCH_REDIRECT_URI ??
+    "https://nexorachat.cloud/api/integrations/twitch/callback",
+  twitchIntegrationEnabled: process.env.TWITCH_INTEGRATION_ENABLED !== "false",
+  githubClientId: process.env.GITHUB_CLIENT_ID ?? "",
+  githubClientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
+  githubRedirectUri:
+    process.env.GITHUB_REDIRECT_URI ??
+    "https://nexorachat.cloud/api/integrations/github/callback",
+  githubIntegrationEnabled: process.env.GITHUB_INTEGRATION_ENABLED !== "false",
+  externalPresenceIntervalMs: Math.max(
+    30_000,
+    Number(process.env.EXTERNAL_PRESENCE_INTERVAL_MS ?? 60_000),
+  ),
+
+  // ── Cider (player web em /cider) ─────────────────────────────────
+  // O Cider roda no navegador do próprio usuário e publica "tocando agora"
+  // pelo WebSocket. Não há OAuth, chave nem chamada de terceiros: o servidor
+  // só valida o que chega. Desligado por padrão para não expor nada em
+  // instalações que não queiram o player.
+  ciderPlayerEnabled: process.env.CIDER_PLAYER_ENABLED !== "false",
+  ciderActivityIntervalMs: Math.max(
+    5_000,
+    Number(process.env.CIDER_ACTIVITY_INTERVAL_MS ?? 20_000)
+  ),
+
+  // ── Monitoramento de uptime (UptimeRobot) ──────────────────────
+  // Somente servidor: a chave nunca é exposta ao cliente.
+  uptimeRobotApiKey: process.env.UPTIMEROBOT_API_KEY ?? "",
+
+  // ── Passkeys / WebAuthn ───────────────────────────────────────
+  // rpID = domínio efetivo do app; origin = origem completa esperada
+  // pelo autenticador (deve corresponder exatamente, incluindo porta).
+  passkeyRpId:
+    process.env.PASSKEY_RP_ID ??
+    process.env.APP_ORIGIN?.replace(/^https?:\/\//, "").replace(/\/$/, "") ??
+    "nexorachat.cloud",
+  passkeyOrigin:
+    process.env.PASSKEY_ORIGIN ??
+    process.env.APP_ORIGIN ??
+    "https://nexorachat.cloud",
+
+  // ── E-mail transacional (Resend) ───────────────────────────────
+  // Mantido no servidor; nenhum destes valores é enviado ao cliente.
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  resendFromEmail: process.env.RESEND_FROM_EMAIL ?? "",
+  resendLogoUrl: process.env.RESEND_LOGO_URL ?? "",
 };

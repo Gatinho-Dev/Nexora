@@ -5,10 +5,10 @@ import { useAppStore } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
 import { soundManager } from "@/lib/sound";
 import { Avatar } from "@/components/Avatar";
-import { PhoneOff, Phone } from "lucide-react";
+import { PhoneOff, Phone, Video } from "lucide-react";
 import { toast } from "sonner";
 
-const RING_TIMEOUT_MS = 30_000;
+const RING_TIMEOUT_MS = 120_000;
 
 /**
  * Chamada recebida em DM/grupo: toque + banner com Aceitar/Recusar.
@@ -49,12 +49,18 @@ export function IncomingCallToast() {
 
   const markRead = trpc.notification.markRead.useMutation();
 
-  const accept = async () => {
+  const accept = async (withVideo = false) => {
     if (!call || !me) return;
     const target = call;
     dismiss();
     try {
-      await voiceManager.join({ conversationId: target.conversationId, myId: me.id });
+      await voiceManager.join({
+        conversationId: target.conversationId,
+        myId: me.id,
+        initiated: false,
+        video: withVideo,
+      });
+      if (withVideo) await voiceManager.toggleCamera();
       if (target.notificationId) {
         markRead.mutate({ id: target.notificationId });
       }
@@ -68,6 +74,7 @@ export function IncomingCallToast() {
 
   const decline = () => {
     if (!call) return;
+    voiceManager.declineCall(call.conversationId);
     if (call.notificationId) {
       markRead.mutate({ id: call.notificationId });
     }
@@ -89,24 +96,32 @@ export function IncomingCallToast() {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-bold">{call.actorName}</p>
           <p className="text-xs text-muted2">
-            Chamada de voz entrando…
+            {call.video ? "Chamada de vídeo" : "Chamada de voz"} entrando…
           </p>
         </div>
         <button
           onClick={decline}
           aria-label="Recusar chamada"
           title="Recusar"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/90 text-white transition-colors hover:bg-red-500"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-500/90 text-white transition-colors hover:bg-red-500"
         >
           <PhoneOff className="h-4 w-4" />
         </button>
         <button
-          onClick={() => void accept()}
+          onClick={() => void accept(false)}
           aria-label="Aceitar chamada"
           title="Aceitar"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/90 text-white transition-colors hover:bg-emerald-500"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500/90 text-white transition-colors hover:bg-emerald-500"
         >
           <Phone className="h-4 w-4" />
+        </button>
+        <button
+          onClick={() => void accept(true)}
+          aria-label="Aceitar com vídeo"
+          title="Aceitar com vídeo"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#4654D8] text-white transition-colors hover:bg-[#5868ea]"
+        >
+          <Video className="h-4 w-4" />
         </button>
       </div>
     </div>

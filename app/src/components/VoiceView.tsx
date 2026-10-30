@@ -32,6 +32,21 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { QRCodeSVG } from "qrcode.react";
+import { Smartphone, ChevronDown, Copy, Check } from "lucide-react";
 import type { VoiceParticipant } from "@contracts/types";
 
 function VideoTile({
@@ -52,6 +67,7 @@ function VideoTile({
   speaking: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const setVoiceSession = useAppStore(state => state.setVoiceSession);
   const hasVideo =
     !!stream &&
     (participant.camera || participant.screen) &&
@@ -61,12 +77,16 @@ function VideoTile({
     const video = videoRef.current;
     if (!video) return;
     video.srcObject = hasVideo ? stream : null;
-    if (hasVideo) video.play().catch(() => {});
+    if (hasVideo) {
+      video.play().catch(() => {
+        if (!isLocal) setVoiceSession({ voicePlaybackBlocked: true });
+      });
+    }
     return () => {
       video.pause();
       video.srcObject = null;
     };
-  }, [stream, hasVideo]);
+  }, [hasVideo, isLocal, setVoiceSession, stream]);
 
   return (
     <div
@@ -186,36 +206,20 @@ export function VoiceView({
   const deafened = useAppStore(s => s.deafened);
   const cameraOn = useAppStore(s => s.cameraOn);
   const screenOn = useAppStore(s => s.screenOn);
+  const companionStatus = useAppStore(s => s.companionStatus);
+  const companionCode = useAppStore(s => s.companionCode);
+  const companionSessionId = useAppStore(s => s.companionSessionId);
+  const companionRequestPending = useAppStore(s => s.companionRequestPending);
   const speakingByUser = useAppStore(s => s.speakingByUser);
   const localVideo = useAppStore(s => s.localVideo);
   const remoteStreams = useAppStore(s => s.remoteStreams);
+  const connectionQuality = useAppStore(s => s.voiceQuality);
 
   const [joining, setJoining] = useState(false);
   const [focusUserId, setFocusUserId] = useState<number | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [connectionQuality, setConnectionQuality] = useState<"excellent" | "good" | "poor" | "unknown">("unknown");
-  const qualityCheckRef = useRef(0);
-
-  // Periodic connection quality check (simplified)
-  useEffect(() => {
-    if (!connected) {
-      setConnectionQuality("unknown");
-      return;
-    }
-    
-    const checkQuality = () => {
-      if (connectionStatus === "connected") {
-        const qualities = ["excellent", "good", "poor"] as const;
-        setConnectionQuality(qualities[Math.floor(Math.random() * 3)]);
-      } else {
-        setConnectionQuality("unknown");
-      }
-    };
-    
-    checkQuality();
-    qualityCheckRef.current = window.setInterval(checkQuality, 10000);
-    return () => window.clearInterval(qualityCheckRef.current);
-  }, [connected, connectionStatus]);
+  const [companionOpen, setCompanionOpen] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   const setSpeaker = trpc.server.stageSetSpeaker.useMutation({
     onError: e => toast.error(e.message),
@@ -424,23 +428,52 @@ export function VoiceView({
               <span
                 className={cn(
                   "flex h-2 w-2 rounded-full",
-                  connectionQuality === "excellent" && "bg-[#23A559]",
-                  connectionQuality === "good" && "bg-amber-400",
-                  connectionQuality === "poor" && "bg-red-400",
-                  connectionQuality === "unknown" && "bg-white/30"
+                  connectionQuality.level === "excellent" && "bg-[#23A559]",
+                  connectionQuality.level === "good" && "bg-amber-400",
+                  connectionQuality.level === "poor" && "bg-red-400",
+                  connectionQuality.level === "unknown" && "bg-white/30"
                 )}
               />
               <span className="text-[10px] text-muted2">
-                {connectionQuality === "excellent" && "Excelente"}
-                {connectionQuality === "good" && "Boa"}
-                {connectionQuality === "poor" && "Ruim"}
-                {connectionQuality === "unknown" && "—"}
+                {connectionQuality.level === "excellent" && "Excelente"}
+                {connectionQuality.level === "good" && "Boa"}
+                {connectionQuality.level === "poor" && "Ruim"}
+                {connectionQuality.level === "unknown" && "—"}
               </span>
             </span>
           )}
         </div>
       </div>
 
+      {companionRequestPending && companionSessionId && (
+        <div
+          role="alert"
+          className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-[#5865F2]/30 bg-[#5865F2]/15 px-4 py-2"
+        >
+          <p className="flex items-center gap-2 text-xs font-semibold text-white">
+            <Smartphone className="h-4 w-4 text-[#8b94ff]" />
+            Um celular quer se conectar como sua câmera.
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="h-7 bg-[#23A559] px-3 text-xs text-white hover:bg-[#1e8c4b]"
+              onClick={() => voiceManager.approveCompanion(companionSessionId)}
+            >
+              <Check className="mr-1 h-3.5 w-3.5" />
+              Permitir
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-7 bg-white/10 px-3 text-xs text-white hover:bg-white/20"
+              onClick={() => voiceManager.rejectCompanion(companionSessionId)}
+            >
+              Recusar
+            </Button>
+          </div>
+        </div>
+      )}
       {playbackBlocked && (
         <button
           type="button"
@@ -678,33 +711,110 @@ export function VoiceView({
           </Tooltip>
 
           {/* Camera */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={cameraOn ? "default" : "secondary"}
-                size="icon"
-                className={cn(
-                  "h-12 w-12 rounded-2xl shadow-lg transition-transform active:scale-95",
-                  cameraOn && "bg-[#5865F2] text-white hover:bg-[#4752C4]"
-                )}
-                onClick={() =>
-                  voiceManager.toggleCamera().catch(e => toast.error(e.message))
-                }
-                disabled={amAudience}
-                aria-label={cameraOn ? "Desligar câmera" : "Ligar câmera"}
-                title={cameraOn ? "Desligar câmera" : "Ligar câmera"}
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex">
+                  <Button
+                    variant={cameraOn ? "default" : "secondary"}
+                    size="icon"
+                    className={cn(
+                      "h-12 w-12 rounded-l-2xl rounded-r-none shadow-lg transition-transform active:scale-95",
+                      cameraOn && "bg-[#5865F2] text-white hover:bg-[#4752C4]"
+                    )}
+                    onClick={() =>
+                      voiceManager
+                        .toggleCamera()
+                        .catch(e => toast.error(e.message))
+                    }
+                    disabled={amAudience}
+                    aria-label={cameraOn ? "Desligar câmera" : "Ligar câmera"}
+                    title={cameraOn ? "Desligar câmera" : "Ligar câmera"}
+                  >
+                    {cameraOn ? (
+                      <Video className="h-5 w-5" />
+                    ) : (
+                      <VideoOff className="h-5 w-5" />
+                    )}
+                  </Button>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant={cameraOn ? "default" : "secondary"}
+                      size="icon"
+                      className={cn(
+                        "relative h-12 w-7 rounded-l-none rounded-r-2xl border-l border-black/20 px-0 shadow-lg transition-transform active:scale-95",
+                        cameraOn &&
+                          "bg-[#5865F2] text-white hover:bg-[#4752C4]"
+                      )}
+                      disabled={amAudience}
+                      aria-label="Opções de câmera"
+                      title="Opções de câmera"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                      {companionStatus === "video-ready" && (
+                        <span className="absolute right-1 top-1 flex h-2 w-2">
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                        </span>
+                      )}
+                    </Button>
+                  </DropdownMenuTrigger>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {cameraOn ? "Desligar câmera" : "Ligar câmera"}
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="center" sideOffset={6}>
+              {companionRequestPending && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    if (companionSessionId)
+                      voiceManager.approveCompanion(companionSessionId);
+                  }}
+                >
+                  <Check className="mr-2 h-4 w-4 text-emerald-400" />
+                  Permitir celular como câmera
+                </DropdownMenuItem>
+              )}
+              {companionStatus === "video-ready" && (
+                <DropdownMenuItem
+                  onSelect={() => voiceManager.setCameraSource("companion")}
+                >
+                  <Smartphone className="mr-2 h-4 w-4 text-emerald-400" />
+                  Celular conectado — usar como câmera
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onSelect={() => voiceManager.setCameraSource("local")}
               >
-                {cameraOn ? (
-                  <Video className="h-5 w-5" />
-                ) : (
-                  <VideoOff className="h-5 w-5" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">
-              {cameraOn ? "Desligar câmera" : "Ligar câmera"}
-            </TooltipContent>
-          </Tooltip>
+                <Video className="mr-2 h-4 w-4" />
+                Usar câmera deste dispositivo
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (companionSessionId) {
+                    // Já pareado — reabre o modal de status/QR.
+                    setCompanionOpen(true);
+                  } else {
+                    voiceManager.startCompanionCamera();
+                    setCompanionOpen(true);
+                  }
+                }}
+              >
+                <Smartphone className="mr-2 h-4 w-4" />
+                Usar celular como câmera
+              </DropdownMenuItem>
+              {companionSessionId && (
+                <DropdownMenuItem
+                  onSelect={() => void voiceManager.stopCompanionCamera()}
+                  className="text-red-400 focus:text-red-300"
+                >
+                  <PhoneOff className="mr-2 h-4 w-4" />
+                  Desconectar celular
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Screen Share — indisponível em navegadores móveis */}
           {typeof navigator !== "undefined" &&
@@ -814,6 +924,126 @@ export function VoiceView({
         onOpenChange={setSettingsOpen}
         initialTab="voice"
       />
+      <CompanionModal
+        open={companionOpen}
+        onOpenChange={setCompanionOpen}
+        status={companionStatus}
+        code={companionCode}
+        sessionId={companionSessionId}
+        codeCopied={codeCopied}
+        onCopy={() => {
+          if (!companionCode) return;
+          void navigator.clipboard
+            ?.writeText(companionCode)
+            .then(() => {
+              setCodeCopied(true);
+              setTimeout(() => setCodeCopied(false), 2000);
+            })
+            .catch(() => {});
+        }}
+        onDisconnect={() => voiceManager.stopCompanionCamera()}
+      />
     </div>
+  );
+}
+
+function CompanionModal({
+  open,
+  onOpenChange,
+  status,
+  code,
+  sessionId,
+  codeCopied,
+  onCopy,
+  onDisconnect,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  status: string;
+  code: string | null;
+  sessionId: string | null;
+  codeCopied: boolean;
+  onCopy: () => void;
+  onDisconnect: () => void;
+}) {
+  const companionUrl =
+    typeof window !== "undefined" && code
+      ? `${window.location.origin}/companion?code=${encodeURIComponent(code)}`
+      : null;
+
+  const isBusy = status === "pending" || status === "paired";
+  const label =
+    status === "video-ready"
+      ? "Conexão ativa"
+      : status === "paired"
+        ? "Emparelhado"
+        : status === "pending"
+          ? "Aguardando pareamento…"
+          : "Câmera externa";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Usar outro dispositivo como câmera</DialogTitle>
+          <DialogDescription>
+            Escaneie o QR code com outro dispositivo para usar a câmera dele na
+            chamada. Não é necessário login nesse dispositivo.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col items-center gap-4">
+          {companionUrl ? (
+            <div className="rounded-2xl border border-white/10 bg-white p-4">
+              <QRCodeSVG
+                value={companionUrl}
+                size={180}
+                bgColor="#ffffff"
+                fgColor="#000000"
+                level="M"
+              />
+            </div>
+          ) : (
+            <div className="flex h-[180px] w-[180px] items-center justify-center rounded-2xl border border-white/10 bg-muted text-muted2 text-sm px-3 text-center">
+              Gerando código…
+            </div>
+          )}
+          {code && (
+            <button
+              type="button"
+              onClick={onCopy}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-muted px-3 py-1.5 font-mono text-sm tracking-[0.25em] hover:bg-muted/70"
+              title="Copiar código"
+            >
+              {code}
+              {codeCopied ? (
+                <Check className="h-3.5 w-3.5 text-emerald-400" />
+              ) : (
+                <Copy className="h-3.5 w-3.5 text-muted2" />
+              )}
+            </button>
+          )}
+          <div className="flex items-center gap-2 text-sm">
+            {isBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[#5865F2]" />
+            ) : status === "video-ready" ? (
+              <Smartphone className="h-4 w-4 text-emerald-400" />
+            ) : null}
+            <span className="text-muted2">{label}</span>
+          </div>
+        </div>
+        {sessionId && (
+          <Button
+            variant="destructive"
+            className="mt-2"
+            onClick={() => {
+              onDisconnect();
+              onOpenChange(false);
+            }}
+          >
+            Desconectar dispositivo
+          </Button>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type {
   MessageDTO,
   ReactionDTO,
+  RichPresenceActivityDTO,
   RobloxActivityDTO,
   VoiceParticipant,
 } from "@contracts/types";
@@ -11,8 +12,41 @@ export const dmKey = (id: number) => `dm:${id}`;
 
 type TypingEntry = { name: string; until: number };
 
+export type ChannelUnreadDetail = {
+  serverId: number;
+  count: number;
+  mentionCount: number;
+  firstUnreadMessageId: number;
+  firstUnreadAt: string | Date;
+  latestMessageId: number;
+};
+
+type ServerVoiceSummary = {
+  count: number;
+  preview: Pick<VoiceParticipant, "userId" | "name" | "avatar">[];
+};
+
 export type VoiceConnectionStatus =
   "idle" | "connecting" | "connected" | "reconnecting" | "failed";
+
+export type VoiceCallPhase =
+  | "idle"
+  | "creating"
+  | "ringing"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "ended"
+  | "failed";
+
+export type VoiceConnectionQuality = {
+  level: "excellent" | "good" | "poor" | "unknown";
+  rttMs: number | null;
+  jitterMs: number | null;
+  packetLossPercent: number | null;
+  bitrateKbps: number | null;
+  candidateType: string | null;
+};
 
 type AppState = {
   wsConnected: boolean;
@@ -25,7 +59,14 @@ type AppState = {
   setSensitiveMediaPref: (pref: "hide" | "warn" | "auto") => void;
   // rail unread aggregation per server
   serverUnread: Record<number, number>;
+  serverMentions: Record<number, number>;
   setServerUnread: (serverId: number, count: number) => void;
+  serverVoiceSummaries: Record<number, ServerVoiceSummary>;
+  setServerVoiceSummary: (
+    serverId: number,
+    count: number,
+    preview: Pick<VoiceParticipant, "userId" | "name" | "avatar">[]
+  ) => void;
   stageHandsByRoom: Record<string, number[]>;
   setStageHands: (roomKey: string, userIds: number[]) => void;
   quickSwitcherOpen: boolean;
@@ -34,9 +75,18 @@ type AppState = {
   presence: Record<number, string>;
   // atividade Roblox em tempo real (WS activity:update vence a query inicial)
   robloxActivity: Record<number, RobloxActivityDTO | null>;
-  setRobloxActivity: (userId: number, activity: RobloxActivityDTO | null) => void;
+  setRobloxActivity: (
+    userId: number,
+    activity: RobloxActivityDTO | null
+  ) => void;
+  richPresence: Record<number, RichPresenceActivityDTO[]>;
+  setRichPresence: (
+    userId: number,
+    activities: RichPresenceActivityDTO[]
+  ) => void;
   unreadChannels: Record<number, number>;
   unreadConversations: Record<number, number>;
+  channelUnreadDetails: Record<number, ChannelUnreadDetail>;
   // voice
   voiceParticipants: Record<string, VoiceParticipant[]>;
   voiceChannelId: number | null;
@@ -47,11 +97,34 @@ type AppState = {
   cameraOn: boolean;
   screenOn: boolean;
   voiceConnectionStatus: VoiceConnectionStatus;
+  voiceCallPhase: VoiceCallPhase;
+  voiceCallId: string | null;
+  voiceCallStartedAt: number | null;
+  voiceCallConnectedAt: number | null;
+  voiceCallDeadlineAt: number | null;
+  voiceCallEndReason: string | null;
+  voiceQuality: VoiceConnectionQuality;
+  voiceDeviceError: string | null;
   voicePlaybackBlocked: boolean;
   speakingByUser: Record<number, boolean>;
   localStream: MediaStream | null;
   localVideo: MediaStream | null;
   remoteStreams: Record<number, MediaStream>;
+  companionSessionId: string | null;
+  companionCode: string | null;
+  companionStatus:
+    | "idle"
+    | "pending"
+    | "paired"
+    | "video-ready"
+    | "disconnected"
+    | "error";
+  companionVideo: MediaStream | null;
+  companionCameraActive: boolean;
+  /** Pareamento aguardando aprovação do dono (toast de confirmação). */
+  companionRequestPending: boolean;
+  /** De onde vem o vídeo publicado na chamada: webcam local ou celular. */
+  cameraSource: "local" | "companion";
   incomingCall: {
     conversationId: number;
     actorName: string;
@@ -69,6 +142,7 @@ type AppState = {
   setMessages: (key: string, msgs: MessageDTO[], hasMore: boolean) => void;
   prependMessages: (key: string, older: MessageDTO[], hasMore: boolean) => void;
   addMessage: (msg: MessageDTO) => void;
+  mergeRecentMessages: (key: string, recent: MessageDTO[]) => void;
   updateMessage: (msg: MessageDTO) => void;
   upsertMessage: (msg: MessageDTO) => void;
   removeMessage: (key: string, id: number) => void;
@@ -82,7 +156,8 @@ type AppState = {
   setPresenceBulk: (entries: Record<number, string>) => void;
   setUnread: (
     channels: Record<number, number>,
-    conversations: Record<number, number>
+    conversations: Record<number, number>,
+    channelDetails?: Record<number, ChannelUnreadDetail>
   ) => void;
   bumpUnreadChannel: (id: number) => void;
   bumpUnreadConversation: (id: number) => void;
@@ -101,18 +176,31 @@ type AppState = {
         | "cameraOn"
         | "screenOn"
         | "voiceConnectionStatus"
+        | "voiceCallPhase"
+        | "voiceCallId"
+        | "voiceCallStartedAt"
+        | "voiceCallConnectedAt"
+        | "voiceCallDeadlineAt"
+        | "voiceCallEndReason"
+        | "voiceQuality"
+        | "voiceDeviceError"
         | "voicePlaybackBlocked"
         | "localStream"
         | "localVideo"
+        | "companionSessionId"
+        | "companionCode"
+        | "companionStatus"
+        | "companionVideo"
+        | "companionCameraActive"
+        | "companionRequestPending"
+        | "cameraSource"
       >
     >
   ) => void;
   setRemoteStream: (userId: number, stream: MediaStream | null) => void;
   setSpeaking: (userId: number, speaking: boolean) => void;
   resetVoice: () => void;
-  setIncomingCall: (
-    call: AppState["incomingCall"]
-  ) => void;
+  setIncomingCall: (call: AppState["incomingCall"]) => void;
   setMobileNavOpen: (v: boolean) => void;
   setMobileMembersOpen: (v: boolean) => void;
   setMembersOpen: (v: boolean) => void;
@@ -129,12 +217,16 @@ export const useAppStore = create<AppState>(set => ({
   typing: {},
   presence: {},
   robloxActivity: {},
+  richPresence: {},
   sensitiveMediaPref: "warn",
   serverUnread: {},
+  serverMentions: {},
+  serverVoiceSummaries: {},
   stageHandsByRoom: {},
   quickSwitcherOpen: false,
   unreadChannels: {},
   unreadConversations: {},
+  channelUnreadDetails: {},
   voiceParticipants: {},
   voiceChannelId: null,
   voiceConversationId: null,
@@ -144,11 +236,33 @@ export const useAppStore = create<AppState>(set => ({
   cameraOn: false,
   screenOn: false,
   voiceConnectionStatus: "idle",
+  voiceCallPhase: "idle",
+  voiceCallId: null,
+  voiceCallStartedAt: null,
+  voiceCallConnectedAt: null,
+  voiceCallDeadlineAt: null,
+  voiceCallEndReason: null,
+  voiceQuality: {
+    level: "unknown",
+    rttMs: null,
+    jitterMs: null,
+    packetLossPercent: null,
+    bitrateKbps: null,
+    candidateType: null,
+  },
+  voiceDeviceError: null,
   voicePlaybackBlocked: false,
   speakingByUser: {},
   localStream: null,
   localVideo: null,
   remoteStreams: {},
+  companionSessionId: null,
+  companionCode: null,
+  companionStatus: "idle",
+  companionVideo: null,
+  companionCameraActive: false,
+  companionRequestPending: false,
+  cameraSource: "local" as const,
   incomingCall: null,
   mobileNavOpen: false,
   mobileMembersOpen: false,
@@ -179,6 +293,25 @@ export const useAppStore = create<AppState>(set => ({
       // Cap de memória: mantém no máx. as 200 mais recentes por canal
       // (histórico completo continua no banco e paginável por scroll).
       const next = [...list, msg];
+      return {
+        messages: {
+          ...s.messages,
+          [key]: next.length > 200 ? next.slice(next.length - 200) : next,
+        },
+      };
+    }),
+
+  // Reconciles a fresh page after reconnect: adds only ids missing locally and
+  // keeps the loaded (possibly older) history, so nothing sent during the drop
+  // is lost and nothing already shown is duplicated.
+  mergeRecentMessages: (key, recent) =>
+    set(s => {
+      const list = s.messages[key];
+      if (!list) return s;
+      const known = new Set(list.map(m => m.id));
+      const missing = recent.filter(m => !known.has(m.id));
+      if (missing.length === 0) return s;
+      const next = [...list, ...missing].sort((a, b) => a.id - b.id);
       return {
         messages: {
           ...s.messages,
@@ -255,11 +388,30 @@ export const useAppStore = create<AppState>(set => ({
   setRobloxActivity: (userId, activity) =>
     set(s => ({ robloxActivity: { ...s.robloxActivity, [userId]: activity } })),
 
+  setRichPresence: (userId, activities) =>
+    set(s => ({ richPresence: { ...s.richPresence, [userId]: activities } })),
+
   setPresenceBulk: entries =>
     set(s => ({ presence: { ...s.presence, ...entries } })),
 
-  setUnread: (channels, conversations) =>
-    set({ unreadChannels: channels, unreadConversations: conversations }),
+  setUnread: (channels, conversations, channelDetails = {}) =>
+    set(() => {
+      const serverUnread: Record<number, number> = {};
+      const serverMentions: Record<number, number> = {};
+      for (const detail of Object.values(channelDetails)) {
+        serverUnread[detail.serverId] =
+          (serverUnread[detail.serverId] ?? 0) + detail.count;
+        serverMentions[detail.serverId] =
+          (serverMentions[detail.serverId] ?? 0) + detail.mentionCount;
+      }
+      return {
+        unreadChannels: channels,
+        unreadConversations: conversations,
+        channelUnreadDetails: channelDetails,
+        serverUnread,
+        serverMentions,
+      };
+    }),
 
   setSensitiveMediaPref: pref => {
     set({ sensitiveMediaPref: pref });
@@ -267,9 +419,12 @@ export const useAppStore = create<AppState>(set => ({
   setQuickSwitcherOpen: v => set({ quickSwitcherOpen: v }),
   setStageHands: (roomKey, userIds) =>
     set(state =>
-      JSON.stringify(state.stageHandsByRoom[roomKey]) === JSON.stringify(userIds)
+      JSON.stringify(state.stageHandsByRoom[roomKey]) ===
+      JSON.stringify(userIds)
         ? state
-        : { stageHandsByRoom: { ...state.stageHandsByRoom, [roomKey]: userIds } }
+        : {
+            stageHandsByRoom: { ...state.stageHandsByRoom, [roomKey]: userIds },
+          }
     ),
   setServerUnread: (serverId, count) =>
     set(state =>
@@ -277,6 +432,16 @@ export const useAppStore = create<AppState>(set => ({
         ? state
         : { serverUnread: { ...state.serverUnread, [serverId]: count } }
     ),
+  setServerVoiceSummary: (serverId, count, preview) =>
+    set(state => ({
+      serverVoiceSummaries: {
+        ...state.serverVoiceSummaries,
+        [serverId]: {
+          count,
+          preview: preview.slice(0, 4),
+        },
+      },
+    })),
   bumpUnreadChannel: id =>
     set(s => ({
       unreadChannels: {
@@ -296,8 +461,28 @@ export const useAppStore = create<AppState>(set => ({
   clearUnreadChannel: id =>
     set(s => {
       const next = { ...s.unreadChannels };
+      const details = { ...s.channelUnreadDetails };
+      const detail = details[id];
       delete next[id];
-      return { unreadChannels: next };
+      delete details[id];
+      if (!detail)
+        return { unreadChannels: next, channelUnreadDetails: details };
+      const serverUnread = { ...s.serverUnread };
+      const serverMentions = { ...s.serverMentions };
+      serverUnread[detail.serverId] = Math.max(
+        0,
+        (serverUnread[detail.serverId] ?? 0) - detail.count
+      );
+      serverMentions[detail.serverId] = Math.max(
+        0,
+        (serverMentions[detail.serverId] ?? 0) - detail.mentionCount
+      );
+      return {
+        unreadChannels: next,
+        channelUnreadDetails: details,
+        serverUnread,
+        serverMentions,
+      };
     }),
 
   clearUnreadConversation: id =>
@@ -341,11 +526,33 @@ export const useAppStore = create<AppState>(set => ({
       cameraOn: false,
       screenOn: false,
       voiceConnectionStatus: "idle",
+      voiceCallPhase: "idle",
+      voiceCallId: null,
+      voiceCallStartedAt: null,
+      voiceCallConnectedAt: null,
+      voiceCallDeadlineAt: null,
+      voiceCallEndReason: null,
+      voiceQuality: {
+        level: "unknown",
+        rttMs: null,
+        jitterMs: null,
+        packetLossPercent: null,
+        bitrateKbps: null,
+        candidateType: null,
+      },
+      voiceDeviceError: null,
       voicePlaybackBlocked: false,
       speakingByUser: {},
       localStream: null,
       localVideo: null,
       remoteStreams: {},
+      companionSessionId: null,
+      companionCode: null,
+      companionStatus: "idle",
+      companionVideo: null,
+      companionCameraActive: false,
+      companionRequestPending: false,
+      cameraSource: "local",
     }),
 
   setIncomingCall: call => set({ incomingCall: call }),

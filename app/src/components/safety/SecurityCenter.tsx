@@ -6,9 +6,11 @@ import {
   Flag,
   Lock,
   MessageSquareWarning,
+  MonitorSmartphone,
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
+import { AccountSecurityFeatures } from "@/components/settings/AccountSecurityFeatures";
 
 /**
  * Configurações → Minha Conta → Central de Segurança
@@ -20,7 +22,8 @@ export type SecurityCenterTab =
   | "sensitive"
   | "privacy"
   | "my-reports"
-  | "appeals";
+  | "appeals"
+  | "devices";
 
 const HUB_ITEMS: {
   tab: SecurityCenterTab;
@@ -57,6 +60,12 @@ const HUB_ITEMS: {
     icon: MessageSquareWarning,
     title: "Apelações",
     description: "Solicite revisão de decisões aplicadas à sua conta.",
+  },
+  {
+    tab: "devices",
+    icon: MonitorSmartphone,
+    title: "Dispositivos conectados",
+    description: "Revise e encerre sessões ativas da sua conta.",
   },
   {
     tab: "privacy",
@@ -129,6 +138,16 @@ export function SecurityCenter({
             aria-hidden
           />
         </a>
+      </div>
+
+      <div className="border-t border-white/[0.06] pt-5">
+        <div className="mb-4">
+          <h3 className="text-sm font-bold text-white">Autenticação e atividade</h3>
+          <p className="mt-1 text-[11px] leading-5 text-muted2">
+            Configure 2FA, passkeys e acompanhe eventos de acesso da sua conta.
+          </p>
+        </div>
+        <AccountSecurityFeatures />
       </div>
 
       <p className="flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-3 py-2.5 text-[11px] text-muted2">

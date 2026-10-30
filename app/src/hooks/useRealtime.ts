@@ -8,12 +8,14 @@ import { soundManager } from "@/lib/sound";
 import { toast } from "sonner";
 import { queryClient } from "@/providers/trpc";
 import type { WSServerEvent } from "@contracts/types";
+import { showNotificationPopup, toOfficialNotification } from "@/lib/notificationDisplay";
 
 /** Connects the realtime socket and routes events to stores/queries. */
 export function useRealtime(myUserId: number | undefined) {
   const utils = trpc.useUtils();
   // Último status de conta conhecido — usado para detectar transições.
   const lastAccountStatus = useRef<string | null>(null);
+  const discoveryInvalidateTimer = useRef<number | null>(null);
 
   useEffect(() => {
     if (!myUserId) return;
@@ -33,6 +35,15 @@ export function useRealtime(myUserId: number | undefined) {
         utils.notification.list.invalidate();
         utils.official.unreadCount.invalidate();
         utils.official.list.invalidate();
+        // Recover messages sent while the socket was down in the open chat.
+        const view = getCurrentView();
+        if (view.channelId || view.conversationId) {
+          const key = view.channelId ? channelKey(view.channelId) : dmKey(view.conversationId!);
+          utils.client.message.list
+            .query({ channelId: view.channelId, conversationId: view.conversationId, limit: 50 })
+            .then(res => useAppStore.getState().mergeRecentMessages(key, res.messages))
+            .catch(() => {});
+        }
       }
     });
 
@@ -46,25 +57,36 @@ export function useRealtime(myUserId: number | undefined) {
           store.addMessage(msg);
           const isMine = msg.authorId === myUserId;
           if (msg.channelId) {
-            if (view.channelId === msg.channelId) {
-              utils.client.message.markRead
-                .mutate({ channelId: msg.channelId, lastMessageId: msg.id })
-                .catch(() => {});
-            } else if (!isMine) {
-              store.bumpUnreadChannel(msg.channelId);
+            if (!isMine) {
+              if (view.channelId !== msg.channelId) {
+                store.bumpUnreadChannel(msg.channelId);
+              }
+              void utils.message.unread.invalidate();
             }
           } else if (msg.conversationId) {
             utils.dm.list.invalidate();
-            if (view.conversationId === msg.conversationId) {
-              utils.client.message.markRead
+            const isActivelyReading =
+              view.conversationId === msg.conversationId &&
+              document.visibilityState === "visible" &&
+              document.hasFocus();
+            if (isActivelyReading) {
+              void utils.client.message.markRead
                 .mutate({
                   conversationId: msg.conversationId,
                   lastMessageId: msg.id,
                 })
-                .catch(() => {});
+                .then(() => store.clearUnreadConversation(msg.conversationId!))
+                .catch(() => utils.message.unread.invalidate());
             } else if (!isMine) {
               store.bumpUnreadConversation(msg.conversationId);
-              soundManager.play("dm-message");
+              const conversation = utils.dm.list
+                .getData()
+                ?.find(item => item.id === msg.conversationId);
+              const muted =
+                conversation?.mutedForever === true ||
+                (!!conversation?.mutedUntil &&
+                  new Date(conversation.mutedUntil).getTime() > Date.now());
+              if (!muted) soundManager.play("dm-message");
             }
           }
           break;
@@ -108,11 +130,21 @@ export function useRealtime(myUserId: number | undefined) {
         case "activity:update":
           store.setRobloxActivity(event.userId, event.activity);
           break;
+        case "rich-presence:update":
+          store.setRichPresence(event.userId, event.activities);
+          break;
         case "voice:participants": {
           const roomKey = event.channelId
             ? `c:${event.channelId}`
             : `dm:${event.conversationId}`;
           store.setVoiceParticipants(roomKey, event.participants);
+          if (event.serverId) {
+            store.setServerVoiceSummary(
+              event.serverId,
+              event.activeVoiceCount ?? event.participants.length,
+              event.voicePreviewMembers ?? event.participants
+            );
+          }
           voiceManager.syncParticipants(roomKey, event.participants);
           break;
         }
@@ -127,6 +159,32 @@ export function useRealtime(myUserId: number | undefined) {
           voiceManager.handleVoiceDenied(event.reason);
           break;
         }
+        case "call:state": {
+          const affectsCurrentCall = voiceManager.handleCallState(event);
+          const isIncomingCall =
+            store.incomingCall?.conversationId === event.conversationId;
+          if (event.state === "connected" || event.state === "ended") {
+            if (isIncomingCall) store.setIncomingCall(null);
+            soundManager.stopRingtone();
+          }
+          if (event.state === "connected" && affectsCurrentCall) {
+            soundManager.play("call-connected");
+          }
+          if (
+            event.state === "ended" &&
+            (affectsCurrentCall || isIncomingCall)
+          ) {
+            soundManager.play("call-ended");
+            if (event.reason === "unanswered") {
+              toast.info(
+                "A chamada foi encerrada porque ninguém entrou em 2 minutos."
+              );
+            } else if (event.reason === "declined") {
+              toast.info("A chamada foi recusada.");
+            }
+          }
+          break;
+        }
         case "signal": {
           const roomKey = event.channelId
             ? `c:${event.channelId}`
@@ -134,10 +192,66 @@ export function useRealtime(myUserId: number | undefined) {
           voiceManager.handleSignal(roomKey, event.from, event.data as never);
           break;
         }
+        case "companion:session": {
+          voiceManager.handleCompanionSession(event.sessionId, event.code);
+          break;
+        }
+        case "companion:paired": {
+          voiceManager.handleCompanionPaired(event.sessionId);
+          break;
+        }
+        case "companion:request": {
+          voiceManager.handleCompanionRequest(event.sessionId);
+          toast.info("Um celular está tentando se conectar como câmera.", {
+            description: "Abra o menu da câmera para permitir ou recusar.",
+            duration: 10000,
+          });
+          break;
+        }
+        case "companion:signal": {
+          voiceManager.handleCompanionSignal(
+            event.sessionId,
+            event.data as never
+          );
+          break;
+        }
+        case "companion:control": {
+          voiceManager.handleCompanionControl(event.sessionId, event.action);
+          break;
+        }
+        case "companion:state": {
+          useAppStore.getState().setVoiceSession({
+            companionCameraActive: event.session.cameraActive,
+            companionStatus: event.session.status,
+          });
+          break;
+        }
+        case "companion:disconnected": {
+          voiceManager.handleCompanionDisconnected(event.sessionId);
+          break;
+        }
         case "notification": {
           utils.notification.unreadCount.invalidate();
           utils.notification.list.invalidate();
           const n = event.notification;
+          if (n.type === "mention" && n.channelId) {
+            void utils.message.unread.invalidate();
+          }
+          const notificationView = getCurrentView();
+          const isOpenConversation =
+            !!n.conversationId &&
+            notificationView.conversationId === n.conversationId &&
+            document.visibilityState === "visible" &&
+            document.hasFocus();
+          if (isOpenConversation && n.messageId) {
+            void utils.client.message.markRead
+              .mutate({
+                conversationId: n.conversationId!,
+                lastMessageId: n.messageId,
+              })
+              .catch(() => utils.message.unread.invalidate());
+            break;
+          }
           if (n.type === "call_started" && n.conversationId) {
             const storeState = useAppStore.getState();
             const notInThatRoom =
@@ -147,14 +261,16 @@ export function useRealtime(myUserId: number | undefined) {
               soundManager.startRingtone();
               storeState.setIncomingCall({
                 conversationId: n.conversationId,
-                actorName:
-                  n.actor?.name ?? n.actor?.username ?? "Alguém",
+                actorName: n.actor?.name ?? n.actor?.username ?? "Alguém",
                 actorAvatar: n.actor?.avatar ?? null,
                 notificationId: n.id,
-                video: false,
+                video: n.content?.includes("de vídeo") === true,
               });
               break;
             }
+          }
+          if (document.visibilityState === "visible") {
+            showNotificationPopup(n);
           }
           soundManager.play("notification");
           // Browser notification when the tab is hidden and permission granted
@@ -188,6 +304,9 @@ export function useRealtime(myUserId: number | undefined) {
             desktopNotification.onclick = () => {
               window.focus();
               desktopNotification.close();
+              if (n.conversationId) {
+                window.location.assign(`/channels/@me/${n.conversationId}`);
+              }
             };
           }
           break;
@@ -196,6 +315,11 @@ export function useRealtime(myUserId: number | undefined) {
           utils.official.list.invalidate();
           utils.official.unreadCount.invalidate();
           soundManager.play("notification");
+          // Aviso oficial é a única notificação que entra sempre na frente: o
+          // popup aparece no topo da pilha e a conversa sobe na lista de DMs.
+          showNotificationPopup(
+            toOfficialNotification({ ...event.announcement, isRead: false }),
+          );
           if (
             typeof Notification !== "undefined" &&
             Notification.permission === "granted" &&
@@ -231,10 +355,34 @@ export function useRealtime(myUserId: number | undefined) {
         case "server:refresh":
           utils.server.get.invalidate();
           utils.server.list.invalidate();
+          utils.badge.mine.invalidate();
+          utils.badge.forUser.invalidate();
+          break;
+        case "discovery:refresh":
+          if (discoveryInvalidateTimer.current !== null) {
+            window.clearTimeout(discoveryInvalidateTimer.current);
+          }
+          discoveryInvalidateTimer.current = window.setTimeout(() => {
+            void utils.server.discover.invalidate();
+            void utils.server.discoveryCategories.invalidate();
+            void utils.admin.searchServers.invalidate();
+            void utils.admin.listPartnerServers.invalidate();
+            void utils.badge.mine.invalidate();
+            void utils.badge.forUser.invalidate();
+            discoveryInvalidateTimer.current = null;
+          }, 250);
           break;
         case "dm:refresh":
           utils.dm.list.invalidate();
           utils.dm.get.invalidate();
+          break;
+        case "read:update":
+          if (event.userId !== myUserId) break;
+          utils.message.unread.invalidate();
+          if (event.conversationId) {
+            utils.dm.list.invalidate();
+            utils.dm.get.invalidate({ conversationId: event.conversationId });
+          }
           break;
         case "group:update":
           // Atualiza listas e o grupo aberto (renome, membros, etc).
@@ -258,7 +406,9 @@ export function useRealtime(myUserId: number | undefined) {
           const previous = lastAccountStatus.current;
           lastAccountStatus.current = event.accountStatus;
           if (event.accountStatus === "suspended") {
-            toast.error("⛔ Sua conta foi temporariamente suspensa. Confira o Status da Conta.");
+            toast.error(
+              "⛔ Sua conta foi temporariamente suspensa. Confira o Status da Conta."
+            );
           } else if (event.accountStatus === "permanently_banned") {
             toast.error("🚫 Conta banida permanentemente");
           } else if (
@@ -287,6 +437,9 @@ export function useRealtime(myUserId: number | undefined) {
     });
 
     return () => {
+      if (discoveryInvalidateTimer.current !== null) {
+        window.clearTimeout(discoveryInvalidateTimer.current);
+      }
       off();
       offConnect();
       voiceManager.cleanupVoiceSession();

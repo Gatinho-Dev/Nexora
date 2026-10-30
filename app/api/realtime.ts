@@ -3,8 +3,8 @@ import type { Server as HttpServer } from "http";
 import type { IncomingMessage } from "http";
 import type { Duplex } from "stream";
 import * as cookie from "cookie";
-import { and, eq, ne, or } from "drizzle-orm";
-import { Session, type UserStatus } from "@contracts/constants";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
+import { CiderListen, Session, type UserStatus } from "@contracts/constants";
 import type {
   VoiceParticipant,
   WSClientEvent,
@@ -15,9 +15,54 @@ import { resolveActiveSession } from "./auth/sessions";
 import { findUserByUnionId } from "./queries/users";
 import { getDb } from "./queries/connection";
 import * as schema from "@db/schema";
-import { getMemberPermissions, toPublicUser } from "./utils/permissions";
+import {
+  getEffectiveChannelPermissions,
+  getMemberPermissions,
+  toPublicUser,
+} from "./utils/permissions";
 import { env } from "./lib/env";
 import { randomUUID } from "node:crypto";
+import {
+  allInviteesDeclined,
+  DM_UNANSWERED_TIMEOUT_MS,
+  hasUnansweredCallExpired,
+  isDmCallAnswered,
+  formatDmCallHistory,
+  type DmCallEndReason,
+} from "./voice/dmCallPolicy";
+import {
+  createCompanionSession,
+  getCompanionSessionForOwner,
+  refreshCompanionExpiry,
+  disbandCompanionSession,
+  toPublic,
+} from "./voice/companion";
+import { insertSystemMessage, userName } from "./services/groupService";
+import { createVoiceDropGrace } from "./voice/voiceDropGrace";
+import {
+  CiderActivitySchema,
+  normalizeCiderActivity,
+} from "./integrations/providers/cider";
+import {
+  checkInvite,
+  ListenRateLimiter,
+  ListenRegistry,
+  normalizeListenCode,
+  sanitizeListenEmoji,
+  sanitizeListenRequest,
+  sanitizeListenState,
+  sanitizeListenTrack,
+  listenMembers,
+  type InviteCheck,
+  type ListenSession,
+  type ListenUser,
+} from "./ciderListen";
+import {
+  clearActivity,
+  persistActivity,
+} from "./integrations/presenceService";
+import { ensureSessionConnection } from "./integrations/connectionService";
+import { activeServerTimeout } from "./services/serverModeration";
 
 // ── Connection registry ───────────────────────────────────────
 type Client = {
@@ -39,6 +84,22 @@ const voiceRooms = new Map<string, Map<number, VoiceParticipant>>();
 const userVoiceRoom = new Map<number, string>();
 const voiceClientByUser = new Map<number, Client>();
 const voiceSessionByUser = new Map<number, string>();
+// Pending removals after an unintentional socket drop (see scheduleVoiceDrop).
+const voiceDropGrace = createVoiceDropGrace();
+type DmCallSession = {
+  callId: string;
+  conversationId: number;
+  initiatorId: number;
+  startedAt: number;
+  video: boolean;
+  answered: boolean;
+  participantsEver: Set<number>;
+  invitedUserIds: Set<number>;
+  declinedUserIds: Set<number>;
+  timeout: ReturnType<typeof setTimeout> | null;
+  emptyRoomTimeout: ReturnType<typeof setTimeout> | null;
+};
+const dmCallSessions = new Map<number, DmCallSession>();
 /** Raised hands per stage room: roomKey → Set<userId>. */
 const stageHands = new Map<string, Set<number>>();
 /** Max simultaneous video transmitters on a stage (camera or screen). */
@@ -55,6 +116,170 @@ function channelRoomKey(channelId: number) {
 }
 function dmRoomKey(conversationId: number) {
   return `dm:${conversationId}`;
+}
+
+function callStateEvent(
+  session: DmCallSession,
+  state: "ringing" | "connected" | "ended",
+  reason?: "unanswered" | "declined" | "cancelled" | "completed"
+): WSServerEvent {
+  return {
+    t: "call:state",
+    conversationId: session.conversationId,
+    callId: session.callId,
+    state,
+    startedAt: new Date(session.startedAt).toISOString(),
+    unansweredDeadline:
+      !session.answered && state !== "ended"
+        ? new Date(session.startedAt + DM_UNANSWERED_TIMEOUT_MS).toISOString()
+        : undefined,
+    video: session.video,
+    initiatorId: session.initiatorId,
+    reason,
+  };
+}
+
+async function endDmCall(conversationId: number, reason: DmCallEndReason) {
+  const session = dmCallSessions.get(conversationId);
+  if (!session) return;
+  dmCallSessions.delete(conversationId);
+  if (session.timeout) clearTimeout(session.timeout);
+  session.timeout = null;
+  if (session.emptyRoomTimeout) clearTimeout(session.emptyRoomTimeout);
+  session.emptyRoomTimeout = null;
+
+  try {
+    await broadcastToConversation(
+      conversationId,
+      callStateEvent(session, "ended", reason)
+    );
+  } catch (error) {
+    console.error("[voice] failed to broadcast call end", error);
+  }
+
+  try {
+    const db = getDb();
+    const initiatorName = await userName(session.initiatorId);
+    const content = formatDmCallHistory({
+      initiatorName,
+      reason,
+      startedAt: session.startedAt,
+      endedAt: Date.now(),
+    });
+    const messageId = await insertSystemMessage(
+      db,
+      conversationId,
+      session.initiatorId,
+      content,
+      "call"
+    );
+    const message = await db.query.messages.findFirst({
+      where: eq(schema.messages.id, messageId),
+    });
+    if (message) {
+      // Dynamic import avoids an eager realtime ↔ messageRouter cycle.
+      const { buildMessageDTO } = await import("./messageRouter");
+      await broadcastToConversation(conversationId, {
+        t: "message:new",
+        message: await buildMessageDTO(message),
+      });
+    }
+  } catch (error) {
+    console.error("[voice] failed to persist call history", error);
+  }
+
+  const room = voiceRooms.get(dmRoomKey(conversationId));
+  const activeClients = room
+    ? [...room.keys()]
+        .map(userId => voiceClientByUser.get(userId))
+        .filter((client): client is Client => !!client)
+    : [];
+  await Promise.all(activeClients.map(client => voiceLeave(client)));
+}
+
+async function joinDmCallSession(input: {
+  conversationId: number;
+  userId: number;
+  initiated: boolean;
+  video: boolean;
+}) {
+  let session = dmCallSessions.get(input.conversationId);
+  if (!session) {
+    const members = await getDb()
+      .select({ userId: schema.conversationMembers.userId })
+      .from(schema.conversationMembers)
+      .where(
+        eq(schema.conversationMembers.conversationId, input.conversationId)
+      );
+    const startedAt = Date.now();
+    session = {
+      callId: randomUUID(),
+      conversationId: input.conversationId,
+      initiatorId: input.userId,
+      startedAt,
+      video: input.video,
+      answered: false,
+      participantsEver: new Set(),
+      invitedUserIds: new Set(
+        members
+          .map(member => member.userId)
+          .filter(userId => userId !== input.userId)
+      ),
+      declinedUserIds: new Set(),
+      timeout: null,
+      emptyRoomTimeout: null,
+    };
+    dmCallSessions.set(input.conversationId, session);
+    const callId = session.callId;
+    session.timeout = setTimeout(() => {
+      const current = dmCallSessions.get(input.conversationId);
+      if (
+        current?.callId === callId &&
+        hasUnansweredCallExpired({
+          answered: current.answered,
+          startedAt: current.startedAt,
+          now: Date.now(),
+        })
+      ) {
+        void endDmCall(input.conversationId, "unanswered");
+      }
+    }, DM_UNANSWERED_TIMEOUT_MS);
+    session.timeout.unref?.();
+  }
+
+  if (session.emptyRoomTimeout) clearTimeout(session.emptyRoomTimeout);
+  session.emptyRoomTimeout = null;
+
+  session.participantsEver.add(input.userId);
+  if (!session.answered && isDmCallAnswered(session.participantsEver)) {
+    session.answered = true;
+    if (session.timeout) clearTimeout(session.timeout);
+    session.timeout = null;
+    await broadcastToConversation(
+      input.conversationId,
+      callStateEvent(session, "connected")
+    );
+    return;
+  }
+  await broadcastToConversation(
+    input.conversationId,
+    callStateEvent(session, session.answered ? "connected" : "ringing")
+  );
+}
+
+async function declineDmCall(client: Client, conversationId: number) {
+  const member = await getDb().query.conversationMembers.findFirst({
+    where: and(
+      eq(schema.conversationMembers.conversationId, conversationId),
+      eq(schema.conversationMembers.userId, client.userId)
+    ),
+  });
+  const session = dmCallSessions.get(conversationId);
+  if (!member || !session || session.answered) return;
+  session.declinedUserIds.add(client.userId);
+  if (allInviteesDeclined(session.invitedUserIds, session.declinedUserIds)) {
+    await endDmCall(conversationId, "declined");
+  }
 }
 
 function addClient(client: Client) {
@@ -130,10 +355,17 @@ export function broadcastToAll(event: WSServerEvent) {
 }
 
 async function serverMemberIds(serverId: number): Promise<number[]> {
+  const connectedUserIds = [...byUser.keys()];
+  if (connectedUserIds.length === 0) return [];
   const rows = await getDb()
     .select({ userId: schema.serverMembers.userId })
     .from(schema.serverMembers)
-    .where(eq(schema.serverMembers.serverId, serverId));
+    .where(
+      and(
+        eq(schema.serverMembers.serverId, serverId),
+        inArray(schema.serverMembers.userId, connectedUserIds)
+      )
+    );
   return rows.map(r => r.userId);
 }
 
@@ -209,7 +441,7 @@ export async function contactIds(userId: number): Promise<Set<number>> {
   return ids;
 }
 
-async function broadcastPresence(userId: number) {
+export async function broadcastPresence(userId: number) {
   const status = visibleStatus(userId);
   const contacts = await contactIds(userId);
   sendToUsers(contacts, { t: "presence", userId, status });
@@ -223,11 +455,42 @@ async function broadcastPresence(userId: number) {
     })
     .where(eq(schema.users.id, userId))
     .catch(() => {});
+
+  // Re-apply rich-presence audience filtering immediately when the owner
+  // becomes invisible or visible again. Dynamic import avoids a static cycle:
+  // presenceService uses the realtime delivery helpers exported by this file.
+  void import("./integrations/presenceService")
+    .then(({ rebroadcastActivities }) => rebroadcastActivities(userId))
+    .catch(() => {});
 }
 
 // ── Voice ─────────────────────────────────────────────────────
 export function getVoiceParticipants(roomKey: string): VoiceParticipant[] {
   return [...(voiceRooms.get(roomKey)?.values() ?? [])];
+}
+
+/**
+ * Compact server-rail summary. Callers must pass only channel ids the viewer
+ * is allowed to see; this function deliberately knows nothing about ACLs.
+ */
+export function getVoiceSummaryForChannels(channelIds: Iterable<number>) {
+  const participants = new Map<number, VoiceParticipant>();
+  for (const channelId of channelIds) {
+    for (const participant of getVoiceParticipants(channelRoomKey(channelId))) {
+      participants.set(participant.userId, participant);
+    }
+  }
+  const visible = [...participants.values()];
+  return {
+    activeVoiceCount: visible.length,
+    voicePreviewMembers: visible
+      .slice(0, 4)
+      .map(({ userId, name, avatar }) => ({
+        userId,
+        name,
+        avatar,
+      })),
+  };
 }
 
 /** Flip a user between stage speaker and audience while they are connected. */
@@ -250,6 +513,20 @@ export async function setLiveStageSpeaker(
   return true;
 }
 
+export async function setLiveVoiceMuted(
+  channelId: number,
+  userId: number,
+  muted: boolean
+): Promise<boolean> {
+  const roomKey = channelRoomKey(channelId);
+  const room = voiceRooms.get(roomKey);
+  const participant = room?.get(userId);
+  if (!participant || !room) return false;
+  participant.muted = muted;
+  await broadcastVoiceParticipants(roomKey);
+  return true;
+}
+
 /** True when the given user currently sits in the voice room of the channel. */
 export function isUserInVoiceRoom(channelId: number, userId: number): boolean {
   return !!voiceRooms.get(channelRoomKey(channelId))?.has(userId);
@@ -259,17 +536,120 @@ async function broadcastVoiceParticipants(roomKey: string) {
   const participants = getVoiceParticipants(roomKey);
   if (roomKey.startsWith("c:")) {
     const channelId = Number(roomKey.slice(2));
-    await broadcastToChannel(channelId, {
-      t: "voice:participants",
-      channelId,
-      participants,
+    const channel = await getDb().query.channels.findFirst({
+      where: eq(schema.channels.id, channelId),
     });
+    if (!channel) return;
+    const [memberIds, serverVoiceChannels] = await Promise.all([
+      serverMemberIds(channel.serverId),
+      getDb()
+        .select()
+        .from(schema.channels)
+        .where(
+          and(
+            eq(schema.channels.serverId, channel.serverId),
+            or(
+              eq(schema.channels.type, "VOICE"),
+              eq(schema.channels.type, "STAGE")
+            )
+          )
+        ),
+    ]);
+    await Promise.all(
+      memberIds.map(async userId => {
+        const permissions = await getMemberPermissions(
+          userId,
+          channel.serverId
+        );
+        const visibleChannelIds: number[] = [];
+        for (const voiceChannel of serverVoiceChannels) {
+          if (
+            permissions?.has("ADMINISTRATOR") ||
+            permissions?.has("MANAGE_CHANNELS")
+          ) {
+            visibleChannelIds.push(voiceChannel.id);
+            continue;
+          }
+          const effective = await getEffectiveChannelPermissions(
+            userId,
+            voiceChannel
+          );
+          if (effective?.has("VIEW_CHANNEL")) {
+            visibleChannelIds.push(voiceChannel.id);
+          }
+        }
+        if (visibleChannelIds.length === 0) return;
+        const summary = getVoiceSummaryForChannels(visibleChannelIds);
+        sendToUsers([userId], {
+          t: "voice:participants",
+          channelId,
+          serverId: channel.serverId,
+          participants,
+          ...summary,
+        });
+      })
+    );
   } else {
     const conversationId = Number(roomKey.slice(3));
     await broadcastToConversation(conversationId, {
       t: "voice:participants",
       conversationId,
       participants,
+    });
+  }
+}
+
+async function sendInitialVoiceSummaries(userId: number) {
+  const db = getDb();
+  const memberServers = await db
+    .select({ serverId: schema.serverMembers.serverId })
+    .from(schema.serverMembers)
+    .where(eq(schema.serverMembers.userId, userId));
+  const serverIds = memberServers.map(m => m.serverId);
+  if (serverIds.length === 0) return;
+
+  for (const serverId of serverIds) {
+    const voiceChannels = await db
+      .select()
+      .from(schema.channels)
+      .where(
+        and(
+          eq(schema.channels.serverId, serverId),
+          or(
+            eq(schema.channels.type, "VOICE"),
+            eq(schema.channels.type, "STAGE")
+          )
+        )
+      );
+    if (voiceChannels.length === 0) continue;
+
+    const permissions = await getMemberPermissions(userId, serverId);
+    if (!permissions) continue;
+
+    const visibleChannelIds: number[] = [];
+    for (const vc of voiceChannels) {
+      if (
+        permissions.has("ADMINISTRATOR") ||
+        permissions.has("MANAGE_CHANNELS")
+      ) {
+        visibleChannelIds.push(vc.id);
+        continue;
+      }
+      const effective = await getEffectiveChannelPermissions(userId, vc);
+      if (effective?.has("VIEW_CHANNEL")) {
+        visibleChannelIds.push(vc.id);
+      }
+    }
+
+    if (visibleChannelIds.length === 0) continue;
+
+    const summary = getVoiceSummaryForChannels(visibleChannelIds);
+    sendToUsers([userId], {
+      t: "voice:participants",
+      channelId: visibleChannelIds[0],
+      serverId,
+      participants: [],
+      ...summary,
     });
   }
 }
@@ -289,7 +669,9 @@ function broadcastStageHands(roomKey: string) {
   }
 }
 
-async function countTransmitters(room: Map<number, VoiceParticipant>): Promise<number> {
+async function countTransmitters(
+  room: Map<number, VoiceParticipant>
+): Promise<number> {
   let n = 0;
   for (const p of room.values()) if (p.camera || p.screen) n++;
   return n;
@@ -297,7 +679,12 @@ async function countTransmitters(room: Map<number, VoiceParticipant>): Promise<n
 
 async function voiceJoin(
   client: Client,
-  target: { channelId?: number; conversationId?: number }
+  target: {
+    channelId?: number;
+    conversationId?: number;
+    initiated?: boolean;
+    video?: boolean;
+  }
 ) {
   const db = getDb();
   let roomKey: string;
@@ -316,12 +703,21 @@ async function voiceJoin(
       });
       return;
     }
-    const perms = await getMemberPermissions(client.userId, channel.serverId);
-    if (!perms || !perms.has("CONNECT")) {
+    const perms = await getEffectiveChannelPermissions(client.userId, channel);
+    if (!perms || !perms.has("VIEW_CHANNEL") || !perms.has("CONNECT")) {
       send(client, {
         t: "voice:denied",
         channelId: target.channelId,
-        reason: "Você não tem permissão para entrar neste canal de voz.",
+        reason: "Você não tem permissão para acessar este canal de voz.",
+      });
+      return;
+    }
+    const timeoutUntil = await activeServerTimeout(client.userId, channel.serverId);
+    if (timeoutUntil) {
+      send(client, {
+        t: "voice:denied",
+        channelId: target.channelId,
+        reason: `Você está em timeout até ${timeoutUntil.toISOString()}.`,
       });
       return;
     }
@@ -410,6 +806,15 @@ async function voiceJoin(
     voiceSessionId,
   });
 
+  if (target.conversationId) {
+    await joinDmCallSession({
+      conversationId: target.conversationId,
+      userId: client.userId,
+      initiated: target.initiated === true,
+      video: target.video === true,
+    });
+  }
+
   // Audit row for server voice channels (best-effort).
   if (target.channelId) {
     db.insert(schema.voiceSessions)
@@ -420,7 +825,22 @@ async function voiceJoin(
   await broadcastVoiceParticipants(roomKey);
 }
 
-async function voiceLeave(client: Client) {
+/**
+ * A dropped socket is not a hang-up: keep the voice seat for a short grace
+ * period so a quick reconnect can rejoin without ending the call. Only a
+ * rejoin of the same room (which runs voiceLeave first) or the timer's own
+ * removal clears it; intentional leaves still go through voiceLeave directly.
+ */
+function scheduleVoiceDrop(client: Client) {
+  if (voiceClientByUser.get(client.userId) !== client) return;
+  if (!userVoiceRoom.get(client.userId)) return;
+  voiceDropGrace.schedule(client.userId, () => {
+    voiceLeave(client).catch(() => {});
+  });
+}
+
+async function voiceLeave(client: Client, intentional = false) {
+  voiceDropGrace.cancel(client.userId);
   const activeVoiceClient = voiceClientByUser.get(client.userId);
   if (activeVoiceClient && activeVoiceClient !== client) return;
   const roomKey = userVoiceRoom.get(client.userId);
@@ -439,6 +859,31 @@ async function voiceLeave(client: Client) {
   if (room) {
     room.delete(client.userId);
     if (room.size === 0) voiceRooms.delete(roomKey);
+  }
+  if (roomKey.startsWith("dm:")) {
+    const conversationId = Number(roomKey.slice(3));
+    const session = dmCallSessions.get(conversationId);
+    if (session && !voiceRooms.get(roomKey)?.size) {
+      if (intentional) {
+        await endDmCall(
+          conversationId,
+          session.answered ? "completed" : "cancelled"
+        );
+      } else {
+        if (session.emptyRoomTimeout) clearTimeout(session.emptyRoomTimeout);
+        const callId = session.callId;
+        session.emptyRoomTimeout = setTimeout(() => {
+          const current = dmCallSessions.get(conversationId);
+          if (current?.callId === callId && !voiceRooms.get(roomKey)?.size) {
+            void endDmCall(
+              conversationId,
+              current.answered ? "completed" : "cancelled"
+            );
+          }
+        }, 20_000);
+        session.emptyRoomTimeout.unref?.();
+      }
+    }
   }
   if (roomKey.startsWith("c:")) {
     getDb()
@@ -502,6 +947,205 @@ async function voiceStateUpdate(
   await broadcastVoiceParticipants(roomKey);
 }
 
+// ── Cider (player em /cider) ──────────────────────────────────
+/**
+ * Atividade publicada pelo player web em `/cider`.
+ *
+ * Três defesas, porque aqui um cliente autenticado manda dados que viram
+ * presença visível para os contatos dele:
+ *
+ * 1. **rate limit** por usuário — a página só reenvia quando a faixa muda ou a
+ *    cada `CIDER_ACTIVITY_INTERVAL_MS`, mas um loop apertado não pode virar
+ *    enxurrada de escrita no banco nem de broadcast para todos os amigos;
+ * 2. **zod estrito** — o objeto é revalidado aqui; o tipo do TS é só sugestão
+ *    e não protege nada em runtime;
+ * 3. **allowlist de host da capa** — `normalizeCiderActivity` recusa URL que
+ *    não seja `https` de um host de imagem do YouTube, para que o card não vire
+ *    um rastreador apontando o cartão para lugar nenhum.
+ */
+const lastCiderPush = new Map<number, number>();
+
+// ── Cider: "Ouvir junto" (sessão de escuta compartilhada) ─────
+/**
+ * A sessão acompanha o desenho das salas de voz: registro em memória, sem
+ * banco, e o processo do realtime é a autoridade sobre quem está dentro.
+ *
+ * Diferente da presença de "tocando agora", aqui **um** usuário manda no que
+ * toca — o anfitrião. Os convidados recebem o estado e pedem mudanças; o
+ * servidor só entrega. É por isso que a autorização é toda do lado do anfitrião:
+ * `state` só sai de quem é host, `request`/`add` só chegam nele.
+ */
+const listenSessions = new ListenRegistry();
+const listenReactBudget = new ListenRateLimiter(CiderListen.REACT_INTERVAL_MS);
+const listenStateBudget = new ListenRateLimiter(CiderListen.STATE_INTERVAL_MS);
+
+/** Identidade mínima de quem entra numa sessão (vinda da sessão autenticada). */
+async function listenUser(client: Client): Promise<ListenUser | null> {
+  const user = await getDb().query.users.findFirst({
+    where: eq(schema.users.id, client.userId),
+  });
+  if (!user) return null;
+  return {
+    userId: user.id,
+    name: user.name ?? user.username ?? "Usuário",
+    avatar: user.avatar,
+  };
+}
+
+/**
+ * Carência do anfitrião ausente, um temporizador por sessão.
+ *
+ * Vive num mapa (e não no objeto da sessão) porque quem tem temporizador é o
+ * processo que entrega os avisos — o registro só sabe quando o anfitrião saiu.
+ */
+const hostGraceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearHostGrace(code: string): void {
+  const timer = hostGraceTimers.get(code);
+  if (timer) clearTimeout(timer);
+  hostGraceTimers.delete(code);
+}
+
+/** Agenda o fim da sessão para quando a carência do anfitrião acabar. */
+function scheduleHostGrace(code: string): void {
+  clearHostGrace(code);
+  const timer = setTimeout(() => {
+    hostGraceTimers.delete(code);
+    const expired = listenSessions.expireHostAway(code);
+    if (!expired) return;
+    const audience = expired.members
+      .filter((member) => member.userId !== expired.session.hostId)
+      .map((member) => member.userId);
+    sendToUsers(audience, { t: "cider:listen:ended", code, reason: "host-left" });
+  }, CiderListen.HOST_GRACE_MS);
+  timer.unref?.();
+  hostGraceTimers.set(code, timer);
+}
+
+/** Entrega um evento a todos os membros da sessão, menos `exceptUserId`. */
+function sendToSession(
+  session: ListenSession,
+  event: WSServerEvent,
+  exceptUserId?: number
+): void {
+  for (const userId of session.members.keys()) {
+    if (userId === exceptUserId) continue;
+    sendToUsers([userId], event);
+  }
+}
+
+/** A lista de participantes mudou: todo mundo recebe a mesma versão dela. */
+function emitMembers(session: ListenSession, exceptUserId?: number): void {
+  sendToSession(
+    session,
+    { t: "cider:listen:members", code: session.code, members: listenMembers(session) },
+    exceptUserId
+  );
+}
+
+/**
+ * Sai da sessão (se estiver numa) avisando os outros.
+ *
+ * Um só caminho para as cinco saídas — sair, encerrar, trocar de sessão, perder
+ * a conexão e a carência que vence —, porque esquecer um aviso deixaria a lista
+ * de participantes mentindo na tela de quem ficou.
+ *
+ * `keepHost` é a diferença entre "a conexão caiu" (a sessão **espera** o
+ * anfitrião voltar) e "eu saí" (a sessão acaba). Sem essa distinção, um
+ * recarregamento de página encerraria a sessão de todo mundo.
+ */
+function leaveListen(userId: number, options: { keepHost?: boolean } = {}): void {
+  const outcome = listenSessions.leave(userId, options);
+  if (!outcome.session) return;
+  listenReactBudget.forget(userId);
+  if (outcome.ended) {
+    clearHostGrace(outcome.session.code);
+    sendToSession(
+      outcome.session,
+      { t: "cider:listen:ended", code: outcome.session.code, reason: "host-left" },
+      userId
+    );
+    return;
+  }
+  if (outcome.waiting) {
+    sendToSession(
+      outcome.session,
+      { t: "cider:listen:host-presence", code: outcome.session.code, present: false },
+      userId
+    );
+    scheduleHostGrace(outcome.session.code);
+    return;
+  }
+  emitMembers(outcome.session);
+}
+
+/** Motivo legível de um convite recusado (quem lê é a pessoa que convidou). */
+function inviteDenial(verdict: Exclude<InviteCheck, "ok">): string {
+  switch (verdict) {
+    case "self":
+      return "Você não precisa convidar a si mesmo.";
+    case "not-friends":
+      return "Só dá para convidar amigos: o convite toca na tela deles.";
+    case "already-in-session":
+      return "Essa pessoa já está numa sessão de escuta.";
+    case "session-full":
+      return `A sessão está cheia (${CiderListen.MAX_MEMBERS} pessoas).`;
+  }
+}
+
+/** Amizade aceita entre dois usuários — a permissão do convite. */
+async function areFriends(a: number, b: number): Promise<boolean> {
+  const rows = await getDb()
+    .select({ status: schema.friendships.status })
+    .from(schema.friendships)
+    .where(
+      or(
+        and(
+          eq(schema.friendships.requesterId, a),
+          eq(schema.friendships.addresseeId, b)
+        ),
+        and(
+          eq(schema.friendships.requesterId, b),
+          eq(schema.friendships.addresseeId, a)
+        )
+      )
+    );
+  return rows.some(row => row.status === "ACCEPTED");
+}
+
+async function ciderNowPlaying(
+  client: Client,
+  raw: unknown
+): Promise<void> {
+  if (!env.ciderPlayerEnabled) return;
+
+  const parsed = CiderActivitySchema.safeParse(raw);
+  if (!parsed.success) return;
+
+  const { clear, activity } = normalizeCiderActivity(parsed.data);
+  const now = Date.now();
+  if (clear) {
+    // A limpeza **não** entra no intervalo mínimo: quem manda `title: null`
+    // acabou de encerrar o Cider e espera a faixa sair do perfil na hora. Se o
+    // limite valesse aqui, os últimos 20 s de "tocando" ficariam pendurados no
+    // perfil de quem já parou.
+    lastCiderPush.set(client.userId, now);
+    await clearActivity(client.userId, "cider");
+    return;
+  }
+  if (!activity) return;
+
+  const previous = lastCiderPush.get(client.userId) ?? 0;
+  if (now - previous < env.ciderActivityIntervalMs) return;
+  lastCiderPush.set(client.userId, now);
+
+  // O Cider não tem OAuth: a identidade é a sessão. Sem a linha em
+  // `user_connections`, porém, toda a leitura de presença descarta a atividade
+  // (perfil e amigos filtram por ela) e ouvir não aparecia em lugar nenhum.
+  await ensureSessionConnection(client.userId, "cider");
+  await persistActivity(client.userId, activity);
+}
+
 // ── Message handling ──────────────────────────────────────────
 async function handleEvent(client: Client, event: WSClientEvent) {
   switch (event.t) {
@@ -548,13 +1192,227 @@ async function handleEvent(client: Client, event: WSClientEvent) {
       await broadcastPresence(client.userId);
       break;
     }
+    case "cider:now-playing":
+      await ciderNowPlaying(client, event.activity);
+      break;
+    /*
+     * "Ouvir junto": o anfitrião abre, publica o estado e recebe pedidos; o
+     * convidado entra pelo código, segue o estado e manda reações. Cada evento
+     * tem um dono só — a autorização está no registro, não na interface.
+     */
+    case "cider:listen:start": {
+      if (!env.ciderPlayerEnabled) return;
+      const me = await listenUser(client);
+      if (!me) return;
+      // Uma sessão por usuário: quem já estava em outra sai (os membros que
+      // ficam são avisados) antes de abrir esta.
+      if (listenSessions.codeOf(client.userId)) leaveListen(client.userId);
+      const created = listenSessions.create(me);
+      if (!created.ok) {
+        send(client, { t: "cider:listen:denied", reason: created.reason });
+        return;
+      }
+      send(client, {
+        t: "cider:listen:session",
+        code: created.session.code,
+        me: created.member,
+        hostId: created.session.hostId,
+        members: listenMembers(created.session),
+        state: created.session.state,
+        token: created.token,
+      });
+      break;
+    }
+    case "cider:listen:join": {
+      if (!env.ciderPlayerEnabled) return;
+      const me = await listenUser(client);
+      if (!me) return;
+      if (listenSessions.codeOf(client.userId)) leaveListen(client.userId);
+      const joined = listenSessions.join(event.code, me);
+      if (!joined.ok) {
+        send(client, { t: "cider:listen:denied", reason: joined.reason });
+        return;
+      }
+      // O convidado entra **já alinhado**: o payload leva o último estado do
+      // anfitrião, e é com ele que o player do convidado começa a tocar. Sem
+      // isso, entrar numa sessão só tocaria na próxima troca de faixa — e a
+      // pessoa ficaria na sala sem ouvir o que a sala está ouvindo.
+      send(client, {
+        t: "cider:listen:session",
+        code: joined.session.code,
+        me: joined.member,
+        hostId: joined.session.hostId,
+        members: listenMembers(joined.session),
+        state: joined.session.state,
+        token: joined.token,
+      });
+      emitMembers(joined.session, client.userId);
+      break;
+    }
+    case "cider:listen:resume": {
+      if (!env.ciderPlayerEnabled) return;
+      // Uma sessão por usuário, também na volta: quem estava em outra saiu dela
+      // (os membros de lá são avisados) antes de retomar esta.
+      const target = normalizeListenCode(event.code);
+      const current = listenSessions.codeOf(client.userId);
+      if (target && current && current !== target) leaveListen(client.userId);
+      const resumed = listenSessions.resume(event.code, event.token);
+      if (!resumed.ok) {
+        send(client, { t: "cider:listen:denied", reason: resumed.reason });
+        return;
+      }
+      // Ele voltou: a carência não precisa mais correr, e quem ficou na sala
+      // precisa saber que o anfitrião está de novo no comando.
+      clearHostGrace(resumed.session.code);
+      send(client, {
+        t: "cider:listen:session",
+        code: resumed.session.code,
+        me: resumed.member,
+        hostId: resumed.session.hostId,
+        members: listenMembers(resumed.session),
+        state: resumed.session.state,
+        token: resumed.token,
+      });
+      if (resumed.member.role === "host") {
+        sendToSession(
+          resumed.session,
+          {
+            t: "cider:listen:host-presence",
+            code: resumed.session.code,
+            present: true,
+          },
+          client.userId
+        );
+      }
+      emitMembers(resumed.session, client.userId);
+      break;
+    }
+    case "cider:listen:leave":
+      leaveListen(client.userId);
+      break;
+    case "cider:listen:end": {
+      const closed = listenSessions.close(client.userId);
+      if (!closed.session) return;
+      clearHostGrace(closed.session.code);
+      sendToSession(closed.session, {
+        t: "cider:listen:ended",
+        code: closed.session.code,
+        reason: "closed",
+      });
+      break;
+    }
+    case "cider:listen:state": {
+      if (!env.ciderPlayerEnabled) return;
+      const state = sanitizeListenState(event.state);
+      if (!state) return;
+      // O teto do servidor é contra rajada hostil: o cliente já publica
+      // espaçado, e o último estado publicado continua valendo na sessão.
+      if (!listenStateBudget.take(client.userId)) return;
+      const session = listenSessions.setState(client.userId, state);
+      if (!session) return;
+      sendToSession(
+        session,
+        { t: "cider:listen:sync", code: session.code, state },
+        client.userId
+      );
+      break;
+    }
+    case "cider:listen:react": {
+      const emoji = sanitizeListenEmoji(event.emoji);
+      if (!emoji) return;
+      const session = listenSessions.sessionOf(client.userId);
+      if (!session) return;
+      if (!listenReactBudget.take(client.userId)) return;
+      const me = session.members.get(client.userId)?.member;
+      sendToSession(
+        session,
+        {
+          t: "cider:listen:reaction",
+          code: session.code,
+          from: client.userId,
+          name: me?.name ?? "Alguém",
+          emoji,
+        },
+        client.userId
+      );
+      break;
+    }
+    case "cider:listen:request": {
+      const request = sanitizeListenRequest(event);
+      if (!request) return;
+      const session = listenSessions.sessionOf(client.userId);
+      // O anfitrião não pede a si mesmo: o transporte dele já é o verdadeiro.
+      if (!session || session.hostId === client.userId) return;
+      const me = session.members.get(client.userId)?.member;
+      sendToUsers([session.hostId], {
+        t: "cider:listen:request",
+        code: session.code,
+        from: client.userId,
+        name: me?.name ?? "Alguém",
+        ...request,
+      });
+      break;
+    }
+    case "cider:listen:add": {
+      const track = sanitizeListenTrack(event.track);
+      if (!track) return;
+      const session = listenSessions.sessionOf(client.userId);
+      if (!session || session.hostId === client.userId) return;
+      const me = session.members.get(client.userId)?.member;
+      sendToUsers([session.hostId], {
+        t: "cider:listen:add",
+        code: session.code,
+        from: client.userId,
+        name: me?.name ?? "Alguém",
+        track,
+      });
+      break;
+    }
+    case "cider:listen:invite": {
+      const me = await listenUser(client);
+      const session = listenSessions.sessionOf(client.userId);
+      if (!me || !session || session.hostId !== client.userId) return;
+      // A amizade é checada **antes** do "está online": a resposta errada aqui
+      // contaria a um estranho se um id arbitrário está conectado agora.
+      const verdict = checkInvite({
+        fromUserId: client.userId,
+        toUserId: event.toUserId,
+        areFriends: await areFriends(client.userId, event.toUserId),
+        targetInSession: !!listenSessions.codeOf(event.toUserId),
+        memberCount: session.members.size,
+      });
+      if (verdict !== "ok") {
+        send(client, { t: "cider:listen:denied", reason: inviteDenial(verdict) });
+        return;
+      }
+      // O convite toca na tela do outro **agora**: para quem está offline não há
+      // onde tocar, e dizer "enviado" seria mentira.
+      if (!isUserOnline(event.toUserId)) {
+        send(client, {
+          t: "cider:listen:denied",
+          reason: "Essa pessoa não está online agora — o convite precisa dela com o Nexora aberto.",
+        });
+        return;
+      }
+      const hostMember = session.members.get(client.userId)?.member;
+      if (!hostMember) return;
+      sendToUsers([event.toUserId], {
+        t: "cider:listen:invited",
+        code: session.code,
+        from: hostMember,
+      });
+      break;
+    }
     case "voice:join":
       await voiceJoin(client, event);
       break;
     case "voice:leave":
       if (event.voiceSessionId === voiceSessionByUser.get(client.userId)) {
-        await voiceLeave(client);
+        await voiceLeave(client, true);
       }
+      break;
+    case "call:decline":
+      await declineDmCall(client, event.conversationId);
       break;
     case "voice:state":
       await voiceStateUpdate(client, event);
@@ -603,6 +1461,108 @@ async function handleEvent(client: Client, event: WSClientEvent) {
         conversationId: event.conversationId,
         data: event.data,
       });
+      break;
+    }
+    case "companion:start": {
+      const roomKey = userVoiceRoom.get(client.userId);
+      if (!roomKey) {
+        send(client, {
+          t: "voice:denied",
+          reason: "Entre numa chamada para usar outro dispositivo como câmera.",
+        });
+        return;
+      }
+      if (event.voiceSessionId !== voiceSessionByUser.get(client.userId))
+        return;
+      const session = createCompanionSession({
+        ownerUserId: client.userId,
+        sessionId: event.voiceSessionId ?? roomKey,
+      });
+      send(client, {
+        t: "companion:session",
+        sessionId: session.id,
+        code: session.code,
+      });
+      break;
+    }
+    case "companion:signal": {
+      const session = getCompanionSessionForOwner(
+        event.sessionId,
+        client.userId
+      );
+      if (!session) return;
+      refreshCompanionExpiry(session);
+      const ws = session.companionSocket;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(
+        JSON.stringify({
+          t: "companion:signal",
+          code: session.code,
+          data: event.data,
+        })
+      );
+      break;
+    }
+    case "companion:stop": {
+      const session = getCompanionSessionForOwner(
+        event.sessionId,
+        client.userId
+      );
+      if (!session) return;
+      const ws = session.companionSocket;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            t: "companion:error",
+            code: session.code,
+            message: "O proprietário encerrou a câmera externa.",
+          })
+        );
+        ws.close(4000, "owner-stopped");
+      }
+      disbandCompanionSession(session);
+      break;
+    }
+    case "companion:approve": {
+      const session = getCompanionSessionForOwner(
+        event.sessionId,
+        client.userId
+      );
+      if (!session || !session.companionSocket) return;
+      session.status = "paired";
+      session.companionSocket.send(
+        JSON.stringify({
+          t: "paired",
+          code: session.code,
+          session: toPublic(session),
+        })
+      );
+      send(client, { t: "companion:paired", sessionId: session.id });
+      send(client, {
+        t: "companion:state",
+        sessionId: session.id,
+        session: toPublic(session),
+      });
+      break;
+    }
+    case "companion:reject": {
+      const session = getCompanionSessionForOwner(
+        event.sessionId,
+        client.userId
+      );
+      if (!session) return;
+      const ws = session.companionSocket;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            t: "companion:error",
+            code: session.code,
+            message: "O proprietário recusou a conexão deste celular.",
+          })
+        );
+        ws.close(4000, "owner-rejected");
+      }
+      disbandCompanionSession(session);
       break;
     }
   }
@@ -673,12 +1633,20 @@ export function attachRealtime(server: HttpServer) {
       }
 
       try {
+        // Nexora CLI (e outros clientes não-navegador) autentica via
+        // Authorization: Bearer com o mesmo JWT de sessão; o Web usa cookie.
+        const bearer = req.headers["authorization"];
+        const bearerToken =
+          typeof bearer === "string" && bearer.startsWith("Bearer ")
+            ? bearer.slice(7)
+            : null;
         const cookies = cookie.parse(req.headers.cookie ?? "");
-        const token = cookies[Session.cookieName];
+        const token = bearerToken ?? cookies[Session.cookieName];
         const claim = token ? await verifySessionToken(token) : null;
         // Sessão deve existir e estar ativa (revogação remota funciona aqui).
-        const session = claim ? await resolveActiveSession(claim.sid) : null;
-        const user = claim && session ? await findUserByUnionId(claim.unionId) : null;
+        const session = claim ? await resolveActiveSession(claim.sid, token) : null;
+        const user =
+          claim && session ? await findUserByUnionId(claim.unionId) : null;
         if (!user || !session) {
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
           socket.destroy();
@@ -707,11 +1675,17 @@ export function attachRealtime(server: HttpServer) {
 
   wss.on(
     "connection",
-    async (ws: WebSocket, _req: IncomingMessage, userId: number, sid: string | null) => {
+    async (
+      ws: WebSocket,
+      _req: IncomingMessage,
+      userId: number,
+      sid: string | null
+    ) => {
       const client: Client = { ws, userId, sid: sid ?? null, alive: true };
       addClient(client);
       send(client, { t: "ready", userId });
-      await broadcastPresence(userId);
+          await broadcastPresence(userId);
+      await sendInitialVoiceSummaries(userId);
 
       ws.on("pong", () => {
         client.alive = true;
@@ -733,8 +1707,13 @@ export function attachRealtime(server: HttpServer) {
       ws.on("close", () => {
         const wasLastConnection = (byUser.get(userId)?.size ?? 0) <= 1;
         removeClient(client);
-        voiceLeave(client).catch(() => {});
+        scheduleVoiceDrop(client);
         if (wasLastConnection && !byUser.has(userId)) {
+          // A conexão caiu — e cair não é sair: a sessão espera o anfitrião
+          // voltar dentro da carência (recarregar a página não pode encerrar a
+          // sala de quem ficou ouvindo). Quem saiu de verdade manda
+          // `cider:listen:leave`/`end`, e aí a sessão acaba na hora.
+          leaveListen(userId, { keepHost: true });
           broadcastPresence(userId).catch(() => {});
         }
       });

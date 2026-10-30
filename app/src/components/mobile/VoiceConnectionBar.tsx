@@ -12,19 +12,25 @@ import {
   TriangleAlert,
   ChevronUp,
 } from "lucide-react";
+import { useNavigate } from "react-router";
 
 /**
  * Barra persistente de chamada (mobile): aparece sempre que o usuário está
  * conectado a uma chamada e NÃO está na tela dela — garante retorno rápido
  * e controles essenciais enquanto navega pelo app.
  */
-export function VoiceConnectionBar({ onOpenSheet }: { onOpenSheet?: () => void }) {
+export function VoiceConnectionBar({
+  onOpenSheet,
+}: {
+  onOpenSheet?: () => void;
+}) {
+  const navigate = useNavigate();
   const voiceChannelId = useAppStore(s => s.voiceChannelId);
   const voiceConversationId = useAppStore(s => s.voiceConversationId);
   const muted = useAppStore(s => s.muted);
   const connectionStatus = useAppStore(s => s.voiceConnectionStatus);
   const participantsMap = useAppStore(s => s.voiceParticipants);
-  const { inCall, viewingCall } = useVoiceCallView();
+  const { inCall, viewingCall, callPath } = useVoiceCallView();
 
   const roomKey =
     voiceChannelId != null
@@ -33,7 +39,7 @@ export function VoiceConnectionBar({ onOpenSheet }: { onOpenSheet?: () => void }
         ? `dm:${voiceConversationId}`
         : null;
   const participantCount = useMemo(
-    () => (roomKey ? participantsMap[roomKey]?.length ?? 0 : 0),
+    () => (roomKey ? (participantsMap[roomKey]?.length ?? 0) : 0),
     [participantsMap, roomKey]
   );
 
@@ -43,7 +49,7 @@ export function VoiceConnectionBar({ onOpenSheet }: { onOpenSheet?: () => void }
     <div className="fixed inset-x-0 bottom-0 z-40 md:hidden animate-in slide-in-from-bottom fade-in duration-200">
       <div className="flex items-center gap-2.5 border-t border-black/20 bg-rail px-3 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
         <button
-          onClick={() => onOpenSheet?.()}
+          onClick={() => (onOpenSheet ? onOpenSheet() : navigate(callPath))}
           aria-label="Abrir painel da chamada"
           className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl py-1 text-left transition-colors active:bg-white/[0.06]"
         >
@@ -81,10 +87,7 @@ export function VoiceConnectionBar({ onOpenSheet }: { onOpenSheet?: () => void }
                 : "Toque para voltar à chamada"}
             </span>
           </span>
-          <ChevronUp
-            className="h-4 w-4 shrink-0 text-muted2"
-            aria-hidden
-          />
+          <ChevronUp className="h-4 w-4 shrink-0 text-muted2" aria-hidden />
         </button>
 
         <button
@@ -92,10 +95,8 @@ export function VoiceConnectionBar({ onOpenSheet }: { onOpenSheet?: () => void }
           aria-label={muted ? "Ativar microfone" : "Silenciar microfone"}
           aria-pressed={muted}
           className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95",
-            muted
-              ? "bg-red-500/90 text-white"
-              : "bg-white/10 text-bodyx"
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95",
+            muted ? "bg-red-500/90 text-white" : "bg-white/10 text-bodyx"
           )}
         >
           {muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -104,7 +105,7 @@ export function VoiceConnectionBar({ onOpenSheet }: { onOpenSheet?: () => void }
         <button
           onClick={() => void voiceManager.leave()}
           aria-label="Desconectar da chamada"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-600 text-white transition-transform active:scale-95"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-600 text-white transition-transform active:scale-95"
         >
           <PhoneOff className="h-4 w-4" />
         </button>

@@ -13,6 +13,7 @@ import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VoiceMediaRenderer } from "@/components/voice/VoiceMediaRenderer";
 import { IncomingCallToast } from "@/components/voice/IncomingCallToast";
+import { NotificationPopupHost } from "@/components/NotificationPopupHost";
 import { VoiceConnectionBar } from "@/components/mobile/VoiceConnectionBar";
 import { useVoiceCallView } from "@/hooks/useVoiceCallView";
 import { PermanentBanScreen } from "@/components/safety/PermanentBanScreen";
@@ -43,6 +44,10 @@ export function AppLayout() {
   const mobileNavOpen = useAppStore(s => s.mobileNavOpen);
   const setMobileNavOpen = useAppStore(s => s.setMobileNavOpen);
   const setMembersOpen = useAppStore(s => s.setMembersOpen);
+  const hasIntegrationReturn = (() => {
+    const params = new URLSearchParams(location.search);
+    return params.has("integration") && params.has("status");
+  })();
 
   // Global modals and context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
@@ -50,8 +55,10 @@ export function AppLayout() {
     null
   );
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("account");
+  const [settingsOpen, setSettingsOpen] = useState(hasIntegrationReturn);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>(
+    hasIntegrationReturn ? "connections" : "account"
+  );
   useEffect(() => {
     const openSettings = (e: Event) => {
       const tab = (e as CustomEvent<{ tab?: SettingsTab }>).detail?.tab;
@@ -77,19 +84,26 @@ export function AppLayout() {
     return () => window.removeEventListener("nexora:session-revoked", show);
   }, []);
 
-  // Notificações do PC: pergunta UMA vez (clicável = gesto do usuário).
+  // Solicita a permissão nativa assim que a sessão autenticada estiver pronta.
+  // Alguns navegadores exigem um gesto do usuário; nesses casos, o toast vira
+  // um fallback clicável para abrir o mesmo pedido de permissão.
   useEffect(() => {
+    if (isLoading || !user) return;
     if (
       typeof Notification === "undefined" ||
       Notification.permission !== "default"
     ) {
       return;
     }
-    if (localStorage.getItem("nexora-desktop-notif-asked") === "1") return;
-    localStorage.setItem("nexora-desktop-notif-asked", "1");
-    toast(
-      "Quer receber notificações da Nexora no seu computador?",
-      {
+
+    const sessionKey = "nexora-notification-permission-requested";
+    if (sessionStorage.getItem(sessionKey) === "1") return;
+    sessionStorage.setItem(sessionKey, "1");
+
+    let cancelled = false;
+    const showPermissionFallback = () => {
+      if (cancelled) return;
+      toast("Ative as notificações do Nexora no seu navegador.", {
         duration: 15_000,
         action: {
           label: "Ativar",
@@ -97,9 +111,19 @@ export function AppLayout() {
             void Notification.requestPermission();
           },
         },
-      }
-    );
-  }, []);
+      });
+    };
+
+    void Notification.requestPermission()
+      .then(permission => {
+        if (permission === "default") showPermissionFallback();
+      })
+      .catch(showPermissionFallback);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoading, user]);
   const keyboardOffset = useKeyboardOffset(true);
   const quickSwitcherOpen = useAppStore(st => st.quickSwitcherOpen);
   const wsConnected = useAppStore(st => st.wsConnected);
@@ -122,7 +146,11 @@ export function AppLayout() {
     if (unread.data) {
       useAppStore
         .getState()
-        .setUnread(unread.data.channels, unread.data.conversations);
+        .setUnread(
+          unread.data.channels,
+          unread.data.conversations,
+          unread.data.channelDetails,
+        );
     }
   }, [unread.data]);
 
@@ -164,6 +192,7 @@ export function AppLayout() {
   const showMobileTopBar = !inServer && !inDmConversation;
 
   function inferTab(pathname: string): MobileTab {
+    if (pathname === "/explore") return "servers";
     if (pathname.startsWith("/channels/@me")) return "home";
     if (pathname.startsWith("/channels/")) return "servers";
     return "home";
@@ -181,7 +210,7 @@ export function AppLayout() {
 
   const handleOpenContextMenu = (
     e: React.MouseEvent,
-    type: "user" | "channel" | "server",
+    type: "user" | "channel",
     id: number
   ) => {
     e.preventDefault();
@@ -197,7 +226,7 @@ export function AppLayout() {
       <div className="flex min-h-0 flex-1">
       {/* Desktop Rail */}
       <div className="hidden md:flex h-full">
-        <ServerRail onOpenContextMenu={handleOpenContextMenu} />
+        <ServerRail />
       </div>
 
       {/* Mobile Drawer */}
@@ -208,7 +237,7 @@ export function AppLayout() {
             onClick={() => setMobileNavOpen(false)}
           />
           <div className="absolute left-0 top-0 flex h-full shadow-2xl">
-            <ServerRail onOpenContextMenu={handleOpenContextMenu} />
+            <ServerRail />
             <div id="mobile-sidebar-slot" className="flex h-full" />
           </div>
         </div>
@@ -317,6 +346,7 @@ export function AppLayout() {
         initialTab={settingsTab}
       />
       <IncomingCallToast />
+      <NotificationPopupHost />
       <VoiceMediaRenderer myUserId={user.id} />
       {sessionRevoked && <SessionRevokedScreen />}
       </div>

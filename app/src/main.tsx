@@ -3,8 +3,10 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import "./index.css";
 import { initTheme } from "@/lib/theme";
+import { ensureAdSenseScript } from "@/lib/adsense";
 import { TRPCProvider } from "@/providers/trpc";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Toaster } from "@/components/ui/sonner";
 import App from "./App.tsx";
 
 // PWA: registra o service worker apenas em build de produção.
@@ -13,6 +15,10 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
 }
+
+// A tag oficial também está no index.html. Esta guarda cobre HMR, extensões
+// e shells futuros sem permitir uma segunda instalação do script.
+ensureAdSenseScript();
 
 try {
   initTheme();
@@ -28,6 +34,7 @@ try {
         <TRPCProvider>
           <ErrorBoundary>
             <App />
+            <Toaster position="top-right" closeButton richColors />
           </ErrorBoundary>
         </TRPCProvider>
       </BrowserRouter>

@@ -44,10 +44,14 @@ export function Seo({
   ogType = "website",
 }: SeoProps) {
   useEffect(() => {
-    const fullTitle = title ? `${title} | ${SITE_NAME}` : `${SITE_NAME} — Converse, conecte-se e crie comunidades`;
+    const defaultTitle = `${SITE_NAME} — Chat, Comunidades e Conversas Online`;
+    const defaultDescription =
+      "Conheça a Nexora, a plataforma para conversar online, criar comunidades e se conectar com pessoas por mensagens, voz e vídeo — direto no navegador.";
+    const fullTitle = title ? `${title} | ${SITE_NAME}` : defaultTitle;
+    const desc = description ?? defaultDescription;
     document.title = fullTitle;
 
-    if (description) upsertMeta("name", "description", description);
+    upsertMeta("name", "description", desc);
     upsertMeta("name", "robots", noindex ? "noindex,follow" : "index,follow");
     upsertMeta("name", "application-name", SITE_NAME);
 
@@ -56,13 +60,12 @@ export function Seo({
     upsertMeta("property", "og:title", fullTitle);
     upsertMeta("property", "og:url", url);
     upsertMeta("property", "og:type", ogType);
+    upsertMeta("property", "og:locale", "pt_BR");
     upsertMeta("property", "og:image", OG_IMAGE);
-    if (description) {
-      upsertMeta("property", "og:description", description);
-      upsertMeta("name", "twitter:description", description);
-    }
+    upsertMeta("property", "og:description", desc);
     upsertMeta("name", "twitter:card", "summary_large_image");
     upsertMeta("name", "twitter:title", fullTitle);
+    upsertMeta("name", "twitter:description", desc);
     upsertMeta("name", "twitter:image", OG_IMAGE);
 
     let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
@@ -73,16 +76,18 @@ export function Seo({
     }
     canonical.href = url;
 
-    // Verificação do Google Search Console, apenas quando configurada no build.
-    const verification = import.meta.env.VITE_GOOGLE_SITE_VERIFICATION as string | undefined;
-    if (verification) {
-      upsertMeta("name", "google-site-verification", verification);
-    }
+    // Verificações de webmaster (Search Console / Bing), só quando definidas no build.
+    const google = import.meta.env.VITE_GOOGLE_SITE_VERIFICATION as string | undefined;
+    if (google) upsertMeta("name", "google-site-verification", google);
+    const bing = import.meta.env.VITE_BING_SITE_VERIFICATION as string | undefined;
+    if (bing) upsertMeta("name", "msvalidate.01", bing);
 
     return () => {
-      // Limpa a tag de verificação se a rota mudar sem a env (evita meta órfã).
+      // Limpa as tags de verificação se a rota mudar sem as envs (evita meta órfã).
       document.head
-        .querySelectorAll('meta[name="google-site-verification"]')
+        .querySelectorAll(
+          'meta[name="google-site-verification"], meta[name="msvalidate.01"]'
+        )
         .forEach(el => el.remove());
     };
   }, [title, description, canonicalPath, noindex, ogType]);

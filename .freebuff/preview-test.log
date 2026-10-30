@@ -1,0 +1,67 @@
+
+> nexora@1.1.0 dev
+> concurrently "tsx watch api/server.ts" "vite"
+
+[1] 13:36:57 [vite] (client) Re-optimizing dependencies because lockfile has changed
+[1] 
+[1]   VITE v7.3.6  ready in 410 ms
+[1] 
+[1]   ➜  Local:   http://localhost:5173/
+[1]   ➜  Network: use --host to expose
+[0] ◇ injected env (8) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[0] [realtime] WebSocket server attached at /ws
+[0] [companion] WebSocket gateway attached at /ws/companion
+[0] [live] WebSocket gateway attached at /ws/live
+[0] Server running on http://localhost:0/
+[0] [safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?
+[0] params: queued,RESTART_RECOVERY,processing
+[0]     at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]     at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+[0]     at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]     at async Promise.allSettled (index 1) {
+[0]   query: 'update `media_deep_reviews` set `status` = ?, `lastError` = ? where `media_deep_reviews`.`status` = ?',
+[0]   params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+[0]   cause: Error: Table 'pulsar.media_deep_reviews' doesn't exist
+[0]       at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+[0]       at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+[0]       at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+[0]       at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+[0]       at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+[0]       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]       at async resumePendingDeepReviews (/home/daniel/Downloads/app/app/api/services/reports/deepMediaReview.ts:257:3)
+[0]       at async Promise.allSettled (index 1) {
+[0]     code: 'ER_NO_SUCH_TABLE',
+[0]     errno: 1146,
+[0]     sqlState: '42S02',
+[0]     sqlMessage: "Table 'pulsar.media_deep_reviews' doesn't exist",
+[0]     sql: "update `media_deep_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `media_deep_reviews`.`status` = 'processing'"
+[0]   }
+[0] }
+[0] [safety] Failed to resume a moderation queue. DrizzleQueryError: Failed query: update `text_history_reviews` set `status` = ?, `lastError` = ? where `text_history_reviews`.`status` = ?
+[0] params: queued,RESTART_RECOVERY,processing
+[0]     at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:79:11)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]     at async MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:16)
+[0]     at async resumePendingTextHistoryReviews (/home/daniel/Downloads/app/app/api/services/reports/textHistoryReview.ts:364:3)
+[0]     at async Promise.allSettled (index 2) {
+[0]   query: 'update `text_history_reviews` set `status` = ?, `lastError` = ? where `text_history_reviews`.`status` = ?',
+[0]   params: [ 'queued', 'RESTART_RECOVERY', 'processing' ],
+[0]   cause: Error: Table 'pulsar.text_history_reviews' doesn't exist
+[0]       at <anonymous> (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:101:25)
+[0]       at MySql2PreparedQuery.queryWithCache (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/session.ts:77:18)
+[0]       at MySql2PreparedQuery.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql2/session.ts:100:27)
+[0]       at QueryPromise.execute (/home/daniel/Downloads/app/app/node_modules/src/mysql-core/query-builders/update.ts:242:25)
+[0]       at QueryPromise.then (/home/daniel/Downloads/app/app/node_modules/src/query-promise.ts:31:15)
+[0]       at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]       at async resumePendingTextHistoryReviews (/home/daniel/Downloads/app/app/api/services/reports/textHistoryReview.ts:364:3)
+[0]       at async Promise.allSettled (index 2) {
+[0]     code: 'ER_NO_SUCH_TABLE',
+[0]     errno: 1146,
+[0]     sqlState: '42S02',
+[0]     sqlMessage: "Table 'pulsar.text_history_reviews' doesn't exist",
+[0]     sql: "update `text_history_reviews` set `status` = 'queued', `lastError` = 'RESTART_RECOVERY' where `text_history_reviews`.`status` = 'processing'"
+[0]   }
+[0] }
+[0] tsx watch api/server.ts exited with code SIGTERM
+[1] vite exited with code SIGTERM

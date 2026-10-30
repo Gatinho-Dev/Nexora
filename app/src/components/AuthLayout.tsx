@@ -218,9 +218,9 @@ function AuthLayoutContent({
                     <p className="text-sm font-medium truncate leading-none">
                       {user?.name || "-"}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate mt-1.5">
-                      {user?.email || "-"}
-                    </p>
+                     <p className="text-xs text-muted-foreground truncate mt-1.5">
+                       {user?.username ? `@${user.username}` : "-"}
+                     </p>
                   </div>
                 </button>
               </DropdownMenuTrigger>

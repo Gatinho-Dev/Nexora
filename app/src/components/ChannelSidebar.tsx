@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
@@ -34,6 +34,7 @@ import { EventsModal } from "./modals/EventsModal";
 import { ReportDialog } from "./safety/ReportDialog";
 import { voiceManager } from "@/lib/rtc";
 import { toast } from "sonner";
+import { ServerHeader } from "./server/ServerHeader";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,7 +57,7 @@ export function ChannelSidebar({
   details: ServerDetailsDTO;
   onOpenContextMenu?: (
     e: React.MouseEvent,
-    type: "channel" | "server",
+    type: "channel",
     id: number
   ) => void;
   onOpenProfile?: (userId: number) => void;
@@ -87,16 +88,6 @@ export function ChannelSidebar({
   const toggleCategory = (catId: number) => {
     setCollapsedCategories(prev => ({ ...prev, [catId]: !prev[catId] }));
   };
-
-  // Aggregate this server's channel unreads for the 72px rail indicators.
-  const setServerUnread = useAppStore(st => st.setServerUnread);
-  useEffect(() => {
-    const total = channels.reduce(
-      (sum, c) => sum + (unreadChannels[c.id] ?? 0),
-      0
-    );
-    setServerUnread(server.id, total);
-  }, [channels, unreadChannels, server.id, setServerUnread]);
 
   const channelsInCategory = (
     categoryId: number | null,
@@ -142,11 +133,11 @@ export function ChannelSidebar({
       {/* Server Header Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="h-12 px-4 flex items-center justify-between font-semibold text-foreground border-b border-black/20 hover:bg-hov transition-colors shadow-sm">
-            <span className="truncate text-sm tracking-wide">
-              {server.name}
-            </span>
-            <ChevronDown className="h-4 w-4 shrink-0 text-muted2" />
+          <button
+            className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#7383FF]"
+            aria-label={`Abrir menu de ${server.name}`}
+          >
+            <ServerHeader server={server} />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56 bg-popover text-popover-foreground border-black/20 shadow-xl">

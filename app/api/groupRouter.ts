@@ -688,7 +688,12 @@ export const groupRouter = createRouter({
 
   // ── Calls ────────────────────────────────────────────────────
   startCall: authedQuery
-    .input(z.object({ conversationId: z.number() }))
+    .input(
+      z.object({
+        conversationId: z.number(),
+        video: z.boolean().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       await assertCanInteract(ctx.user.id);
       rateLimit(`call:${ctx.user.id}`, 5, 60_000);
@@ -701,7 +706,7 @@ export const groupRouter = createRouter({
         type: "call_started",
         actorId: ctx.user.id,
         conversationId: input.conversationId,
-        content: `${actor} iniciou uma chamada.`,
+        content: `${actor} iniciou uma chamada${input.video ? " de vídeo" : ""}.`,
         skip: [...inRoom],
       });
       return { ok: true };
@@ -831,7 +836,10 @@ export const groupRouter = createRouter({
         RateLimits.reaction.windowMs,
       );
       const { role } = await requireGroupAccess(ctx.user.id, input.conversationId);
-      if (!canModeratePin(role)) {
+      const conversation = await getDb().query.conversations.findFirst({
+        where: eq(schema.conversations.id, input.conversationId),
+      });
+      if (conversation?.isGroup && !canModeratePin(role)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Somente administradores podem fixar mensagens.",
@@ -866,7 +874,10 @@ export const groupRouter = createRouter({
     .input(z.object({ conversationId: z.number(), messageId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const { role } = await requireGroupAccess(ctx.user.id, input.conversationId);
-      if (!canModeratePin(role)) {
+      const conversation = await getDb().query.conversations.findFirst({
+        where: eq(schema.conversations.id, input.conversationId),
+      });
+      if (conversation?.isGroup && !canModeratePin(role)) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Somente administradores podem remover fixações.",

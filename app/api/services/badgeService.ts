@@ -540,11 +540,16 @@ export async function listForUser(userId: number) {
 export async function recordEvent(
   type: BadgeEventType,
   userId: number,
-  metadata: Record<string, unknown> = {},
-): Promise<void> {
+  metadata: Record<string, unknown> = {}
+): Promise<EvaluationResult | null> {
   const db = getDb();
   await db.insert(schema.badgeEvents).values({ type, userId, metadata });
-  await evaluateUser(userId, { trigger: type }).catch(() => {});
+  try {
+    return await evaluateUser(userId, { trigger: type });
+  } catch (error) {
+    console.error(`[badges] evaluation failed for event ${type}`, error);
+    return null;
+  }
 }
 
 // ── Avaliação automática ──────────────────────────────────────

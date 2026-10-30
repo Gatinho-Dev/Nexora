@@ -3,11 +3,7 @@ import { getDb } from "../../queries/connection";
 import * as schema from "@db/schema";
 import { encryptSecret, decryptSecret } from "../../lib/crypto";
 import { logSafetyEvent } from "../../services/safetyAudit";
-import {
-  refreshTokens,
-  revokeToken,
-  RobloxApiError,
-} from "./client";
+import { refreshTokens, revokeToken, RobloxApiError } from "./client";
 
 /**
  * RobloxConnectionService — CRUD do vínculo Roblox ↔ Nexora.
@@ -90,7 +86,9 @@ export async function upsertRobloxConnection(input: {
 }
 
 /** Access token válido — renova automaticamente quando expirado. */
-export async function getValidAccessToken(userId: number): Promise<string | null> {
+export async function getValidAccessToken(
+  userId: number
+): Promise<string | null> {
   const conn = await findRobloxConnection(userId);
   if (!conn || !conn.accessTokenEnc || conn.needsReauth) return null;
 
@@ -133,7 +131,9 @@ export async function disconnectRoblox(userId: number): Promise<boolean> {
   const conn = await findRobloxConnection(userId);
   if (!conn) return false;
   // Best-effort: revoga no Roblox; falha não bloqueia desconexão local.
-  const access = conn.accessTokenEnc ? decryptSecret(conn.accessTokenEnc) : null;
+  const access = conn.accessTokenEnc
+    ? decryptSecret(conn.accessTokenEnc)
+    : null;
   if (access) void revokeToken(access).catch(() => {});
 
   await getDb()
@@ -142,7 +142,6 @@ export async function disconnectRoblox(userId: number): Promise<boolean> {
   await getDb()
     .delete(schema.robloxActivity)
     .where(eq(schema.robloxActivity.userId, userId));
-
   void logSafetyEvent({
     event: "roblox_connection_removed",
     actorUserId: userId,
