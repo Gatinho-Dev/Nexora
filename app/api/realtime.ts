@@ -38,6 +38,7 @@ import {
   toPublic,
 } from "./voice/companion";
 import { insertSystemMessage, userName } from "./services/groupService";
+import { createVoiceDropGrace } from "./voice/voiceDropGrace";
 import {
   CiderActivitySchema,
   normalizeCiderActivity,
@@ -83,6 +84,8 @@ const voiceRooms = new Map<string, Map<number, VoiceParticipant>>();
 const userVoiceRoom = new Map<number, string>();
 const voiceClientByUser = new Map<number, Client>();
 const voiceSessionByUser = new Map<number, string>();
+// Pending removals after an unintentional socket drop (see scheduleVoiceDrop).
+const voiceDropGrace = createVoiceDropGrace();
 type DmCallSession = {
   callId: string;
   conversationId: number;
@@ -822,7 +825,22 @@ async function voiceJoin(
   await broadcastVoiceParticipants(roomKey);
 }
 
+/**
+ * A dropped socket is not a hang-up: keep the voice seat for a short grace
+ * period so a quick reconnect can rejoin without ending the call. Only a
+ * rejoin of the same room (which runs voiceLeave first) or the timer's own
+ * removal clears it; intentional leaves still go through voiceLeave directly.
+ */
+function scheduleVoiceDrop(client: Client) {
+  if (voiceClientByUser.get(client.userId) !== client) return;
+  if (!userVoiceRoom.get(client.userId)) return;
+  voiceDropGrace.schedule(client.userId, () => {
+    voiceLeave(client).catch(() => {});
+  });
+}
+
 async function voiceLeave(client: Client, intentional = false) {
+  voiceDropGrace.cancel(client.userId);
   const activeVoiceClient = voiceClientByUser.get(client.userId);
   if (activeVoiceClient && activeVoiceClient !== client) return;
   const roomKey = userVoiceRoom.get(client.userId);
@@ -1689,7 +1707,7 @@ export function attachRealtime(server: HttpServer) {
       ws.on("close", () => {
         const wasLastConnection = (byUser.get(userId)?.size ?? 0) <= 1;
         removeClient(client);
-        voiceLeave(client).catch(() => {});
+        scheduleVoiceDrop(client);
         if (wasLastConnection && !byUser.has(userId)) {
           // A conexão caiu — e cair não é sair: a sessão espera o anfitrião
           // voltar dentro da carência (recarregar a página não pode encerrar a

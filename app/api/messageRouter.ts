@@ -28,6 +28,7 @@ import {
   sendToUsers,
 } from "./realtime";
 import { assertCanInteract } from "./services/accountSafety";
+import { filterMentionRecipients } from "./services/mentionRules";
 import { runAutomodForMessage } from "./services/automod/service";
 import { moderateTextMessage } from "./services/textModeration";
 import { blockedBetween } from "./services/groupService";
@@ -315,7 +316,6 @@ async function processMentions(
   msg: typeof schema.messages.$inferSelect
 ) {
   const db = getDb();
-  const mentionedIds = new Set<number>();
 
   if (msg.channelId) {
     const channel = await db.query.channels.findFirst({
@@ -327,29 +327,58 @@ async function processMentions(
       .from(schema.serverMembers)
       .where(eq(schema.serverMembers.serverId, channel.serverId));
 
-    if (content.includes("@everyone")) {
-      for (const m of members) mentionedIds.add(m.userId);
-    } else {
-      const usernames = [...content.matchAll(/@([a-zA-Z0-9_.-]+)/g)].map(m =>
-        m[1].toLowerCase()
+    const usernames = [...content.matchAll(/@([a-zA-Z0-9_.-]+)/g)].map(m =>
+      m[1].toLowerCase()
+    );
+    const memberIds = members.map(m => m.userId);
+    const memberUsers = memberIds.length
+      ? await db
+          .select({ id: schema.users.id, username: schema.users.username })
+          .from(schema.users)
+          .where(inArray(schema.users.id, memberIds))
+      : [];
+    const directlyMentioned = new Set(
+      memberUsers
+        .filter(u => u.username && usernames.includes(u.username.toLowerCase()))
+        .map(u => u.id)
+    );
+    const candidateIds = new Set<number>([
+      ...directlyMentioned,
+      ...(content.includes("@everyone") ? memberIds : []),
+    ]);
+    candidateIds.delete(authorId);
+    if (candidateIds.size === 0) return;
+
+    // Respeita as preferências de notificação do servidor de cada usuário.
+    const preferences = await db
+      .select()
+      .from(schema.serverNotificationPreferences)
+      .where(
+        and(
+          eq(schema.serverNotificationPreferences.serverId, channel.serverId),
+          inArray(schema.serverNotificationPreferences.userId, [...candidateIds]),
+        ),
       );
-      if (usernames.length > 0) {
-        for (const m of members) {
-          const user = await db.query.users.findFirst({
-            where: eq(schema.users.id, m.userId),
-          });
-          if (
-            user?.username &&
-            usernames.includes(user.username.toLowerCase())
-          ) {
-            mentionedIds.add(m.userId);
-          }
-        }
-      }
-    }
-    mentionedIds.delete(authorId);
-    if (mentionedIds.size > 0) {
-      await notifyUsers([...mentionedIds].slice(0, 20), {
+    const preferenceByUser = new Map(
+      preferences.map(preference => [preference.userId, preference])
+    );
+    const eligibleIds = filterMentionRecipients({
+      candidateIds: [...candidateIds],
+      directlyMentioned,
+      preferences: preferenceByUser,
+      now: Date.now(),
+    });
+
+    // Só notifica quem consegue ver o canal.
+    const visibleFlags = await Promise.all(
+      eligibleIds.map(async userId => {
+        const perms = await getEffectiveChannelPermissions(userId, channel);
+        return perms?.has("VIEW_CHANNEL") ?? false;
+      })
+    );
+    const mentionedIds = eligibleIds.filter((_, i) => visibleFlags[i]);
+    if (mentionedIds.length > 0) {
+      await notifyUsers(mentionedIds.slice(0, 20), {
         type: "mention",
         actorId: authorId,
         serverId: channel.serverId,
@@ -675,6 +704,7 @@ export const messageRouter = createRouter({
         tag: z.string().min(1).max(24).optional(),
         attachmentIds: z.array(z.number()).max(10).optional(),
         spoilerIds: z.array(z.number()).max(10).optional(),
+        clientNonce: z.string().min(1).max(64).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -756,16 +786,46 @@ export const messageRouter = createRouter({
         }
       }
 
-      const [{ id }] = await db
-        .insert(schema.messages)
-        .values({
-          channelId: input.channelId ?? null,
-          conversationId: input.conversationId ?? null,
-          authorId: ctx.user.id,
-          content,
-          replyToId: input.replyToId ?? null,
-        })
-        .$returningId();
+      // Idempotency: a retry of the same client send returns the original
+      // message instead of inserting a duplicate (see msg_author_nonce_uniq).
+      if (input.clientNonce) {
+        const existing = await db.query.messages.findFirst({
+          where: and(
+            eq(schema.messages.authorId, ctx.user.id),
+            eq(schema.messages.clientNonce, input.clientNonce)
+          ),
+        });
+        if (existing) {
+          return { message: await buildMessageDTO(existing) };
+        }
+      }
+
+      let id: number;
+      try {
+        [{ id }] = await db
+          .insert(schema.messages)
+          .values({
+            channelId: input.channelId ?? null,
+            conversationId: input.conversationId ?? null,
+            authorId: ctx.user.id,
+            content,
+            replyToId: input.replyToId ?? null,
+            clientNonce: input.clientNonce ?? null,
+          })
+          .$returningId();
+      } catch (error) {
+        // A concurrent retry won the unique (authorId, clientNonce) race.
+        const raced = input.clientNonce
+          ? await db.query.messages.findFirst({
+              where: and(
+                eq(schema.messages.authorId, ctx.user.id),
+                eq(schema.messages.clientNonce, input.clientNonce)
+              ),
+            })
+          : undefined;
+        if (raced) return { message: await buildMessageDTO(raced) };
+        throw error;
+      }
 
       // Attach previously uploaded files — only media already cleared by
       // content-safety may be published.

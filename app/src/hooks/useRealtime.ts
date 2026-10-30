@@ -35,6 +35,15 @@ export function useRealtime(myUserId: number | undefined) {
         utils.notification.list.invalidate();
         utils.official.unreadCount.invalidate();
         utils.official.list.invalidate();
+        // Recover messages sent while the socket was down in the open chat.
+        const view = getCurrentView();
+        if (view.channelId || view.conversationId) {
+          const key = view.channelId ? channelKey(view.channelId) : dmKey(view.conversationId!);
+          utils.client.message.list
+            .query({ channelId: view.channelId, conversationId: view.conversationId, limit: 50 })
+            .then(res => useAppStore.getState().mergeRecentMessages(key, res.messages))
+            .catch(() => {});
+        }
       }
     });
 
