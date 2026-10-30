@@ -1560,6 +1560,147 @@ export const appeals = mysqlTable(
   })
 );
 
+// ── Bots por servidor ──────────────────────────────────────────
+export const bots = mysqlTable(
+  "bots",
+  {
+    id: serial("id").primaryKey(),
+    serverId: bigint("serverId", { mode: "number", unsigned: true }).notNull(),
+    name: varchar("name", { length: 80 }).notNull(),
+    description: text("description"),
+    avatarUrl: text("avatarUrl"),
+    /** simple | advanced — modo de edição */
+    mode: mysqlEnum("mode", ["simple", "advanced"]).default("simple").notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    /** Para bots avançados: código JS/TS executado no sandbox */
+    code: text("code"),
+    /** Configuração visual dos nós (simple mode) — JSON serializado do React Flow */
+    nodesConfig: json("nodesConfig").$type<Record<string, unknown> | null>(),
+    createdByUserId: bigint("createdByUserId", {
+      mode: "number",
+      unsigned: true,
+    }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => ({
+    serverIdx: index("bot_server_idx").on(table.serverId),
+    creatorIdx: index("bot_creator_idx").on(table.createdByUserId),
+  }),
+);
+
+export const botTriggers = mysqlTable(
+  "bot_triggers",
+  {
+    id: serial("id").primaryKey(),
+    botId: bigint("botId", { mode: "number", unsigned: true }).notNull(),
+    /** Tipos de gatilho: message_create | message_update | message_delete | member_join | member_leave | member_ban | member_timeout | role_create | role_update | role_delete | channel_create | channel_update | channel_delete | reaction_add | reaction_remove | voice_join | voice_leave | voice_switch | scheduled | webhook | command */
+    type: varchar("type", { length: 48 }).notNull(),
+    /** Configuração específica do trigger (ex.: canal, palavra-chave, expressão cron) */
+    config: json("config").$type<Record<string, unknown> | null>(),
+    /** Condição adicional em código (advanced mode) — ex.: "event.message.content.includes('hello')" */
+    condition: text("condition"),
+    position: int("position").default(0).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    botIdx: index("bt_bot_idx").on(table.botId),
+    typeIdx: index("bt_type_idx").on(table.type),
+  }),
+);
+
+export const botActions = mysqlTable(
+  "bot_actions",
+  {
+    id: serial("id").primaryKey(),
+    botId: bigint("botId", { mode: "number", unsigned: true }).notNull(),
+    triggerId: bigint("triggerId", { mode: "number", unsigned: true }),
+    /** Tipos de ação: send_message | send_embed | reply | edit_message | delete_message | add_role | remove_role | timeout_member | kick_member | ban_member | create_channel | delete_channel | send_dm | webhook_call | run_code | delay | conditional_branch | log_audit */
+    type: varchar("type", { length: 48 }).notNull(),
+    /** Configuração da ação (ex.: canal, mensagem, cargo, duração, código) */
+    config: json("config").$type<Record<string, unknown> | null>(),
+    /** Código customizado para ações 'run_code' ou condições avançadas */
+    code: text("code"),
+    position: int("position").default(0).notNull(),
+    /** Permite encadeamento: próximo actionId (para fluxo linear) */
+    nextActionId: bigint("nextActionId", { mode: "number", unsigned: true }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    botIdx: index("ba_bot_idx").on(table.botId),
+    triggerIdx: index("ba_trigger_idx").on(table.triggerId),
+  }),
+);
+
+export const botNodes = mysqlTable(
+  "bot_nodes",
+  {
+    id: serial("id").primaryKey(),
+    botId: bigint("botId", { mode: "number", unsigned: true }).notNull(),
+    /** node type: trigger | action | condition | delay | code | output */
+    nodeType: mysqlEnum("nodeType", ["trigger", "action", "condition", "delay", "code", "output"]).notNull(),
+    /** trigger/action type reference */
+    refType: varchar("refType", { length: 48 }),
+    /** Posição no canvas (React Flow) */
+    positionX: int("positionX").default(0).notNull(),
+    positionY: int("positionY").default(0).notNull(),
+    /** Dados do nó (configuração visual) */
+    data: json("data").$type<Record<string, unknown> | null>(),
+    /** ID do nó pai no fluxo (para árvore) */
+    parentId: bigint("parentId", { mode: "number", unsigned: true }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    botIdx: index("bn_bot_idx").on(table.botId),
+  }),
+);
+
+export const botEdges = mysqlTable(
+  "bot_edges",
+  {
+    id: serial("id").primaryKey(),
+    botId: bigint("botId", { mode: "number", unsigned: true }).notNull(),
+    sourceNodeId: bigint("sourceNodeId", { mode: "number", unsigned: true }).notNull(),
+    targetNodeId: bigint("targetNodeId", { mode: "number", unsigned: true }).notNull(),
+    /** handle/source handle (ex.: "true" / "false" para conditions) */
+    sourceHandle: varchar("sourceHandle", { length: 32 }),
+    targetHandle: varchar("targetHandle", { length: 32 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  (table) => ({
+    botIdx: index("be_bot_idx").on(table.botId),
+    sourceIdx: index("be_source_idx").on(table.sourceNodeId),
+    targetIdx: index("be_target_idx").on(table.targetNodeId),
+  }),
+);
+
+export const botExecutions = mysqlTable(
+  "bot_executions",
+  {
+    id: serial("id").primaryKey(),
+    botId: bigint("botId", { mode: "number", unsigned: true }).notNull(),
+    triggerId: bigint("triggerId", { mode: "number", unsigned: true }),
+    triggerType: varchar("triggerType", { length: 48 }),
+    /** status: success | failed | timeout | cancelled */
+    status: mysqlEnum("status", ["success", "failed", "timeout", "cancelled"]).notNull(),
+    /** Contexto da execução (evento que disparou) */
+    context: json("context").$type<Record<string, unknown> | null>(),
+    /** Resultado das actions executadas */
+    result: json("result").$type<Record<string, unknown> | null>(),
+    error: text("error"),
+    startedAt: timestamp("startedAt").defaultNow().notNull(),
+    completedAt: timestamp("completedAt"),
+  },
+  (table) => ({
+    botIdx: index("bex_bot_idx").on(table.botId),
+    statusIdx: index("bex_status_idx").on(table.status),
+    startedIdx: index("bex_started_idx").on(table.startedAt),
+  }),
+);
+
 // ── AutoMod por servidor ──────────────────────────────────────
 export const automodRules = mysqlTable(
   "automod_rules",
@@ -1850,6 +1991,13 @@ export type SafetyAuditEvent = typeof safetyAuditEvents.$inferSelect;
 export type AccountSession = typeof accountSessions.$inferSelect;
 export type UserConnection = typeof userConnections.$inferSelect;
 export type RobloxActivity = typeof robloxActivity.$inferSelect;
+export type Bot = typeof bots.$inferSelect;
+export type InsertBot = typeof bots.$inferInsert;
+export type BotTrigger = typeof botTriggers.$inferSelect;
+export type BotAction = typeof botActions.$inferSelect;
+export type BotNode = typeof botNodes.$inferSelect;
+export type BotEdge = typeof botEdges.$inferSelect;
+export type BotExecution = typeof botExecutions.$inferSelect;
 export type ExternalOauthState = typeof externalOauthStates.$inferSelect;
 export type LiveRoom = typeof liveRooms.$inferSelect;
 export type RichPresenceActivity = typeof richPresenceActivities.$inferSelect;
