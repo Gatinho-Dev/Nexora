@@ -273,6 +273,7 @@ export function MessageInput({
   const [recordSeconds, setRecordSeconds] = useState(0);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingSendRef = useRef<{ key: string; nonce: string } | null>(null);
 
   const send = trpc.message.send.useMutation({
     onError: e => toast.error(e.message),
@@ -619,6 +620,14 @@ export function MessageInput({
       toast.error("Verificando mídia... Aguarde a análise de segurança.");
       return;
     }
+    // One nonce per logical message: a retry after a lost response reuses it
+    // so the server returns the original message instead of duplicating it.
+    const attachmentIds = files.map(f => f.id);
+    const spoilers = spoilerIds.filter(id => files.some(f => f.id === id));
+    const payloadKey = JSON.stringify([channelId, conversationId, content, replyingTo?.id, threadId, attachmentIds, spoilers]);
+    if (!pendingSendRef.current || pendingSendRef.current.key !== payloadKey) {
+      pendingSendRef.current = { key: payloadKey, nonce: crypto.randomUUID() };
+    }
     send.mutate(
       {
         channelId,
@@ -626,11 +635,13 @@ export function MessageInput({
         content,
         replyToId: replyingTo?.id,
         threadId,
-        attachmentIds: files.map(f => f.id),
-        spoilerIds: spoilerIds.filter(id => files.some(f => f.id === id)),
+        attachmentIds,
+        spoilerIds: spoilers,
+        clientNonce: pendingSendRef.current.nonce,
       },
       {
         onSuccess: () => {
+          pendingSendRef.current = null;
           setText("");
           clearDraft();
           setFiles([]);

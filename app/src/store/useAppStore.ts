@@ -142,6 +142,7 @@ type AppState = {
   setMessages: (key: string, msgs: MessageDTO[], hasMore: boolean) => void;
   prependMessages: (key: string, older: MessageDTO[], hasMore: boolean) => void;
   addMessage: (msg: MessageDTO) => void;
+  mergeRecentMessages: (key: string, recent: MessageDTO[]) => void;
   updateMessage: (msg: MessageDTO) => void;
   upsertMessage: (msg: MessageDTO) => void;
   removeMessage: (key: string, id: number) => void;
@@ -292,6 +293,25 @@ export const useAppStore = create<AppState>(set => ({
       // Cap de memória: mantém no máx. as 200 mais recentes por canal
       // (histórico completo continua no banco e paginável por scroll).
       const next = [...list, msg];
+      return {
+        messages: {
+          ...s.messages,
+          [key]: next.length > 200 ? next.slice(next.length - 200) : next,
+        },
+      };
+    }),
+
+  // Reconciles a fresh page after reconnect: adds only ids missing locally and
+  // keeps the loaded (possibly older) history, so nothing sent during the drop
+  // is lost and nothing already shown is duplicated.
+  mergeRecentMessages: (key, recent) =>
+    set(s => {
+      const list = s.messages[key];
+      if (!list) return s;
+      const known = new Set(list.map(m => m.id));
+      const missing = recent.filter(m => !known.has(m.id));
+      if (missing.length === 0) return s;
+      const next = [...list, ...missing].sort((a, b) => a.id - b.id);
       return {
         messages: {
           ...s.messages,

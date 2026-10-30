@@ -100,3 +100,32 @@ describe("server rail aggregation", () => {
     );
   });
 });
+
+describe("mergeRecentMessages after reconnect", () => {
+  const msg = (id: number) =>
+    ({ id, channelId: 7, conversationId: null, content: `m${id}` }) as never;
+
+  beforeEach(() => {
+    useAppStore.setState({ messages: {} });
+  });
+
+  it("adds only missing messages and keeps them in id order", () => {
+    useAppStore.setState({ messages: { "c:7": [msg(1), msg(2), msg(4)] } });
+    useAppStore.getState().mergeRecentMessages("c:7", [msg(2), msg(3), msg(5)]);
+    expect(
+      useAppStore.getState().messages["c:7"].map(m => m.id),
+    ).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("is a no-op when every message is already known", () => {
+    const list = [msg(1), msg(2)];
+    useAppStore.setState({ messages: { "c:7": list } });
+    useAppStore.getState().mergeRecentMessages("c:7", [msg(1), msg(2)]);
+    expect(useAppStore.getState().messages["c:7"]).toBe(list);
+  });
+
+  it("does not create a list for a conversation that was never loaded", () => {
+    useAppStore.getState().mergeRecentMessages("c:9", [msg(1)]);
+    expect(useAppStore.getState().messages["c:9"]).toBeUndefined();
+  });
+});

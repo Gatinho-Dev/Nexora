@@ -7,6 +7,7 @@ import { MessageItem } from "./MessageItem";
 import { IconHash } from "../icons/channelIcons";
 import { MessageInput } from "./MessageInput";
 import { useChatUIStore } from "@/store/useChatUIStore";
+import { useSearchParams } from "react-router";
 import {
   Loader2,
   ArrowDown,
@@ -58,6 +59,9 @@ export function ChatArea({
   topPanel,
 }: Props) {
   const utils = trpc.useUtils();
+  const [searchParams] = useSearchParams();
+  // Notificações de menção levam a ?message=<id>; esse alvo tem prioridade.
+  const targetMessageId = Number(searchParams.get("message")) || null;
   const key = channelId ? channelKey(channelId) : dmKey(conversationId!);
   const messages = useAppStore(s => s.messages[key]);
   const hasMore = useAppStore(s => s.hasMore[key] ?? false);
@@ -127,10 +131,12 @@ export function ChatArea({
   useEffect(() => {
     if (!unreadQuery.isSuccess) return;
     let cancelled = false;
-    const initialUnreadMessageId =
-      unreadState?.firstUnreadMessageId ?? firstUnreadMessageId ?? undefined;
-    // Com unread real, começamos no divisor; sem unread, no presente.
-    stickToBottom.current = !initialUnreadMessageId;
+    const initialUnreadMessageId = targetMessageId
+      ? undefined
+      : (unreadState?.firstUnreadMessageId ?? firstUnreadMessageId ?? undefined);
+    const anchorMessageId = targetMessageId ?? initialUnreadMessageId;
+    // Com alvo ou unread real, começamos no ponto; sem nenhum, no presente.
+    stickToBottom.current = !anchorMessageId;
     seenCountRef.current = 0;
     const timeout = setTimeout(() => {
       if (!cancelled) {
@@ -147,14 +153,20 @@ export function ChatArea({
       .query({
         channelId,
         conversationId,
-        limit: initialUnreadMessageId ? 100 : 50,
-        around: initialUnreadMessageId,
+        limit: anchorMessageId ? 100 : 50,
+        around: anchorMessageId,
       })
       .then(res => {
         if (cancelled) return;
         useAppStore.getState().setMessages(key, res.messages, res.hasMore);
         setLoading(false);
         requestAnimationFrame(() => {
+          if (targetMessageId) {
+            document
+              .getElementById(`msg-${targetMessageId}`)
+              ?.scrollIntoView({ block: "center", behavior: "auto" });
+            return;
+          }
           if (initialUnreadMessageId) {
             const boundary = document.getElementById(
               `unread-${initialUnreadMessageId}`,
@@ -178,7 +190,7 @@ export function ChatArea({
       setCurrentView({});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelId, conversationId, reloadTick, unreadQuery.isSuccess]);
+  }, [channelId, conversationId, reloadTick, unreadQuery.isSuccess, targetMessageId]);
 
   // Uma conversa em segundo plano continua não lida até voltar ao foco. Só
   // marcamos como lida se o usuário já estava no presente do histórico.
