@@ -445,17 +445,180 @@ export type ModerationCaseDTO = {
   updatedAt: string | Date;
 };
 
-export type AccountSessionDTO = {
-  id: string;
-  friendlyName: string;
-  browser: string;
-  os: string;
-  deviceType: "desktop" | "mobile" | "tablet" | "unknown";
-  ipAddress: string | null;
+export type BotExecutionStatus = "success" | "failed" | "timeout" | "cancelled";
+
+export type BotTriggerType =
+  | "message_create"
+  | "message_update"
+  | "message_delete"
+  | "member_join"
+  | "member_leave"
+  | "member_ban"
+  | "member_timeout"
+  | "role_create"
+  | "role_update"
+  | "role_delete"
+  | "channel_create"
+  | "channel_update"
+  | "channel_delete"
+  | "reaction_add"
+  | "reaction_remove"
+  | "voice_join"
+  | "voice_leave"
+  | "voice_switch"
+  | "scheduled"
+  | "webhook"
+  | "command";
+
+export type BotActionType =
+  | "send_message"
+  | "send_embed"
+  | "reply"
+  | "edit_message"
+  | "delete_message"
+  | "add_role"
+  | "remove_role"
+  | "timeout_member"
+  | "kick_member"
+  | "ban_member"
+  | "create_channel"
+  | "delete_channel"
+  | "send_dm"
+  | "webhook_call"
+  | "run_code"
+  | "delay"
+  | "conditional_branch"
+  | "log_audit";
+
+export type BotNodeType = "trigger" | "action" | "condition" | "delay" | "code" | "output";
+
+export type BotMode = "simple" | "advanced";
+
+export type BotDTO = {
+  id: number;
+  serverId: number;
+  name: string;
+  description: string | null;
+  avatarUrl: string | null;
+  mode: BotMode;
+  enabled: boolean;
+  code: string | null;
+  nodesConfig: Record<string, unknown> | null;
+  createdByUserId: number;
   createdAt: string | Date;
-  lastSeenAt: string | Date;
-  /** True para a sessão que fez esta requisição. */
-  isCurrent?: boolean;
+  updatedAt: string | Date;
+};
+
+export type BotTriggerDTO = {
+  id: number;
+  botId: number;
+  type: BotTriggerType;
+  config: Record<string, unknown> | null;
+  condition: string | null;
+  position: number;
+  createdAt: string | Date;
+};
+
+export type BotActionDTO = {
+  id: number;
+  botId: number;
+  triggerId: number | null;
+  type: BotActionType;
+  config: Record<string, unknown> | null;
+  code: string | null;
+  position: number;
+  nextActionId: number | null;
+  createdAt: string | Date;
+};
+
+export type BotNodeDTO = {
+  id: number;
+  botId: number;
+  nodeType: BotNodeType;
+  refType: string | null;
+  positionX: number;
+  positionY: number;
+  data: Record<string, unknown> | null;
+  parentId: number | null;
+  createdAt: string | Date;
+};
+
+export type BotEdgeDTO = {
+  id: number;
+  botId: number;
+  sourceNodeId: number;
+  targetNodeId: number;
+  sourceHandle: string | null;
+  targetHandle: string | null;
+  createdAt: string | Date;
+};
+
+export type BotExecutionDTO = {
+  id: number;
+  botId: number;
+  triggerId: number | null;
+  triggerType: BotTriggerType | null;
+  status: BotExecutionStatus;
+  context: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  startedAt: string | Date;
+  completedAt: string | Date | null;
+};
+
+export type BotWithRelationsDTO = BotDTO & {
+  triggers: BotTriggerDTO[];
+  actions: BotActionDTO[];
+  nodes: BotNodeDTO[];
+  edges: BotEdgeDTO[];
+};
+
+export type CreateBotInput = {
+  serverId: number;
+  name: string;
+  description?: string | null;
+  avatarUrl?: string | null;
+  mode?: BotMode;
+  code?: string | null;
+  nodesConfig?: Record<string, unknown> | null;
+};
+
+export type UpdateBotInput = Partial<CreateBotInput> & { id: number };
+
+export type CreateTriggerInput = {
+  botId: number;
+  type: BotTriggerType;
+  config?: Record<string, unknown> | null;
+  condition?: string | null;
+  position?: number;
+};
+
+export type CreateActionInput = {
+  botId: number;
+  triggerId?: number | null;
+  type: BotActionType;
+  config?: Record<string, unknown> | null;
+  code?: string | null;
+  position?: number;
+  nextActionId?: number | null;
+};
+
+export type CreateNodeInput = {
+  botId: number;
+  nodeType: BotNodeType;
+  refType?: string | null;
+  positionX: number;
+  positionY: number;
+  data?: Record<string, unknown> | null;
+  parentId?: number | null;
+};
+
+export type CreateEdgeInput = {
+  botId: number;
+  sourceNodeId: number;
+  targetNodeId: number;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
 };
 
 export type SafetyAiStatusDTO = {  provider: string;

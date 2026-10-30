@@ -1,6 +1,6 @@
 import { format, isToday } from "date-fns";
 import { HelpCircle, Monitor, Smartphone, Tablet } from "lucide-react";
-import type { AccountSessionDTO } from "@contracts/types";
+import type { AccountSession } from "@contracts/types";
 import { trpc } from "@/providers/trpc";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,11 +21,11 @@ import {
  * Configurações → Minha Conta → Dispositivos conectados
  *
  * Observação: o backend ainda não retorna `currentSessionId` na lista
- * (AccountSessionDTO), portanto nenhuma sessão recebe badge de
+ * (AccountSession), portanto nenhuma sessão recebe badge de
  * "sessão atual" — apenas a lista, encerramento individual e em massa.
  */
 
-const DEVICE_ICONS: Record<AccountSessionDTO["deviceType"], typeof Monitor> = {
+const DEVICE_ICONS: Record<AccountSession["deviceType"], typeof Monitor> = {
   desktop: Monitor,
   mobile: Smartphone,
   tablet: Tablet,
@@ -101,7 +101,7 @@ export function DevicesSection() {
         <div className="grid max-w-2xl grid-cols-1 gap-3">
           {list.map(session => {
             const Icon =
-              DEVICE_ICONS[session.deviceType as AccountSessionDTO["deviceType"]] ??
+              DEVICE_ICONS[session.deviceType as AccountSession["deviceType"]] ??
               HelpCircle;
             return (
               <div
