@@ -5,3 +5,6 @@
 
 export * from './bot';
 export * from './node-definitions';
+
+// Explicit re-exports for esbuild compatibility
+export type { ValidationError } from './bot';

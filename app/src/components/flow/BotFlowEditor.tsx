@@ -48,12 +48,12 @@ import {
   FlowEdge,
   Viewport,
   NodeDefinition,
-  ValidationError,
   NodeCategory,
   allNodeDefinitions,
   nodeCategories,
   getNodeDefinition,
 } from '@/types/bots';
+import type { ValidationError } from '@/types/bots/bot';
 
 // ============================================
 // Custom Hooks
