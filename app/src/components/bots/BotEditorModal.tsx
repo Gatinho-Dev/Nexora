@@ -8,8 +8,8 @@ import {
   Bot,
   BotMode,
   BotFlow,
-  ValidationError,
 } from '@/types/bots';
+import type { ValidationError } from '@/types/bots/bot';
 import { BotFlowEditor } from '@/components/flow/BotFlowEditor';
 import { renderIcon } from '@/components/flow/nodes/FlowNodes';
 

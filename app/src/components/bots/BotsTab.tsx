@@ -5,17 +5,14 @@ import { useBots } from "@/hooks/useBots";
 import type { Bot } from "@/types/bots";
 
 export const BotsTab: React.FC<{ serverId: number }> = ({ serverId }) => {
-  const { list, adaptBots, toggle, deleteBot, create } = useBots();
+  const { list, adaptBots, toggle, deleteBot, create, update, adaptBotForCreate, adaptBotForUpdate } = useBots();
   const query = list({ serverId });
   const bots = query.data ? adaptBots(query.data as any) : [];
   const [editingBot, setEditingBot] = useState<Bot | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   const handleCreate = async (botData: Partial<Bot> & { mode: "simple" | "advanced" }) => {
-    await create.mutateAsync({
-      ...botData,
-      serverId,
-    } as any);
+    await create.mutateAsync(adaptBotForCreate({ ...botData, serverId }));
     setIsCreating(false);
     query.refetch();
   };
@@ -26,10 +23,7 @@ export const BotsTab: React.FC<{ serverId: number }> = ({ serverId }) => {
 
   const handleSaveEdit = async (botData: Partial<Bot> & { mode: "simple" | "advanced" }) => {
     if (editingBot) {
-      await update.mutateAsync({
-        ...botData,
-        id: Number(editingBot.id),
-      } as any);
+      await update.mutateAsync(adaptBotForUpdate({ ...botData, id: Number(editingBot.id) }));
       setEditingBot(null);
       query.refetch();
     }
@@ -53,15 +47,15 @@ export const BotsTab: React.FC<{ serverId: number }> = ({ serverId }) => {
   };
 
   const handleDuplicate = async (bot: Bot) => {
-    await create.mutateAsync({
+    await create.mutateAsync(adaptBotForCreate({
       serverId,
       name: `${bot.name} (Cópia)`,
       description: bot.description,
       avatarUrl: bot.avatarUrl,
       mode: bot.mode,
       code: bot.code,
-      nodesConfig: bot.flow,
-    } as any);
+      flow: bot.flow,
+    }));
     query.refetch();
   };
 
