@@ -29,9 +29,11 @@ import {
   SlidersHorizontal,
   Upload,
   UserCog,
+  Bot,
   Users,
   X,
 } from "lucide-react";
+import { BotsTab } from "@/components/bots/BotsTab";
 import type { ServerDetailsDTO, RoleDTO } from "@contracts/types";
 import { PERMISSIONS, type Permission } from "@contracts/constants";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -116,7 +118,8 @@ type Tab =
   | "notifications"
   | "danger"
   | "permissions"
-  | "integrations";
+  | "integrations"
+  | "bots";
 
 export function ServerSettingsModal({
   open,
@@ -153,6 +156,7 @@ export function ServerSettingsModal({
     { id: "moderation", label: "Segurança e AutoMod", group: "Segurança", icon: Shield, visible: canBan || canManageServer },
     { id: "audit", label: "Registro de auditoria", group: "Segurança", icon: FileClock, visible: canManageServer },
     { id: "integrations", label: "Integrações", group: "Aplicativos", icon: SlidersHorizontal, visible: canManageServer },
+    { id: "bots", label: "Bots", group: "Aplicativos", icon: Bot, visible: canManageServer },
     { id: "notifications", label: "Notificações", group: "Pessoal", icon: Bell, visible: true },
     { id: "danger", label: "Transferir ou excluir", group: "Servidor", icon: UserCog, visible: isOwner, danger: true },
   ];
@@ -261,6 +265,7 @@ export function ServerSettingsModal({
                 {activeTab === "overview" && <OverviewTab details={details} />}
                 {activeTab === "permissions" && <PermissionsTab details={details} />}
                 {activeTab === "integrations" && <IntegrationsTab details={details} />}
+                {activeTab === "bots" && <BotsTab serverId={details.server.id} />}
                 {activeTab === "roles" && <RolesTab details={details} />}
                 {activeTab === "members" && (
                   <MembersTab

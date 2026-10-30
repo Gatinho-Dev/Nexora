@@ -1,0 +1,5 @@
+// PATCH REFERENCE — adicionar aba "Bots" no ServerSettingsModal (seção Integracoes)
+// Verificar permissao MANAGE_SERVER antes de renderizar
+// Link para /server/:serverId/settings/integrations/bots (rota nova, nao ainda registrada em router)
+// Componentes usados: ServerBotsList + BotEditorModal (prioridade 1)
+// NOTA: nao editar ServerSettingsModal.tsx (91KB) diretamente — aguardar confirmacao do Atlas/Pixel
