@@ -6,6 +6,7 @@ Nexora é uma plataforma de comunicação em tempo real com comunidades, canais 
 
 - **Cider** — player de música em `/cider`, que roda no navegador e publica a
   faixa atual como presença na conta. Ver [`docs/cider.md`](docs/cider.md).
+- **Bots** — sistema de automação de servidores com editor visual de fluxos (Modo Simples) e scripts TypeScript com Monaco Editor (Modo Avançado). Ver [`docs/bots.md`](docs/bots.md).
 
 ## Arquitetura
 
