@@ -148,7 +148,6 @@ export const NODE_CATEGORIES: Record<NodeType, NodeCategory> = {
   send_dm: 'action',
   webhook_call: 'action',
   run_code: 'action',
-  delay: 'action',
   log_audit: 'action',
   reply_message: 'action',
   edit_message: 'action',

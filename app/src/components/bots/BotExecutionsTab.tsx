@@ -1,10 +1,18 @@
+/**
+ * Nexora Bots - Bot Executions Tab
+ * Paginated list of bot executions with detail modal
+ */
+
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import type {
+import {
   BotExecution,
   ExecutionStatus,
-} from '@/types/bots';
+} from '@/contracts/bots';
+import {
+  BotExecutionsTabProps,
+  ExecutionDetailModalProps,
+} from '@/contracts/bots';
 import { renderIcon } from '@/components/flow/nodes/FlowNodes';
-import { useBots } from '@/hooks/useBots';
 
 // ============================================
 // Status Badge
@@ -172,12 +180,6 @@ const ExecutionRow = memo(function ExecutionRow({
 // Execution Detail Modal
 // ============================================
 
-interface ExecutionDetailModalProps {
-  execution: BotExecution | null;
-  isOpen: boolean;
-  onClose: () => void;
-}
-
 export const ExecutionDetailModal = memo(function ExecutionDetailModal({
   execution,
   isOpen,
@@ -189,7 +191,7 @@ export const ExecutionDetailModal = memo(function ExecutionDetailModal({
 
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="execution-detail-title">
-      <div className="modal-content max-w-4xl w-full mx-4 max-h-[90vh]" onClick={e => e.stopPropagation()}>
+      <div className="modal-content max-w-4xl w-full mx-4 max-h-[90vh]">
         <div className="modal-header">
           <div className="flex items-center gap-3">
             <StatusBadge status={execution.status} />
@@ -449,45 +451,36 @@ const ExecutionsEmptyState = memo(function ExecutionsEmptyState({ hasFilters }: 
 // Bot Executions Tab
 // ============================================
 
-interface BotExecutionsTabProps {
-  botId: number;
-  serverId: number;
-}
-
 export const BotExecutionsTab = memo(function BotExecutionsTab({
   botId,
+  serverId,
 }: BotExecutionsTabProps) {
-  const { listExecutions, adaptExecutions } = useBots();
-  
-  const [executions, setExecutions] = useState<BotExecution[]>([]);
+  // In a real app, this would fetch from an API
+  const [executions, _setExecutions] = useState<BotExecution[]>([]);
   const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [cursor, setCursor] = useState<number | undefined>(undefined);
+  const [totalCount, _setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [statusFilter, setStatusFilter] = useState<ExecutionStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedExecution, setSelectedExecution] = useState<BotExecution | null>(null);
 
-  const query = listExecutions({ botId, limit: pageSize, cursor });
-
-  useEffect(() => {
-    if (query.data) {
-      const adapted = adaptExecutions(query.data.items as any);
-      setExecutions(adapted);
-      setHasMore(query.data.hasMore);
-      if (adapted.length > 0) {
-        setCursor(Number(adapted[adapted.length - 1].id));
-      }
-    }
-  }, [query.data, adaptExecutions]);
-
-  useEffect(() => {
-    if (!query.isLoading && !query.isFetching) {
+  const fetchExecutions = useCallback(async () => {
+    setLoading(true);
+    try {
+      // Simulate API call
+      await new Promise((r) => setTimeout(r, 500));
+      // In real app: const response = await api.getExecutions({ botId, serverId, page, pageSize, status: statusFilter, search: searchQuery });
+      // _setExecutions(response.data);
+      // _setTotalCount(response.total);
+    } finally {
       setLoading(false);
-    } else {
-      setLoading(true);
     }
-  }, [query.isLoading, query.isFetching]);
+  }, [botId, serverId, page, pageSize, statusFilter, searchQuery]);
+
+  useEffect(() => {
+    fetchExecutions();
+  }, [fetchExecutions]);
 
   const handleView = useCallback((execution: BotExecution) => {
     setSelectedExecution(execution);
@@ -499,8 +492,8 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
 
   const handleRetry = useCallback(async (_execution: BotExecution) => {
     // In real app: await api.retryExecution(_execution.id);
-    query.refetch();
-  }, [query]);
+    fetchExecutions();
+  }, [fetchExecutions]);
 
   const handleExport = useCallback(() => {
     // const _csvData = executions.map((e) => ({
@@ -520,7 +513,7 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
       <ExecutionsToolbar
         totalCount={totalCount}
         loading={loading}
-        onRefresh={() => query.refetch()}
+        onRefresh={fetchExecutions}
         onExport={handleExport}
         statusFilter={statusFilter}
         onStatusChange={setStatusFilter}
@@ -549,23 +542,25 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
           </div>
         )}
 
-        {/* Load More */}
-        {hasMore && (
-          <div className="p-4 border-t border-surface-border flex justify-center">
+        {/* Pagination */}
+        {totalCount > pageSize && (
+          <div className="p-4 border-t border-surface-border flex items-center justify-center gap-2">
             <button
-              onClick={() => query.refetch()}
-              disabled={loading}
-              className="btn btn-secondary"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+              className="btn btn-secondary btn-sm"
             >
-              {loading ? (
-                <>
-                  {renderIcon('RefreshCw', 14, 'animate-spin')} Loading...
-                </>
-              ) : (
-                <>
-                  {renderIcon('Download', 14)} Load More
-                </>
-              )}
+              {renderIcon('ChevronLeft', 14)} Previous
+            </button>
+            <span className="text-sm text-text-tertiary px-4">
+              Page {page} of {Math.ceil(totalCount / pageSize)}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
+              disabled={page >= Math.ceil(totalCount / pageSize) || loading}
+              className="btn btn-secondary btn-sm"
+            >
+              Next {renderIcon('ChevronRight', 14)}
             </button>
           </div>
         )}

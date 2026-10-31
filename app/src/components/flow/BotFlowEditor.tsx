@@ -19,7 +19,6 @@ import ReactFlow, {
   useEdgesState,
   useReactFlow,
   addEdge,
-  Connection,
   Node,
   Edge,
   OnNodesChange,
@@ -48,12 +47,12 @@ import {
   FlowEdge,
   Viewport,
   NodeDefinition,
+  ValidationError,
   NodeCategory,
   allNodeDefinitions,
   nodeCategories,
   getNodeDefinition,
-} from '@/types/bots';
-import type { ValidationError } from '@/types/bots/bot';
+} from '@/contracts/bots';
 
 // ============================================
 // Custom Hooks

@@ -4,7 +4,7 @@
  */
 
 import React, { memo, useState, useCallback, useEffect } from 'react';
-import { Bot, BotStatus, BotMode, BotListParams } from '@/types/bots';
+import { Bot, BotStatus, BotMode, BotListParams } from '@/contracts/bots';
 import { BotListItem } from './BotListItem';
 import { renderIcon } from '@/components/flow/nodes/FlowNodes';
 
@@ -16,14 +16,14 @@ const EmptyState = memo(function EmptyState({ onCreate }: { onCreate: () => void
   return (
     <div className="flex-1 flex flex-col items-center justify-center py-16 px-6 text-center">
       <div className="w-20 h-20 rounded-2xl bg-surface-tertiary flex items-center justify-center mb-6 text-text-tertiary">
-        {renderIcon('Plus', 40)}
+        {renderIcon('Plus',  40)}
       </div>
       <h3 className="text-lg font-medium text-text-primary mb-2">No bots yet</h3>
       <p className="text-text-tertiary mb-6 max-w-sm">
         Create your first bot to automate tasks, moderate chats, or build custom workflows.
       </p>
       <button onClick={onCreate} className="btn btn-primary">
-        {renderIcon('Plus', 16)}
+        {renderIcon('Plus',  16)}
         Create Bot
       </button>
     </div>
@@ -94,7 +94,7 @@ const SearchFilterBar = memo(function SearchFilterBar({
       {/* Search */}
       <div className="relative flex-1 min-w-[200px]">
         <div className="relative">
-          {renderIcon('Search', 16, 'var(--color-text-tertiary)', 'absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none')}
+          {renderIcon('Search',  16, 'var(--color-text-tertiary)', 'absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none')}
           <input
             type="text"
             value={searchQuery}
@@ -164,7 +164,7 @@ const SearchFilterBar = memo(function SearchFilterBar({
             aria-label="Grid view"
             aria-pressed={viewMode === 'grid'}
           >
-            {renderIcon('Grid', 16)}
+            {renderIcon('Grid',  16)}
           </button>
           <button
             onClick={() => onViewModeChange('list')}
@@ -172,7 +172,7 @@ const SearchFilterBar = memo(function SearchFilterBar({
             aria-label="List view"
             aria-pressed={viewMode === 'list'}
           >
-            {renderIcon('List', 16)}
+            {renderIcon('List',  16)}
           </button>
         </div>
       </div>
@@ -250,7 +250,7 @@ export const ServerBotsList = memo(function ServerBotsList({
         <div className="p-4 border-b border-surface-border flex items-center justify-between">
           <h2 className="text-lg font-semibold text-text-primary">Bots</h2>
           <button onClick={onCreate} className="btn btn-primary btn-sm">
-            {renderIcon('Plus', 14)}
+            {renderIcon('Plus',  14)}
             New Bot
           </button>
         </div>
@@ -267,13 +267,13 @@ export const ServerBotsList = memo(function ServerBotsList({
           <h2 className="text-lg font-semibold text-text-primary">Bots</h2>
           {showFilters && (
             <span className="badge badge-primary">
-              {renderIcon('Filter', 12)}
+              {renderIcon('Filter',  12)}
               Filters active
             </span>
           )}
         </div>
         <button onClick={onCreate} className="btn btn-primary">
-          {renderIcon('Plus', 14)}
+          {renderIcon('Plus',  14)}
           New Bot
         </button>
       </div>

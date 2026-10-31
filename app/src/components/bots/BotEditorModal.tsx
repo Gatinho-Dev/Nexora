@@ -4,12 +4,12 @@
  */
 
 import React, { memo, useState, useCallback, useEffect, useRef } from 'react';
-import type {
+import {
   Bot,
   BotMode,
   BotFlow,
-} from '@/types/bots';
-import type { ValidationError } from '@/types/bots/bot';
+  ValidationError,
+} from '@/contracts/bots';
 import { BotFlowEditor } from '@/components/flow/BotFlowEditor';
 import { renderIcon } from '@/components/flow/nodes/FlowNodes';
 
@@ -477,7 +477,7 @@ export const BotEditorModal = memo(function BotEditorModal({
 
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="editor-title">
-      <div className="modal-content w-full max-w-4xl max-h-[90vh]" onClick={e => e.stopPropagation()}>
+      <div className="modal-content w-full max-w-4xl max-h-[90vh]">
         {/* Header */}
         <div className="modal-header">
           <h2 id="editor-title" className="text-lg font-semibold text-text-primary">
