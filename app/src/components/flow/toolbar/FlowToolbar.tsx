@@ -305,7 +305,7 @@ export const KeyboardShortcutsModal = memo(function KeyboardShortcutsModal({
 
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
-      <div className="modal-content max-w-2xl w-full mx-4 max-h-[80vh]">
+      <div className="modal-content max-w-2xl w-full mx-4 max-h-[80vh]" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2 id="shortcuts-title" className="text-lg font-semibold text-text-primary">Keyboard Shortcuts</h2>
           <button onClick={onClose} className="p-1.5 rounded hover:bg-surface-hover text-text-tertiary hover:text-text-primary transition-colors" aria-label="Close">

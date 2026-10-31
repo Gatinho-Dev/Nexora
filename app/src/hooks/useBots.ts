@@ -86,9 +86,9 @@ export const useBots = () => {
 
   // Adapter functions for components
   const adaptBots = useCallback((dtos: BotDTO[]): Bot[] => dtos.map(adaptBot), []);
-  const adaptBot = useCallback(adaptBot, []);
+  const adaptBotAdapter = useCallback((dto: BotDTO): Bot => adaptBot(dto), []);
   const adaptExecutions = useCallback((dtos: BotExecutionDTO[]): BotExecution[] => dtos.map(adaptExecution), []);
-  const adaptExecution = useCallback(adaptExecution, []);
+  const adaptExecutionAdapter = useCallback((dto: BotExecutionDTO): BotExecution => adaptExecution(dto), []);
 
   return {
     // Raw tRPC hooks
@@ -98,7 +98,7 @@ export const useBots = () => {
     createNode, updateNode, deleteNode,
     createEdge, updateEdge, deleteEdge,
     // Adapters
-    adaptBots, adaptBot, adaptExecutions, adaptExecution,
+    adaptBots, adaptBot: adaptBotAdapter, adaptExecutions, adaptExecution: adaptExecutionAdapter,
     adaptBotForCreate, adaptBotForUpdate,
   };
 };

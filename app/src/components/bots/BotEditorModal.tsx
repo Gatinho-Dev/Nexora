@@ -4,7 +4,7 @@
  */
 
 import React, { memo, useState, useCallback, useEffect, useRef } from 'react';
-import {
+import type {
   Bot,
   BotMode,
   BotFlow,
@@ -477,7 +477,7 @@ export const BotEditorModal = memo(function BotEditorModal({
 
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="editor-title">
-      <div className="modal-content w-full max-w-4xl max-h-[90vh]">
+      <div className="modal-content w-full max-w-4xl max-h-[90vh]" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="modal-header">
           <h2 id="editor-title" className="text-lg font-semibold text-text-primary">

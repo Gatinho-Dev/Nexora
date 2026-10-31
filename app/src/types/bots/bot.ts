@@ -157,8 +157,8 @@ export const NODE_CATEGORIES: Record<NodeType, NodeCategory> = {
   // Logic
   condition: 'logic',
   parallel: 'logic',
+  delay: 'logic',
   switch: 'logic',
-  wait: 'logic',
 };
 
 // ============================================
@@ -294,15 +294,15 @@ export interface ActionConfig {
   // add_role / remove_role
   roleId?: string;
   userId?: string;
-  reason?: string;
+  roleReason?: string;
 
   // timeout_member
   duration?: number; // milliseconds
-  reason?: string;
+  timeoutReason?: string;
 
   // kick_member / ban_member
   banUserId?: string;
-  reason?: string;
+  banReason?: string;
   deleteMessageSeconds?: number;
 
   // create_channel

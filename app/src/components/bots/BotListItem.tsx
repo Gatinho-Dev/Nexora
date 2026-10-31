@@ -90,20 +90,20 @@ const ModeBadge = memo(function ModeBadge({ mode }: { mode: BotMode }) {
 // ============================================
 
 const StatusToggle = memo(function StatusToggle({
-  status,
+  bot,
   onChange,
   disabled,
 }: {
-  status: BotStatus;
-  onChange: (status: BotStatus) => void;
+  bot: Bot;
+  onChange: (bot: Bot, enabled: boolean) => void;
   disabled?: boolean;
 }) {
-  const isEnabled = status === 'enabled';
+  const isEnabled = bot.status === 'enabled';
 
   return (
     <button
       type="button"
-      onClick={() => !disabled && onChange(isEnabled ? 'disabled' : 'enabled')}
+      onClick={() => !disabled && onChange(bot, !isEnabled)}
       disabled={disabled}
       className={`toggle relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-fast ${
         disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
@@ -190,11 +190,6 @@ export const BotListItem = memo(function BotListItem({
     advanced: 'text-primary-500',
   };
 
-  const modeIcons = {
-    simple: Zap,
-    advanced: GitBranch,
-  };
-
   return (
     <div className="card-hover group relative">
       <div className="p-4">
@@ -229,7 +224,7 @@ export const BotListItem = memo(function BotListItem({
           <div className="flex items-center gap-2">
             {/* Status Toggle */}
             <StatusToggle
-              status={bot.status}
+              bot={bot}
               onChange={onToggleStatus}
             />
 
