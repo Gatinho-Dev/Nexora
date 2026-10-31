@@ -4,7 +4,7 @@
  */
 
 import React, { memo } from 'react';
-import { renderIcon } from '@/components/flow/nodes/FlowNodes';
+import { renderIcon } from '../../flow/nodes/FlowNodes';
 
 interface FlowToolbarProps {
   onZoomIn: () => void;
@@ -108,7 +108,7 @@ export const FlowToolbar = memo(function FlowToolbar({
           title="Zoom Out (Ctrl+-)"
           disabled={zoom <= 0.1}
         >
-          {renderIcon('Minus', 18)}
+          {renderIcon('Minus',  18)}
         </ToolbarButton>
         <div className="px-2 text-xs font-mono text-text-secondary min-w-[48px] text-center">
           {zoomPercentage}%
@@ -118,13 +118,13 @@ export const FlowToolbar = memo(function FlowToolbar({
           title="Zoom In (Ctrl+=)"
           disabled={zoom >= 3}
         >
-          {renderIcon('Plus', 18)}
+          {renderIcon('Plus',  18)}
         </ToolbarButton>
         <ToolbarButton onClick={onFitView} title="Fit View (Shift+1)">
-          {renderIcon('Maximize2', 18)}
+          {renderIcon('Maximize2',  18)}
         </ToolbarButton>
         <ToolbarButton onClick={onCenter} title="Center View (Home)">
-          {renderIcon('Home', 18)}
+          {renderIcon('Home',  18)}
         </ToolbarButton>
       </ToolbarGroup>
 
@@ -137,14 +137,14 @@ export const FlowToolbar = memo(function FlowToolbar({
           disabled={!canUndo}
           title="Undo (Ctrl+Z)"
         >
-          {renderIcon('Undo2', 18)}
+          {renderIcon('Undo2',  18)}
         </ToolbarButton>
         <ToolbarButton
           onClick={onRedo}
           disabled={!canRedo}
           title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
         >
-          {renderIcon('Redo2', 18)}
+          {renderIcon('Redo2',  18)}
         </ToolbarButton>
       </ToolbarGroup>
 
@@ -157,21 +157,21 @@ export const FlowToolbar = memo(function FlowToolbar({
           disabled={!hasSelection}
           title="Delete Selected (Del / Backspace)"
         >
-          {renderIcon('Trash2', 18)}
+          {renderIcon('Trash2',  18)}
         </ToolbarButton>
         <ToolbarButton
           onClick={onAlignHorizontal}
           disabled={!hasSelection}
           title="Align Horizontally"
         >
-          {renderIcon('AlignHorizontalDistributeCenter', 18)}
+          {renderIcon('AlignHorizontalDistributeCenter',  18)}
         </ToolbarButton>
         <ToolbarButton
           onClick={onAlignVertical}
           disabled={!hasSelection}
           title="Align Vertically"
         >
-          {renderIcon('AlignVerticalDistributeCenter', 18)}
+          {renderIcon('AlignVerticalDistributeCenter',  18)}
         </ToolbarButton>
       </ToolbarGroup>
 
@@ -184,14 +184,14 @@ export const FlowToolbar = memo(function FlowToolbar({
           active={gridEnabled}
           title="Toggle Grid (G)"
         >
-          {renderIcon('Grid', 18)}
+          {renderIcon('Grid',  18)}
         </ToolbarButton>
         <ToolbarButton
           onClick={onToggleMinimap}
           active={minimapEnabled}
           title="Toggle Minimap (M)"
         >
-          {renderIcon('Layers', 18)}
+          {renderIcon('Layers',  18)}
         </ToolbarButton>
       </ToolbarGroup>
 
@@ -200,10 +200,10 @@ export const FlowToolbar = memo(function FlowToolbar({
       {/* File Operations */}
       <ToolbarGroup>
         <ToolbarButton onClick={onExport} title="Export Flow (JSON)">
-          {renderIcon('Download', 18)}
+          {renderIcon('Download',  18)}
         </ToolbarButton>
         <ToolbarButton onClick={() => document.getElementById('flow-import')?.click()} title="Import Flow (JSON)">
-          {renderIcon('Upload', 18)}
+          {renderIcon('Upload',  18)}
         </ToolbarButton>
         <input
           id="flow-import"
@@ -228,7 +228,7 @@ export const FlowToolbar = memo(function FlowToolbar({
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-danger-500/15 text-danger-500 border border-danger-500/30"
             title={`${validationErrors} validation error(s)`}
           >
-            {renderIcon('AlertCircle', 14)}
+            {renderIcon('AlertCircle',  14)}
             <span className="text-xs font-medium">{validationErrors}</span>
           </button>
         </ToolbarGroup>
@@ -240,10 +240,10 @@ export const FlowToolbar = memo(function FlowToolbar({
       {/* Right Side */}
       <ToolbarGroup>
         <ToolbarButton onClick={onShowHelp} title="Keyboard Shortcuts (?)">
-          {renderIcon('HelpCircle', 18)}
+          {renderIcon('HelpCircle',  18)}
         </ToolbarButton>
         <ToolbarButton onClick={onOpenSettings} title="Settings">
-          {renderIcon('Settings', 18)}
+          {renderIcon('Settings',  18)}
         </ToolbarButton>
       </ToolbarGroup>
     </div>

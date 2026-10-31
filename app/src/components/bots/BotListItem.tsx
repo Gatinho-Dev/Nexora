@@ -8,8 +8,24 @@ import {
   Bot,
   BotMode,
   BotStatus,
+} from '@/contracts/bots';
+import {
   BotListItemProps,
-} from '@/types/bots';
+} from '@/contracts/bots';
+import {
+  Settings,
+  Copy,
+  Trash2,
+  Play,
+  Pause,
+  Eye,
+  MoreHorizontal,
+  Check,
+  X,
+  Zap,
+  Send,
+  GitBranch,
+} from 'lucide-react';
 import { renderIcon } from '@/components/flow/nodes/FlowNodes';
 
 // ============================================
@@ -78,7 +94,7 @@ const ModeBadge = memo(function ModeBadge({ mode }: { mode: BotMode }) {
       }`}
     >
       <span className="flex items-center gap-1.5">
-        {mode === 'simple' ? renderIcon('Zap', 10) : renderIcon('GitBranch', 10)}
+        {mode === 'simple' ? renderIcon('Zap',  10) : renderIcon('GitBranch',  10)}
         {mode === 'simple' ? 'Simple' : 'Advanced'}
       </span>
     </span>
@@ -244,7 +260,7 @@ export const BotListItem = memo(function BotListItem({
                 aria-expanded={dropdownOpen}
                 aria-haspopup="true"
               >
-                {renderIcon('MoreHorizontal', 18)}
+                {renderIcon('MoreHorizontal',  18)}
               </button>
 
               <DropdownMenu
@@ -258,7 +274,7 @@ export const BotListItem = memo(function BotListItem({
                   className="dropdown-item"
                   role="menuitem"
                 >
-                  {renderIcon('Settings', 14)}
+                  {renderIcon('Settings',  14)}
                   Edit
                 </button>
                 <button
@@ -267,7 +283,7 @@ export const BotListItem = memo(function BotListItem({
                   className="dropdown-item"
                   role="menuitem"
                 >
-                  {renderIcon('Copy', 14)}
+                  {renderIcon('Copy',  14)}
                   Duplicate
                 </button>
                 <button
@@ -276,7 +292,7 @@ export const BotListItem = memo(function BotListItem({
                   className="dropdown-item"
                   role="menuitem"
                 >
-                  {renderIcon('Eye', 14)}
+                  {renderIcon('Eye',  14)}
                   View Executions
                 </button>
                 <div className="dropdown-divider" />
@@ -302,7 +318,7 @@ export const BotListItem = memo(function BotListItem({
         {deleting && (
           <div className="mt-3 p-3 bg-danger-500/10 border border-danger-500/30 rounded-lg animate-slide-down">
             <div className="flex items-center gap-2 text-sm text-danger-500 mb-2">
-              {renderIcon('AlertCircle', 16)}
+              {renderIcon('AlertCircle',  16)}
               <span>Delete "{bot.name}"?</span>
             </div>
             <p className="text-xs text-text-tertiary mb-3">This action cannot be undone.</p>

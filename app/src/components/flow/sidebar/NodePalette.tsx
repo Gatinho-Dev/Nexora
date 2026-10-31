@@ -4,8 +4,8 @@
  */
 
 import React, { memo, useState, useCallback } from 'react';
-import { NodeDefinition, NodeCategory, nodeCategories, allNodeDefinitions } from '@/types/bots';
-import { renderIcon } from '@/components/flow/nodes/FlowNodes';
+import { NodeDefinition, NodeCategory, nodeCategories, allNodeDefinitions } from '@/contracts/bots';
+import { renderIcon } from '../../flow/nodes/FlowNodes';
 
 // ============================================
 // Category Section

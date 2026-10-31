@@ -89,7 +89,7 @@
   }
 
   * {
-    @apply border-surface-border;
+    border-color: var(--color-surface-border);
   }
 
   html {

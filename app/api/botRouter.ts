@@ -659,6 +659,29 @@ export const botRouter = createRouter({
       return { id };
     }),
 
+  updateEdge: authedQuery
+    .input(
+      z.object({
+        edgeId: z.number(),
+        sourceHandle: z.string().max(32).optional(),
+        targetHandle: z.string().max(32).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      const [edge] = await db.select().from(schema.botEdges).where(eq(schema.botEdges.id, input.edgeId));
+      if (!edge) throw new TRPCError({ code: "NOT_FOUND", message: "Conexão não encontrada." });
+      await requireBotOwnerOrManage(ctx.user.id, edge.botId);
+      await db
+        .update(schema.botEdges)
+        .set({
+          sourceHandle: input.sourceHandle ?? null,
+          targetHandle: input.targetHandle ?? null,
+        })
+        .where(eq(schema.botEdges.id, input.edgeId));
+      return { ok: true };
+    }),
+
   deleteEdge: authedQuery
     .input(z.object({ edgeId: z.number() }))
     .mutation(async ({ ctx, input }) => {

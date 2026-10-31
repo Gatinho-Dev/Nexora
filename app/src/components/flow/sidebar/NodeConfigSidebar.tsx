@@ -4,30 +4,6 @@
  */
 
 import React, { memo, useState, useCallback, useMemo } from 'react';
-import {
-  X,
-  ChevronDown,
-  ChevronUp,
-  AlertCircle,
-  Info,
-  CheckCircle,
-  Code2,
-  Database,
-  Hash,
-  User,
-  Mail,
-  Globe,
-  Terminal,
-  Settings,
-  Zap,
-  GitBranch,
-  SwitchCamera,
-  Timer,
-  Copy,
-  Trash2,
-  Eye,
-  EyeOff,
-} from 'lucide-react';
 import { NodeDefinition, ConfigField, FlowNode, SelectOption, NodeData } from '@/types/bots';
 import { renderIcon } from '@/components/flow/nodes/FlowNodes';
 
@@ -408,7 +384,7 @@ const JsonInput = memo(function JsonInput({
       />
       {!isValid && (
         <p className="text-xs text-danger-500 mt-1 ml-1 flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" />
+          {renderIcon('AlertCircle', 12, 'var(--color-danger-500)')}
           Invalid JSON format
         </p>
       )}
@@ -448,7 +424,7 @@ const CronInput = memo(function CronInput({
       />
       {!isValid && value && (
         <p className="text-xs text-danger-500 mt-1 ml-1 flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" />
+          {renderIcon('AlertCircle', 12, 'var(--color-danger-500)')}
           Invalid cron expression (expected 5 or 6 fields)
         </p>
       )}
