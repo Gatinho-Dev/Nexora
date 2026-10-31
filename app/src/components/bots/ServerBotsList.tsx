@@ -149,7 +149,7 @@ const SearchFilterBar = memo(function SearchFilterBar({
             className="p-1.5 rounded hover:bg-surface-hover text-text-tertiary hover:text-text-primary transition-colors"
             aria-label={sortOrder === 'asc' ? 'Sort descending' : 'Sort ascending'}
           >
-            {renderIcon(sortOrder === 'asc' ? ChevronDown : ChevronUp, 14)}
+            {renderIcon(sortOrder === 'asc' ? 'ChevronDown' : 'ChevronUp', 14)}
           </button>
         </div>
       </div>
