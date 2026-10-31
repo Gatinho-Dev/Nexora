@@ -4,105 +4,79 @@
 
 @layer base {
   :root {
-    /* Nexora light theme */
-    --background: 220 14% 96%;
-    --foreground: 228 7% 14%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 25% 12%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 25% 12%;
-    --primary: 234 65% 56%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 18% 92%;
-    --secondary-foreground: 222 25% 15%;
-    --muted: 220 18% 92%;
-    --muted-foreground: 220 10% 42%;
-    --accent: 220 18% 90%;
-    --accent-foreground: 222 25% 12%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 220 18% 86%;
-    --input: 220 18% 86%;
-    --ring: 233 100% 73%;
-    --radius: 0.5rem;
-
-    /* App surfaces */
-    --rail: 223 20% 92%;
-    --sidebar-bg: 223 18% 95%;
-    --secondary-sidebar-bg: 223 16% 97%;
-    --chat-bg: 0 0% 100%;
-    --hover-bg: 220 20% 90%;
-    --active-bg: 220 22% 86%;
-    --mention-bg: 234 100% 92%;
-    --mention-fg: 234 80% 35%;
-    --online: 145 65% 39%;
-    --idle: 41 86% 57%;
-    --dnd: 359 88% 60%;
-    --streaming: 268 48% 40%;
-    --offline: 222 6% 53%;
-    --link: 199 100% 49%;
-    --presence-online: 145 65% 39%;
-    --presence-idle: 41 86% 45%;
-    --presence-dnd: 359 72% 50%;
-    --presence-offline: 222 6% 48%;
-    --dm-unread-indicator: #27314f;
-    --dm-unread-divider: #4654d8;
-    --mention-badge: #d83f49;
-
-    /* Chrome surfaces & text tiers */
-    --panel: #ebedef;
-    --hov: #e0e3e8;
-    --act: #cfd3da;
-    --body-t: #2e3338;
-    --muted2: #5a6069;
-    --faint: #6d7480;
-  }
-
-  .dark {
-    /* Nexora dense social dark theme — Discord 2026 design tokens */
-    --background: 228 6% 20%; /* #313338 background-primary */
-    --foreground: 210 9% 96%; /* #F2F3F5 */
-    --card: 223 7% 23%; /* #2B2D31 */
-    --card-foreground: 220 14% 96%;
-    --popover: 225 9% 7%; /* #111214 background-floating */
-    --popover-foreground: 220 14% 96%;
-    --primary: 235 86% 65%; /* Blurple #5865F2 */
-    --primary-hover: 228 55% 52%; /* #4752C4 */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 223 7% 24%;
-    --secondary-foreground: 220 14% 90%;
-    --muted: 223 7% 23%;
-    --muted-foreground: 215 9% 73%; /* #B5BAC1 */
-    --accent: 228 6% 27%;
-    --accent-foreground: 220 14% 96%;
-    --destructive: 359 88% 60%; /* #F23F43 */
-    --destructive-foreground: 0 0% 98%;
-    --border: 228 6% 29%;
-    --input: 225 7% 13%; /* #1E1F22 background-tertiary */
-    --ring: 235 86% 65%; /* Blurple */
-
-    /* App surfaces */
-    --rail: 225 7% 13%; /* #1E1F22 background-tertiary */
-    --sidebar-bg: 223 7% 20%; /* #2B2D31 background-secondary */
-    --secondary-sidebar-bg: 223 7% 18%;
-    --chat-bg: 228 6% 20%; /* #313338 background-primary */
-    --hover-bg: 228 6% 26%;
-    --active-bg: 228 6% 29%;
-    --mention-bg: 235 45% 29%;
-    --mention-fg: 233 100% 82%;
-    --online: 145 65% 39%; /* #23A55A */
-    --idle: 41 86% 57%; /* #F0B232 */
-    --dnd: 359 88% 60%; /* #F23F43 */
-    --streaming: 268 48% 40%; /* #593695 */
-    --offline: 222 6% 53%; /* #80848E */
-    --link: 199 100% 49%; /* #00A8FC */
-    --presence-online: 145 65% 45%;
-    --presence-idle: 41 86% 57%;
-    --presence-dnd: 359 82% 64%;
-    --presence-offline: 222 8% 58%;
-    --dm-unread-indicator: #f4f7fb;
-    --dm-unread-divider: #7383ff;
-    --mention-badge: #ed5962;
+    /* ========================================
+       NEXORA DESIGN TOKENS - Dark Mode First
+       Generated from design-tokens.ts
+       ======================================== */
+    
+    /* Brand Colors */
+    --color-primary-50: #eef0fb;
+    --color-primary-100: #dce0f7;
+    --color-primary-200: #bcc0ef;
+    --color-primary-300: #999ce5;
+    --color-primary-400: #7678db;
+    --color-primary-500: #5865f2;
+    --color-primary-600: #4752c4;
+    --color-primary-700: #3a42a0;
+    --color-primary-800: #30357d;
+    --color-primary-900: #292d63;
+    --color-primary-950: #1d1d45;
+    
+    /* Semantic Colors */
+    --color-success-50: #f0fdf4;
+    --color-success-100: #dcfce7;
+    --color-success-200: #bbf7d0;
+    --color-success-300: #86efac;
+    --color-success-400: #4ade80;
+    --color-success-500: #3ba55c;
+    --color-success-600: #22c55e;
+    --color-success-700: #16a34a;
+    --color-success-800: #15803d;
+    --color-success-900: #166534;
+    
+    --color-danger-50: #fef2f2;
+    --color-danger-100: #fee2e2;
+    --color-danger-200: #fecaca;
+    --color-danger-300: #fca5a5;
+    --color-danger-400: #f87171;
+    --color-danger-500: #ed4245;
+    --color-danger-600: #dc2626;
+    --color-danger-700: #b91c1c;
+    --color-danger-800: #991b1b;
+    --color-danger-900: #7f1d1d;
+    
+    --color-warning-50: #fffbeb;
+    --color-warning-100: #fef3c7;
+    --color-warning-200: #fde68a;
+    --color-warning-300: #fcd34d;
+    --color-warning-400: #fbbf24;
+    --color-warning-500: #faa61a;
+    --color-warning-600: #d97706;
+    --color-warning-700: #b45309;
+    --color-warning-800: #92400e;
+    --color-warning-900: #78350f;
+    
+    /* Node Category Colors */
+    --color-node-trigger-bg: rgba(59, 165, 92, 0.14);
+    --color-node-trigger-border: #3ba55c;
+    --color-node-trigger-text: #3ba55c;
+    --color-node-trigger-handle: #3ba55c;
+    --color-node-trigger-hover: rgba(59, 165, 92, 0.22);
+    --color-node-trigger-active: rgba(59, 165, 92, 0.28);
+    
+    --color-node-action-bg: rgba(88, 101, 242, 0.14);
+    --color-node-action-border: #5865f2;
+    --color-node-action-text: #5865f2;
+    --color-node-action-handle: #5865f2;
+    --color-node-action-hover: rgba(88, 101, 242, 0.22);
+    --color-node-action-active: rgba(88, 101, 242, 0.28);
+    
+    --color-node-logic-bg: rgba(250, 166, 26, 0.14);
+    --color-node-logic-border: #faa61a;
+    --color-node-logic-text: #faa61a;
+    --color-node-logic-handle: #faa61a;
+    --color-node-logic-hover: rgba(250, 166, 26, 0.22);
+    --color-node-logic-active: rgba(250, 166, 26, 0.28);
 
     /* Chrome surfaces & text tiers */
     --panel: #232428;
