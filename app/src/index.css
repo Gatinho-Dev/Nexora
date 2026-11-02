@@ -4,6 +4,51 @@
 
 @layer base {
   :root {
+    /* Nexora light theme */
+    --background: 220 14% 96%;
+    --foreground: 228 7% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 25% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 25% 12%;
+    --primary: 234 65% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 18% 92%;
+    --secondary-foreground: 222 25% 15%;
+    --muted: 220 18% 92%;
+    --muted-foreground: 220 10% 42%;
+    --accent: 220 18% 90%;
+    --accent-foreground: 222 25% 12%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 18% 86%;
+    --input: 220 18% 86%;
+    --ring: 233 100% 73%;
+    --radius: 0.5rem;
+
+    /* App surfaces */
+    --rail: 223 20% 92%;
+    --sidebar-bg: 223 18% 95%;
+    --secondary-sidebar-bg: 223 16% 97%;
+    --chat-bg: 0 0% 100%;
+    --hover-bg: 220 20% 90%;
+    --active-bg: 220 22% 86%;
+    --mention-bg: 234 100% 92%;
+    --mention-fg: 234 80% 35%;
+    --online: 145 65% 39%;
+    --idle: 41 86% 57%;
+    --dnd: 359 88% 60%;
+    --streaming: 268 48% 40%;
+    --offline: 222 6% 53%;
+    --link: 199 100% 49%;
+    --presence-online: 145 65% 39%;
+    --presence-idle: 41 86% 45%;
+    --presence-dnd: 359 72% 50%;
+    --presence-offline: 222 6% 48%;
+    --dm-unread-indicator: #27314f;
+    --dm-unread-divider: #4654d8;
+    --mention-badge: #d83f49;
+
     /* ========================================
        NEXORA DESIGN TOKENS - Dark Mode First
        Generated from design-tokens.ts
@@ -79,6 +124,59 @@
     --color-node-logic-active: rgba(250, 166, 26, 0.28);
 
     /* Chrome surfaces & text tiers */
+    --panel: #ebedef;
+    --hov: #e0e3e8;
+    --act: #cfd3da;
+    --body-t: #2e3338;
+    --muted2: #5a6069;
+    --faint: #6d7480;
+  }
+
+  .dark {
+    /* Nexora dark theme from PR #107 */
+    --background: 228 6% 20%;
+    --foreground: 210 9% 96%;
+    --card: 223 7% 23%;
+    --card-foreground: 220 14% 96%;
+    --popover: 225 9% 7%;
+    --popover-foreground: 220 14% 96%;
+    --primary: 235 86% 65%;
+    --primary-hover: 228 55% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 223 7% 24%;
+    --secondary-foreground: 220 14% 90%;
+    --muted: 223 7% 23%;
+    --muted-foreground: 215 9% 73%;
+    --accent: 228 6% 27%;
+    --accent-foreground: 220 14% 96%;
+    --destructive: 359 88% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 228 6% 29%;
+    --input: 225 7% 13%;
+    --ring: 235 86% 65%;
+
+    --rail: 225 7% 13%;
+    --sidebar-bg: 223 7% 20%;
+    --secondary-sidebar-bg: 223 7% 18%;
+    --chat-bg: 228 6% 20%;
+    --hover-bg: 228 6% 26%;
+    --active-bg: 228 6% 29%;
+    --mention-bg: 235 45% 29%;
+    --mention-fg: 233 100% 82%;
+    --online: 145 65% 39%;
+    --idle: 41 86% 57%;
+    --dnd: 359 88% 60%;
+    --streaming: 268 48% 40%;
+    --offline: 222 6% 53%;
+    --link: 199 100% 49%;
+    --presence-online: 145 65% 45%;
+    --presence-idle: 41 86% 57%;
+    --presence-dnd: 359 82% 64%;
+    --presence-offline: 222 8% 58%;
+    --dm-unread-indicator: #f4f7fb;
+    --dm-unread-divider: #7383ff;
+    --mention-badge: #ed5962;
+
     --panel: #232428;
     --hov: #35373c;
     --act: #404249;
