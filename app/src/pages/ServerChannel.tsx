@@ -237,6 +237,7 @@ export function ServerChannel() {
           <ChatArea
             channelId={channel.id}
             placeholder={`Mensagem em #${channel.name}`}
+            roles={details.data.roles}
             members={details.data.members.map(m => ({
               id: m.user.id,
               username: m.user.username,

@@ -26,6 +26,7 @@ type Props = {
   conversationId?: number;
   placeholder: string;
   members?: { id: number; username: string | null; name: string | null }[];
+  roles?: { id: number; name: string; mentionable?: boolean }[];
   myId: number;
   canManageMessages?: boolean;
   canPinMessages?: boolean;
@@ -48,6 +49,7 @@ export function ChatArea({
   conversationId,
   placeholder,
   members = [],
+  roles = [],
   myId,
   canManageMessages = false,
   canPinMessages = false,
@@ -494,6 +496,7 @@ export function ChatArea({
         conversationId={conversationId}
         placeholder={placeholder}
         members={members}
+        roles={roles}
         disabled={sendDisabled}
       />
     </main>

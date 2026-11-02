@@ -4,16 +4,34 @@ export type MentionPreference = {
   level: "all" | "mentions" | "none";
   mutedUntil: Date | string | null;
   suppressEveryone: boolean;
+  suppressRoles: boolean;
 };
 
-/**
- * Decide quem recebe a notificação de menção, sem acesso a banco.
- * - `level: none` e silenciamento temporário bloqueiam tudo.
- * - `suppressEveryone` bloqueia só `@everyone`; menção direta sempre notifica.
- */
+/** Identifica menções exatas e cargos pelo ID, sem confundir prefixos. */
+export function parseServerMentions(content: string) {
+  const roleIds = new Set(
+    [...content.matchAll(/@\[([^\]\n]+)\]\(role:(\d+)\)/g)]
+      .map(match => Number(match[2]))
+      .filter(Number.isSafeInteger),
+  );
+  // O nome visível de um cargo não é uma menção a um usuário.
+  const withoutRoles = content.replace(/@\[([^\]\n]+)\]\(role:(\d+)\)/g, "");
+  const names = [...withoutRoles.matchAll(/(?<![a-zA-Z0-9_.@-])@([a-zA-Z0-9_.-]+)/g)]
+    .map(match => match[1].toLowerCase());
+  return {
+    roleIds,
+    everyone: /(?<![a-zA-Z0-9_.@-])@everyone(?![a-zA-Z0-9_-]|\.[a-zA-Z0-9_-])/i.test(withoutRoles),
+    here: /(?<![a-zA-Z0-9_.@-])@here(?![a-zA-Z0-9_-]|\.[a-zA-Z0-9_-])/i.test(withoutRoles),
+    usernames: new Set(names.filter(name => name !== "everyone" && name !== "here")),
+  };
+}
+
+/** Aplica supressão por tipo; menção direta não é suprimida por outras opções. */
 export function filterMentionRecipients(input: {
   candidateIds: number[];
   directlyMentioned: ReadonlySet<number>;
+  broadlyMentioned: ReadonlySet<number>;
+  roleMentioned: ReadonlySet<number>;
   preferences: ReadonlyMap<number, MentionPreference>;
   now: number;
 }): number[] {
@@ -26,9 +44,8 @@ export function filterMentionRecipients(input: {
     ) {
       return false;
     }
-    if (!input.directlyMentioned.has(userId) && preference?.suppressEveryone) {
-      return false;
-    }
-    return true;
+    return input.directlyMentioned.has(userId) ||
+      (input.broadlyMentioned.has(userId) && !preference?.suppressEveryone) ||
+      (input.roleMentioned.has(userId) && !preference?.suppressRoles);
   });
 }
