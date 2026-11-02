@@ -25,10 +25,11 @@ import {
 import {
   broadcastToChannel,
   broadcastToConversation,
+  isUserVisibleOnline,
   sendToUsers,
 } from "./realtime";
 import { assertCanInteract } from "./services/accountSafety";
-import { filterMentionRecipients } from "./services/mentionRules";
+import { filterMentionRecipients, parseServerMentions } from "./services/mentionRules";
 import { runAutomodForMessage } from "./services/automod/service";
 import { moderateTextMessage } from "./services/textModeration";
 import { blockedBetween } from "./services/groupService";
@@ -327,11 +328,9 @@ async function processMentions(
       .from(schema.serverMembers)
       .where(eq(schema.serverMembers.serverId, channel.serverId));
 
-    const usernames = [...content.matchAll(/@([a-zA-Z0-9_.-]+)/g)].map(m =>
-      m[1].toLowerCase()
-    );
+    const mentions = parseServerMentions(content);
     const memberIds = members.map(m => m.userId);
-    const memberUsers = memberIds.length
+    const memberUsers = memberIds.length && mentions.usernames.size
       ? await db
           .select({ id: schema.users.id, username: schema.users.username })
           .from(schema.users)
@@ -339,12 +338,40 @@ async function processMentions(
       : [];
     const directlyMentioned = new Set(
       memberUsers
-        .filter(u => u.username && usernames.includes(u.username.toLowerCase()))
+        .filter(u => u.username && mentions.usernames.has(u.username.toLowerCase()))
         .map(u => u.id)
     );
+    const broadlyMentioned = new Set(
+      mentions.everyone ? memberIds : mentions.here ? memberIds.filter(isUserVisibleOnline) : [],
+    );
+    const roleMentioned = new Set<number>();
+    if (mentions.roleIds.size) {
+      const roles = await db.select().from(schema.roles).where(and(
+        eq(schema.roles.serverId, channel.serverId),
+        inArray(schema.roles.id, [...mentions.roleIds]),
+      ));
+      const mentionableRoleIds = roles.filter(role => role.mentionable).map(role => role.id);
+      if (roles.some(role => role.mentionable && role.isDefault)) {
+        for (const userId of memberIds) roleMentioned.add(userId);
+      }
+      if (mentionableRoleIds.length) {
+        const roleMembers = await db
+          .select({ userId: schema.memberRoles.userId })
+          .from(schema.memberRoles)
+          .where(and(
+            eq(schema.memberRoles.serverId, channel.serverId),
+            inArray(schema.memberRoles.roleId, mentionableRoleIds),
+          ));
+        const memberSet = new Set(memberIds);
+        for (const row of roleMembers) {
+          if (memberSet.has(row.userId)) roleMentioned.add(row.userId);
+        }
+      }
+    }
     const candidateIds = new Set<number>([
       ...directlyMentioned,
-      ...(content.includes("@everyone") ? memberIds : []),
+      ...broadlyMentioned,
+      ...roleMentioned,
     ]);
     candidateIds.delete(authorId);
     if (candidateIds.size === 0) return;
@@ -365,6 +392,8 @@ async function processMentions(
     const eligibleIds = filterMentionRecipients({
       candidateIds: [...candidateIds],
       directlyMentioned,
+      broadlyMentioned,
+      roleMentioned,
       preferences: preferenceByUser,
       now: Date.now(),
     });
@@ -378,7 +407,7 @@ async function processMentions(
     );
     const mentionedIds = eligibleIds.filter((_, i) => visibleFlags[i]);
     if (mentionedIds.length > 0) {
-      await notifyUsers(mentionedIds.slice(0, 20), {
+      await notifyUsers(mentionedIds, {
         type: "mention",
         actorId: authorId,
         serverId: channel.serverId,

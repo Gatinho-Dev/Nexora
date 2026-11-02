@@ -269,7 +269,7 @@ function EmbedFacade({
 // ── Inline level ──────────────────────────────────────────────
 
 const TOKEN_RE =
-  /(\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*|__[^_\n]+__|_[^_\n]+_|~~[^~\n]+~~|\|\|[^|\n]+\|\||`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+|@[a-zA-Z0-9_.-]+|@everyone|@here)/g;
+  /(\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|\*[^*\n]+\*|__[^_\n]+__|_[^_\n]+_|~~[^~\n]+~~|\|\|[^|\n]+\|\||`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<]+|@\[[^\]\n]+\]\(role:\d+\)|@[a-zA-Z0-9_.-]+|@everyone|@here)/g;
 
 /** Bloqueia esquemas perigosos (javascript:, data:, vbscript:). */
 function isSafeUrl(url: string): boolean {
@@ -366,6 +366,10 @@ function renderInline(text: string): ReactNode[] {
       );
     }
     // Mentions
+    const roleMention = seg.match(/^@\[([^\]\n]+)\]\(role:\d+\)$/);
+    if (roleMention) {
+      return <span key={i} className="mention">@{roleMention[1]}</span>;
+    }
     if (seg === "@everyone" || seg === "@here") {
       return (
         <span key={i} className="mention">

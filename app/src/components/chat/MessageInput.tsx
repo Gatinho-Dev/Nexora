@@ -116,6 +116,7 @@ type Props = {
   threadId?: number;
   placeholder: string;
   members?: { id: number; username: string | null; name: string | null }[];
+  roles?: { id: number; name: string; mentionable?: boolean }[];
   disabled?: boolean;
 };
 
@@ -125,6 +126,7 @@ export function MessageInput({
   threadId,
   placeholder,
   members = [],
+  roles = [],
   disabled,
 }: Props) {
   const isMobile = useIsMobile();
@@ -304,18 +306,29 @@ export function MessageInput({
     if (replyingTo) textareaRef.current?.focus();
   }, [replyingTo]);
 
-  const mentionCandidates =
-    mentionQuery !== null
-      ? members
-          .filter(
-            m =>
-              m.username
-                ?.toLowerCase()
-                .startsWith(mentionQuery.toLowerCase()) ||
-              m.name?.toLowerCase().startsWith(mentionQuery.toLowerCase())
-          )
-          .slice(0, 6)
-      : [];
+  const mentionCandidates = mentionQuery !== null
+    ? [
+        ...(channelId ? [
+          { key: "everyone", name: "Todos", label: "@everyone", text: "@everyone" },
+          { key: "here", name: "Membros online", label: "@here", text: "@here" },
+          ...roles.filter(role => role.mentionable).map(role => ({
+            key: `role:${role.id}`,
+            name: role.name,
+            label: "Cargo",
+            text: `@[${role.name.replace(/[\]\n]/g, "") || "cargo"}](role:${role.id})`,
+          })),
+        ] : []),
+        ...members.filter(m => m.username).map(m => ({
+          key: `user:${m.id}`,
+          name: m.name ?? m.username!,
+          label: `@${m.username}`,
+          text: `@${m.username}`,
+        })),
+      ].filter(candidate =>
+        candidate.name.toLowerCase().startsWith(mentionQuery.toLowerCase()) ||
+        candidate.label.toLowerCase().replace(/^@/, "").startsWith(mentionQuery.toLowerCase())
+      ).slice(0, 6)
+    : [];
 
   const emitTyping = () => {
     const now = Date.now();
@@ -524,14 +537,15 @@ export function MessageInput({
     setCommandArgs("");
   };
 
-  const insertMention = (username: string) => {
+  const insertMention = (mention: string) => {
     const el = textareaRef.current;
     const cursor = el?.selectionStart ?? text.length;
     const before = text
       .slice(0, cursor)
-      .replace(/@([a-zA-Z0-9_.-]*)$/, `@${username} `);
+      .replace(/@([a-zA-Z0-9_.-]*)$/, `${mention} `);
     const after = text.slice(cursor);
     setText(before + after);
+    saveDraft(before + after);
     setMentionQuery(null);
     textareaRef.current?.focus();
   };
@@ -707,7 +721,7 @@ export function MessageInput({
       if (e.key === "Tab" || e.key === "Enter") {
         e.preventDefault();
         const candidate = mentionCandidates[mentionIndex];
-        if (candidate?.username) insertMention(candidate.username);
+        if (candidate) insertMention(candidate.text);
         return;
       }
       if (e.key === "Escape") {
@@ -1423,7 +1437,7 @@ export function MessageInput({
             <div className="absolute bottom-full left-0 mb-2 w-64 rounded-xl bg-panel border border-white/10 shadow-2xl overflow-hidden z-30 select-none">
               {mentionCandidates.map((m, i) => (
                 <button
-                  key={m.id}
+                  key={m.key}
                   className={cn(
                     "w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left transition-colors",
                     i === mentionIndex
@@ -1432,11 +1446,11 @@ export function MessageInput({
                   )}
                   onMouseDown={e => {
                     e.preventDefault();
-                    if (m.username) insertMention(m.username);
+                    insertMention(m.text);
                   }}
                 >
-                  <span className="font-semibold">{m.name ?? m.username}</span>
-                  <span className="text-[11px] opacity-70">@{m.username}</span>
+                  <span className="font-semibold">{m.name}</span>
+                  <span className="text-[11px] opacity-70">{m.label}</span>
                 </button>
               ))}
             </div>

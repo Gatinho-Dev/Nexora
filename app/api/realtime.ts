@@ -335,6 +335,11 @@ function visibleStatus(userId: number): string {
   return s === "invisible" ? "offline" : s;
 }
 
+/** Connected users with a visible presence are eligible for @here. */
+export function isUserVisibleOnline(userId: number): boolean {
+  return visibleStatus(userId) !== "offline";
+}
+
 // ── Send helpers ──────────────────────────────────────────────
 function send(client: Client, event: WSServerEvent) {
   if (client.ws.readyState === WebSocket.OPEN) {
