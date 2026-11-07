@@ -101,7 +101,7 @@ export function allowedUploadType(mimeType: string): boolean {
 
 export function validRpc(path: unknown, input: unknown): boolean {
   if (typeof path !== "string") return false;
-  if (["auth.me", "server.list", "dm.list", "auth.logout", "advanced.profile.myProfile"].includes(path))
+  if (["auth.me", "server.list", "dm.list", "auth.logout", "advanced.profile.myProfile", "account.sessionsList", "account.sessionRevokeOthers", "account.privacy", "account.emailStatus", "account.resendVerification", "account.cancelEmailChange"].includes(path))
     return input === undefined;
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const obj = input as Record<string, unknown>;
@@ -135,6 +135,44 @@ export function validRpc(path: unknown, input: unknown): boolean {
     return only("messageId", "emoji") && positive(obj.messageId) && typeof obj.emoji === "string" && obj.emoji.length > 0 && obj.emoji.length <= 32;
   if (path === "message.markRead") return only("channelId", "conversationId", "lastMessageId") && target(obj) && positive(obj.lastMessageId);
   if (path === "advanced.profile.publicProfile") return only("userId") && positive(obj.userId);
+  if (path === "account.sessionRevoke")
+    return only("sessionId") && typeof obj.sessionId === "string" && obj.sessionId.length > 0 && obj.sessionId.length <= 32;
+  if (path === "account.setUsername")
+    return only("username") && typeof obj.username === "string" && /^[a-zA-Z0-9_.-]{3,32}$/.test(obj.username);
+  if (path === "account.setPrivacy")
+    return only("readReceipts") && typeof obj.readReceipts === "boolean";
+  if (path === "account.requestEmailChange")
+    return (
+      only("email", "currentPassword", "code") &&
+      typeof obj.email === "string" &&
+      obj.email.trim().length > 0 &&
+      obj.email.length <= 320 &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(obj.email.trim()) &&
+      typeof obj.currentPassword === "string" &&
+      obj.currentPassword.length >= 1 &&
+      obj.currentPassword.length <= 128 &&
+      (obj.code === undefined || (typeof obj.code === "string" && obj.code.length <= 32))
+    );
+  if (path === "account.removeEmail")
+    return (
+      only("currentPassword", "code") &&
+      typeof obj.currentPassword === "string" &&
+      obj.currentPassword.length >= 1 &&
+      obj.currentPassword.length <= 128 &&
+      (obj.code === undefined || (typeof obj.code === "string" && obj.code.length <= 32))
+    );
+  if (path === "account.changePassword")
+    return (
+      only("currentPassword", "newPassword", "disconnectOthers", "code") &&
+      typeof obj.currentPassword === "string" &&
+      obj.currentPassword.length >= 1 &&
+      obj.currentPassword.length <= 128 &&
+      typeof obj.newPassword === "string" &&
+      obj.newPassword.length >= 6 &&
+      obj.newPassword.length <= 128 &&
+      (obj.disconnectOthers === undefined || typeof obj.disconnectOthers === "boolean") &&
+      (obj.code === undefined || (typeof obj.code === "string" && obj.code.length <= 32))
+    );
   return false;
 }
 

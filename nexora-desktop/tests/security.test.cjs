@@ -25,6 +25,33 @@ test('IPC only admits known operations and bounded arguments', () => {
   assert.equal(validRpc('advanced.profile.publicProfile', {userId: 0}), false);
   assert.equal(validRpc('advanced.profile.publicProfile', {userId: 7, extra: 1}), false);
 });
+test('account operations accept only the documented shapes', () => {
+  assert.equal(validRpc('account.sessionsList', undefined), true);
+  assert.equal(validRpc('account.sessionRevokeOthers', undefined), true);
+  assert.equal(validRpc('account.privacy', undefined), true);
+  assert.equal(validRpc('account.sessionRevoke', { sessionId: 'abc123' }), true);
+  assert.equal(validRpc('account.sessionRevoke', { sessionId: '' }), false);
+  assert.equal(validRpc('account.sessionRevoke', { sessionId: 'x'.repeat(33) }), false);
+  assert.equal(validRpc('account.setUsername', { username: 'nexora_user.1' }), true);
+  assert.equal(validRpc('account.setUsername', { username: 'ab' }), false);
+  assert.equal(validRpc('account.setUsername', { username: 'com espaço' }), false);
+  assert.equal(validRpc('account.setPrivacy', { readReceipts: false }), true);
+  assert.equal(validRpc('account.setPrivacy', { readReceipts: 'no' }), false);
+  assert.equal(validRpc('account.setPrivacy', {}), false);
+  assert.equal(validRpc('account.updateProfile', { displayName: 'x' }), false);
+  assert.equal(validRpc('account.emailStatus', undefined), true);
+  assert.equal(validRpc('account.resendVerification', undefined), true);
+  assert.equal(validRpc('account.cancelEmailChange', undefined), true);
+  assert.equal(validRpc('account.requestEmailChange', { email: 'eu@exemplo.com', currentPassword: 'senha' }), true);
+  assert.equal(validRpc('account.requestEmailChange', { email: 'nao-e-email', currentPassword: 'senha' }), false);
+  assert.equal(validRpc('account.requestEmailChange', { email: 'eu@exemplo.com', currentPassword: '' }), false);
+  assert.equal(validRpc('account.requestEmailChange', { email: 'eu@exemplo.com', currentPassword: 'senha', extra: 1 }), false);
+  assert.equal(validRpc('account.removeEmail', { currentPassword: 'senha', code: '123456' }), true);
+  assert.equal(validRpc('account.removeEmail', {}), false);
+  assert.equal(validRpc('account.changePassword', { currentPassword: 'antiga', newPassword: 'nova123' }), true);
+  assert.equal(validRpc('account.changePassword', { currentPassword: 'antiga', newPassword: '123' }), false);
+  assert.equal(validRpc('account.changePassword', { currentPassword: 'antiga', newPassword: 'nova123', disconnectOthers: 'sim' }), false);
+});
 test('message operations only accept bounded, unambiguous payloads', () => {
   assert.equal(validRpc('message.send', {channelId: 1, content: 'resposta', replyToId: 5}), true);
   assert.equal(validRpc('message.send', {channelId: 1, content: 'resposta', replyToId: -1}), false);
