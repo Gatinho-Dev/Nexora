@@ -1,0 +1,75 @@
+{
+  "name": "nexora-desktop",
+  "productName": "Nexora Desktop",
+  "desktopName": "nexora-desktop.desktop",
+  "version": "0.1.1",
+  "private": true,
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently -k \"vite --host 127.0.0.1 --port 5174 --strictPort\" \"wait-on http://127.0.0.1:5174 && electron . --dev\"",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build": "npm run build:electron && vite build",
+    "test": "npm run build:electron && node --test tests/*.test.cjs",
+    "package:linux": "npm run build && electron-builder --linux deb rpm AppImage --publish never"
+  },
+  "build": {
+    "appId": "cloud.nexorachat.desktop",
+    "executableName": "nexora-desktop",
+    "productName": "Nexora Desktop",
+    "directories": {
+      "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Gatinho-Dev",
+      "repo": "Nexora",
+      "releaseType": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json",
+      "resources/icon.png"
+    ],
+    "linux": {
+      "desktop": {
+        "entry": {
+          "Name": "Nexora Desktop",
+          "StartupWMClass": "nexora-desktop"
+        }
+      },
+      "target": [
+        "deb",
+        "rpm",
+        "AppImage"
+      ],
+      "syncDesktopName": true,
+      "category": "Network",
+      "icon": "resources/icon.png",
+      "maintainer": "Nexora"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11",
+    "lucide-react": "^1.66.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^6.2.1",
+    "concurrently": "^10.0.6",
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "wait-on": "^9.5.1"
+  },
+  "description": "Aplicativo desktop da plataforma Nexora",
+  "author": "Nexora",
+  "homepage": "https://nexorachat.cloud"
+}
