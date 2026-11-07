@@ -344,7 +344,7 @@ app
       const { value } = await request(
         name,
         input,
-        ["message.send", "message.edit", "message.delete", "message.addReaction", "message.removeReaction", "message.markRead", "auth.logout"].includes(name),
+        ["message.send", "message.edit", "message.delete", "message.addReaction", "message.removeReaction", "message.markRead", "auth.logout", "account.sessionRevoke", "account.sessionRevokeOthers", "account.setUsername", "account.setPrivacy"].includes(name),
       );
       if (name === "auth.logout") await clearSession();
       return value;

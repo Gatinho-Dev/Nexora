@@ -101,7 +101,7 @@ export function allowedUploadType(mimeType: string): boolean {
 
 export function validRpc(path: unknown, input: unknown): boolean {
   if (typeof path !== "string") return false;
-  if (["auth.me", "server.list", "dm.list", "auth.logout", "advanced.profile.myProfile"].includes(path))
+  if (["auth.me", "server.list", "dm.list", "auth.logout", "advanced.profile.myProfile", "account.sessionsList", "account.sessionRevokeOthers", "account.privacy"].includes(path))
     return input === undefined;
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const obj = input as Record<string, unknown>;
@@ -135,6 +135,12 @@ export function validRpc(path: unknown, input: unknown): boolean {
     return only("messageId", "emoji") && positive(obj.messageId) && typeof obj.emoji === "string" && obj.emoji.length > 0 && obj.emoji.length <= 32;
   if (path === "message.markRead") return only("channelId", "conversationId", "lastMessageId") && target(obj) && positive(obj.lastMessageId);
   if (path === "advanced.profile.publicProfile") return only("userId") && positive(obj.userId);
+  if (path === "account.sessionRevoke")
+    return only("sessionId") && typeof obj.sessionId === "string" && obj.sessionId.length > 0 && obj.sessionId.length <= 32;
+  if (path === "account.setUsername")
+    return only("username") && typeof obj.username === "string" && /^[a-zA-Z0-9_.-]{3,32}$/.test(obj.username);
+  if (path === "account.setPrivacy")
+    return only("readReceipts") && typeof obj.readReceipts === "boolean";
   return false;
 }
 
