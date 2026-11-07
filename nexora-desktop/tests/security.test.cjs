@@ -20,6 +20,10 @@ test('IPC only admits known operations and bounded arguments', () => {
   assert.equal(validRpc('message.send', {channelId: 2, content: 'x'.repeat(4001)}), false);
   assert.equal(validRpc('account.updateProfile', {}), false);
   assert.equal(validRpc('server.get', {serverId: 1, extra: true}), false);
+  assert.equal(validRpc('advanced.profile.myProfile', undefined), true);
+  assert.equal(validRpc('advanced.profile.publicProfile', {userId: 7}), true);
+  assert.equal(validRpc('advanced.profile.publicProfile', {userId: 0}), false);
+  assert.equal(validRpc('advanced.profile.publicProfile', {userId: 7, extra: 1}), false);
 });
 test('message operations only accept bounded, unambiguous payloads', () => {
   assert.equal(validRpc('message.send', {channelId: 1, content: 'resposta', replyToId: 5}), true);

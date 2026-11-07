@@ -334,6 +334,49 @@ async function recoverServerDiscoveryMigration(migrationsFolder: string) {
   console.log("[database] Recovered partial server discovery migration.");
 }
 
+const ADVANCED_MIGRATIONS = [
+  "0021_advanced_communication_suite.sql",
+  "0022_bots_feature.sql",
+  "0023_nexora_live.sql",
+  "0024_live_room_name.sql",
+];
+const ALREADY_APPLIED_ERRORS = new Set(["ER_TABLE_EXISTS_ERROR", "ER_DUP_KEYNAME", "ER_DUP_FIELDNAME"]);
+
+/**
+ * Migrations 0021-0024 were never recorded in the migration journal, so Drizzle
+ * never runs them. Their tables (profile_fields, bots, live rooms) are then
+ * missing and queries such as profile.publicProfile fail. Apply their SQL
+ * idempotently: statements that only re-create existing objects are skipped.
+ * Drizzle ignores these files afterwards because their journal timestamps are
+ * older than the last applied migration.
+ */
+async function recoverAdvancedCommunicationMigrations(migrationsFolder: string) {
+  if (!await tableExists("__drizzle_migrations")) return;
+
+  for (const file of ADVANCED_MIGRATIONS) {
+    const sql = await readFile(path.join(migrationsFolder, file), "utf8");
+    // 0022 has no statement-breakpoint markers, so split on semicolons after
+    // removing comment lines.
+    const statements = sql
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n")
+      .split(";")
+      .map((statement) => statement.trim())
+      .filter(Boolean);
+
+    for (const statement of statements) {
+      try {
+        await pool.query(statement);
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (!code || !ALREADY_APPLIED_ERRORS.has(code)) throw error;
+      }
+    }
+  }
+  console.log("[database] Reconciled advanced communication migrations 0021-0024.");
+}
+
 try {
   const db = drizzle(pool);
   const bundledMigrationsFolder = fileURLToPath(
@@ -350,6 +393,7 @@ try {
   await recoverIncompleteServerSettingsMigration(migrationsFolder);
   await recoverMessageIdempotencyMigration();
   await recoverServerDiscoveryMigration(migrationsFolder);
+  await recoverAdvancedCommunicationMigrations(migrationsFolder);
   await migrate(db, { migrationsFolder });
   // Also reconcile a brand-new database: before the first Drizzle run the
   // messages table (and the migration journal) do not exist yet.
