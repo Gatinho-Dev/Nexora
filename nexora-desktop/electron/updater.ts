@@ -30,7 +30,7 @@ export function initUpdater(send: (next: UpdateState) => void) {
     return;
   }
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on("checking-for-update", () => setState({ status: "checking" }));
   autoUpdater.on("update-available", (info) => setState({ status: "downloading", version: info.version, percent: 0 }));
@@ -38,7 +38,10 @@ export function initUpdater(send: (next: UpdateState) => void) {
   autoUpdater.on("download-progress", (progress) =>
     setState({ status: "downloading", version: state.version, percent: Math.round(progress.percent) })
   );
-  autoUpdater.on("update-downloaded", (info) => setState({ status: "ready", version: info.version }));
+  autoUpdater.on("update-downloaded", (info) => {
+    setState({ status: "ready", version: info.version });
+    autoUpdater.quitAndInstall(false, true);
+  });
   autoUpdater.on("error", (error) => {
     console.error("Falha na atualização automática.", error);
     setState({ status: "error", message: "Não foi possível verificar atualizações agora." });

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('nexora', {
   typing: (target: unknown) => ipcRenderer.invoke('realtime:typing', target),
   voiceSend: (message: unknown) => ipcRenderer.invoke('voice:send', message),
   voiceIceServers: () => ipcRenderer.invoke('voice:iceServers'),
+  mediaFetch: (url: string) => ipcRenderer.invoke('media:fetch', url),
   pickFiles: () => ipcRenderer.invoke('files:pick'),
   uploadFiles: (paths: string[]) => ipcRenderer.invoke('files:upload', paths),
   getSettings: () => ipcRenderer.invoke('desktop:getSettings'),

@@ -349,6 +349,22 @@ app
       if (name === "auth.logout") await clearSession();
       return value;
     });
+    ipcMain.handle("media:fetch", async (event, url: unknown) => {
+      guard(event);
+      if (typeof url !== "string" || !url.startsWith("/api/files/") || url.length > 500 || url.includes(".."))
+        throw new Error("Mídia inválida.");
+      const response = await fetch(new URL(url, API_ORIGIN), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        redirect: "error",
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!response.ok) throw new Error(`Erro ao carregar mídia (${response.status}).`);
+      const type = (response.headers.get("content-type") ?? "").split(";")[0];
+      if (!type.startsWith("image/")) throw new Error("Mídia não suportada.");
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length > 8 * 1024 * 1024) throw new Error("Mídia muito grande.");
+      return `data:${type};base64,${buffer.toString("base64")}`;
+    });
     ipcMain.handle("files:pick", async (event) => {
       guard(event);
       const window = BrowserWindow.fromWebContents(event.sender);

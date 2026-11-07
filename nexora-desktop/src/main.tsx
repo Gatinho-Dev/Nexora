@@ -70,6 +70,7 @@ type Conversation = {
   id: number;
   name?: string | null;
   otherUser: User | null;
+  lastMessage?: { id: number; content: string; authorId: number; createdAt: string } | null;
   unreadCount: number;
   isGroup: boolean;
 };
@@ -125,6 +126,7 @@ declare global {
       typing: (target: Target) => Promise<boolean>;
       voiceSend: (message: unknown) => Promise<boolean>;
       voiceIceServers: () => Promise<RTCIceServer[]>;
+      mediaFetch: (url: string) => Promise<string>;
       getSettings: () => Promise<DesktopSettings>;
       setSettings: (patch: Partial<Pick<DesktopSettings, "notifications" | "minimizeToTray">>) => Promise<DesktopSettings>;
       onSettings: (fn: (settings: DesktopSettings) => void) => () => void;
@@ -151,6 +153,30 @@ const errorText = (error: unknown) =>
         "",
       )
     : "Não foi possível concluir esta ação.";
+function useMedia(src?: string | null) {
+  const [resolved, setResolved] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setResolved(null);
+    if (!src) return;
+    if (!src.startsWith("/api/files/")) {
+      setResolved(src);
+      return;
+    }
+    void window.nexora
+      .mediaFetch(src)
+      .then((value) => alive && setResolved(value))
+      .catch(() => alive && setResolved(null));
+    return () => {
+      alive = false;
+    };
+  }, [src]);
+  return resolved;
+}
+function Media({ src, alt = "" }: { src: string; alt?: string }) {
+  const resolved = useMedia(src);
+  return resolved ? <img src={resolved} alt={alt} /> : null;
+}
 function Avatar({
   name,
   src,
@@ -160,9 +186,10 @@ function Avatar({
   src?: string | null;
   size?: string;
 }) {
+  const resolved = useMedia(src);
   return (
     <span className={`avatar ${size}`}>
-      {src ? <img src={src} alt="" /> : name.slice(0, 1).toUpperCase()}
+      {resolved ? <img src={resolved} alt="" /> : name.slice(0, 1).toUpperCase()}
     </span>
   );
 }
@@ -660,6 +687,7 @@ function App() {
       <div className="boot">
         <img src={icon} alt="Nexora" />
         <LoaderCircle className="spin" size={22} />
+        <span className="boot-text">{updateText(update)}</span>
       </div>
     );
   if (!user) return <Login onLogin={setUser} />;
@@ -702,9 +730,8 @@ function App() {
             title={s.name}
             key={s.id}
             onClick={() => chooseServer(s.id)}
-          >
-            {s.iconUrl ? (
-              <img src={s.iconUrl} alt="" />
+          >                    {s.iconUrl ? (
+                      <Media src={s.iconUrl} />
             ) : (
               s.name.slice(0, 2).toUpperCase()
             )}
@@ -805,9 +832,11 @@ function App() {
                   <span className="dm-name">
                     {dm.name || label(dm.otherUser)}
                     <small>
-                      {dm.otherUser?.status === "online"
-                        ? "Disponível"
-                        : "Mensagem direta"}
+                      {dm.lastMessage
+                        ? dm.lastMessage.content
+                        : dm.otherUser?.status === "online"
+                          ? "Disponível"
+                          : "Mensagem direta"}
                     </small>
                   </span>
                   {dm.unreadCount > 0 && (

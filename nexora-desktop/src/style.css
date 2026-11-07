@@ -7,3 +7,4 @@
 .pending-file button{background:none;border:0;color:inherit;cursor:pointer;padding:0;display:inline-flex}
 .attachments{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .update-box{display:flex;justify-content:space-between;align-items:center;gap:16px;border-top:1px solid #ffffff0d;padding:16px 0}.update-box strong{font-size:13px}.update-box small{display:block;color:#999daf;font-size:11px;line-height:1.5;margin-top:5px}.update-box button{flex:none;border:1px solid #ffffff16;background:#363947;color:#f0f1f7;border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer}.update-box button.primary{background:#7786fa;border-color:#7786fa}.update-box button:disabled{opacity:.5;cursor:default}
+.boot-text{font-size:12px;color:#9a9db0;margin-top:4px}
