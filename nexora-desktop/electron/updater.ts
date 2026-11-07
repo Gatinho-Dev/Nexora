@@ -1,7 +1,8 @@
-import { app, shell } from "electron";
+import { app } from "electron";
 import { autoUpdater } from "electron-updater";
 import { createWriteStream } from "node:fs";
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -128,8 +129,14 @@ export async function installDebUpdate(version: string, debUrl: string, expected
     }
   }, file);
   if (hash.digest("base64") !== expectedSha512) throw new Error("Arquivo de atualização corrompido.");
-  const openError = await shell.openPath(target);
-  if (openError) throw new Error(openError);
+  // Instala direto pelo apt (sem abrir o gdebi); pkexec só pede a senha do sistema.
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("pkexec", ["apt-get", "install", "-y", "--reinstall", target], { stdio: "ignore" });
+    child.on("error", reject);
+    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error("Instalação da atualização não foi concluída."))));
+  });
+  app.relaunch();
+  app.exit(0);
 }
 
 // Reinicia e instala somente depois de o download estar concluído e confirmado pelo usuário.
