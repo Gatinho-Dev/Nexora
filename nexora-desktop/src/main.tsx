@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useRef,
@@ -153,6 +154,17 @@ const errorText = (error: unknown) =>
         "",
       )
     : "Não foi possível concluir esta ação.";
+// Cache por URL: avatares e anexos repetidos não voltam ao processo principal a cada montagem.
+const mediaCache = new Map<string, Promise<string>>();
+function cachedMedia(src: string) {
+  let entry = mediaCache.get(src);
+  if (!entry) {
+    entry = window.nexora.mediaFetch(src);
+    mediaCache.set(src, entry);
+    entry.catch(() => mediaCache.delete(src));
+  }
+  return entry;
+}
 function useMedia(src?: string | null) {
   const [resolved, setResolved] = useState<string | null>(null);
   useEffect(() => {
@@ -163,8 +175,7 @@ function useMedia(src?: string | null) {
       setResolved(src);
       return;
     }
-    void window.nexora
-      .mediaFetch(src)
+    void cachedMedia(src)
       .then((value) => alive && setResolved(value))
       .catch(() => alive && setResolved(null));
     return () => {
@@ -191,6 +202,48 @@ function Avatar({
     <span className={`avatar ${size}`}>
       {resolved ? <img src={resolved} alt="" /> : name.slice(0, 1).toUpperCase()}
     </span>
+  );
+}
+type PublicProfile = {
+  user: { id: number; username: string | null; displayName: string | null; avatar: string | null };
+  details: { displayName: string | null; pronouns: string | null; location: string | null; website: string | null; about: string | null } | null;
+  fields: { id: number; label: string; value: string }[];
+};
+function ProfileModal({ userId, onClose }: { userId: number; onClose: () => void }) {
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setProfile(null);
+    setError(null);
+    api<PublicProfile>("advanced.profile.publicProfile", { userId })
+      .then((data) => alive && setProfile(data))
+      .catch((err) => alive && setError(errorText(err)));
+    return () => { alive = false; };
+  }, [userId]);
+  const name = profile ? (profile.details?.displayName || profile.user.displayName || profile.user.username || "Usuário") : "";
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="profile-modal" role="dialog" aria-modal="true" aria-label="Perfil" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <h2>{name || "Perfil"}</h2>
+          <button className="icon-button" aria-label="Fechar perfil" onClick={onClose}><X size={20}/></button>
+        </header>
+        {error && <div className="error" role="alert">{error}</div>}
+        {!profile && !error && <p className="muted">Carregando perfil…</p>}
+        {profile && (
+          <>
+            <div className="profile-head"><Avatar name={name} src={profile.user.avatar} size="large" /><div>{profile.user.username && <small>@{profile.user.username}</small>}{profile.details?.pronouns && <small>{profile.details.pronouns}</small>}</div></div>
+            {profile.details?.about && <p className="profile-about">{profile.details.about}</p>}
+            <dl>
+              {profile.details?.location && <><dt>Localização</dt><dd>{profile.details.location}</dd></>}
+              {profile.details?.website && <><dt>Site</dt><dd>{profile.details.website}</dd></>}
+              {profile.fields.map((field) => <Fragment key={field.id}><dt>{field.label}</dt><dd>{field.value}</dd></Fragment>)}
+            </dl>
+          </>
+        )}
+      </section>
+    </div>
   );
 }
 function Login({ onLogin }: { onLogin: (user: User) => void }) {
@@ -359,6 +412,7 @@ function App() {
   const [atBottom, setAtBottom] = useState(false);
   const [focused, setFocused] = useState(document.hasFocus());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [profileUserId, setProfileUserId] = useState<number | null>(null);
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings | null>(null);
   const [update, setUpdate] = useState<UpdateState>({ status: "idle" });
   const [version, setVersion] = useState("");
@@ -1010,7 +1064,7 @@ function App() {
                       <div className="message-body">
                         {msg.replyTo && <div className="reply-preview">↳ {label(msg.replyTo.author)}: {msg.replyTo.content}</div>}
                         <div className="message-meta">
-                          <strong>{label(msg.author)}</strong>
+                          <button type="button" className="author-link" onClick={() => setProfileUserId(msg.author.id)}><strong>{label(msg.author)}</strong></button>
                           <time>
                             {new Date(msg.createdAt).toLocaleTimeString(
                               "pt-BR",
@@ -1020,7 +1074,7 @@ function App() {
                           {msg.editedAt && <small>editada</small>}
                         </div>
                         {editing === msg.id ? <form className="edit-message" onSubmit={async (event) => { event.preventDefault(); try { const result = await api<{ message: Message }>("message.edit", { messageId: msg.id, content: editText }); setMessages((old) => old.map((m) => m.id === msg.id ? result.message : m)); setEditing(null); } catch (err) { setError(errorText(err)); } }}><textarea value={editText} maxLength={4000} onChange={(event) => setEditText(event.target.value)} aria-label="Editar mensagem"/><div><button type="button" onClick={() => setEditing(null)}>Cancelar</button><button type="submit" disabled={!editText.trim()}>Salvar</button></div></form> : <p>{msg.content}</p>}
-                        {!!msg.attachments?.length && <div className="attachments">{msg.attachments.map((file) => <span key={file.id} className="attachment-link"><Paperclip size={14}/> {file.filename}</span>)}</div>}
+                        {!!msg.attachments?.length && <div className="attachments">{msg.attachments.map((file) => file.mimeType.startsWith("image/") ? <div key={file.id} className="attachment-image"><Media src={file.url} alt={file.filename}/></div> : <span key={file.id} className="attachment-link"><Paperclip size={14}/> {file.filename}</span>)}</div>}
                         {!!msg.reactions?.length && <div className="reactions">{msg.reactions.map((reaction) => <button type="button" key={reaction.emoji} className={reaction.userIds.includes(user.id) ? "mine" : ""} onClick={() => { const path = reaction.userIds.includes(user.id) ? "message.removeReaction" : "message.addReaction"; void api<{ reactions: Reaction[] }>(path, { messageId: msg.id, emoji: reaction.emoji }).then((result) => setMessages((old) => old.map((m) => m.id === msg.id ? { ...m, reactions: result.reactions } : m))).catch((err) => setError(errorText(err))); }}>{reaction.emoji} {reaction.count}</button>)}</div>}
                         <div className="message-actions">
                           <button type="button" title="Responder" aria-label="Responder" onClick={() => setReplying(msg)}><Reply size={15}/></button>
@@ -1141,6 +1195,7 @@ function App() {
           ))}
         </aside>
       )}
+      {profileUserId !== null && <ProfileModal userId={profileUserId} onClose={() => setProfileUserId(null)} />}
       {settingsOpen && <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}><section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="desktop-settings-title" onClick={(event) => event.stopPropagation()}><header><div><div className="eyebrow">NEXORA DESKTOP</div><h2 id="desktop-settings-title">Configurações</h2></div><button className="icon-button" aria-label="Fechar configurações" onClick={() => setSettingsOpen(false)}><X size={20}/></button></header><p>Preferências deste computador</p>{error && <div className="error" role="alert">{error}</div>}<label><span><strong>Notificações do sistema</strong><small>Avisos discretos, sem conteúdo da mensagem. Respeita o modo não perturbe e conversas silenciadas.</small></span><input type="checkbox" checked={desktopSettings?.notifications ?? false} disabled={!desktopSettings} onChange={(event) => void window.nexora.setSettings({ notifications: event.target.checked }).then(setDesktopSettings).catch((err) => setError(errorText(err)))}/></label><label><span><strong>Minimizar para a bandeja ao fechar</strong><small>{desktopSettings?.trayAvailable ? "A Nexora continua aberta em segundo plano." : "A bandeja não está disponível neste sistema."}</small></span><input type="checkbox" checked={desktopSettings?.minimizeToTray ?? false} disabled={!desktopSettings?.trayAvailable} onChange={(event) => void window.nexora.setSettings({ minimizeToTray: event.target.checked }).then(setDesktopSettings).catch((err) => setError(errorText(err)))}/></label><div className="update-box"><div><strong>Atualizações</strong><small>{updateText(update)}</small></div>{update.status === "ready" ? <button className="primary" onClick={() => void window.nexora.installUpdate().catch((err) => setError(errorText(err)))}>Reiniciar e atualizar</button> : <button onClick={() => void window.nexora.checkUpdates().then(setUpdate).catch((err) => setError(errorText(err)))} disabled={update.status === "checking" || update.status === "downloading" || update.status === "unsupported"}>Verificar agora</button>}</div><div className="settings-version">Nexora Desktop · {version || "versão indisponível"}</div></section></div>}
       {search && (
         <div className="modal-backdrop" onClick={() => setSearch(false)}>
