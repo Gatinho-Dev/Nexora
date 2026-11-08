@@ -15,7 +15,7 @@ const rpc = <T,>(path: string, input?: unknown) => window.nexora.rpc<T>(path, in
 const errorText = (err: unknown) => (err instanceof Error ? err.message : "Algo deu errado.");
 
 export function WebSettings({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<"account" | "sessions" | "privacy" | "username">("account");
+  const [tab, setTab] = useState<"profile" | "account" | "sessions" | "privacy" | "username">("profile");
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="web-settings-title" onClick={(event) => event.stopPropagation()}>
@@ -27,17 +27,89 @@ export function WebSettings({ onClose }: { onClose: () => void }) {
           <button className="icon-button" aria-label="Fechar" onClick={onClose}><X size={20} /></button>
         </header>
         <nav className="settings-tabs" aria-label="Abas da conta">
+          <button className={tab === "profile" ? "primary" : ""} onClick={() => setTab("profile")}>Perfil</button>
           <button className={tab === "account" ? "primary" : ""} onClick={() => setTab("account")}>E-mail e senha</button>
           <button className={tab === "sessions" ? "primary" : ""} onClick={() => setTab("sessions")}>Dispositivos conectados</button>
           <button className={tab === "username" ? "primary" : ""} onClick={() => setTab("username")}>Nome de usuário</button>
           <button className={tab === "privacy" ? "primary" : ""} onClick={() => setTab("privacy")}>Privacidade</button>
         </nav>
+        {tab === "profile" && <ProfilePanel />}
         {tab === "account" && <AccountPanel />}
         {tab === "sessions" && <SessionsPanel />}
         {tab === "username" && <UsernamePanel />}
         {tab === "privacy" && <PrivacyPanel />}
       </section>
     </div>
+  );
+}
+
+type ProfileData = { name: string | null; username: string | null; banner: string | null };
+
+function ProfilePanel() {
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [banner, setBanner] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = () =>
+    rpc<ProfileData>("auth.me")
+      .then((me) => {
+        setProfile(me);
+        setDisplayName(me.name ?? "");
+        setBanner(me.banner ?? "");
+      })
+      .catch((err) => setError(errorText(err)));
+  useEffect(() => { void load(); }, []);
+
+  const trimmedName = displayName.trim();
+  const bannerValid = banner.trim() === "" || /^https?:\/\//.test(banner.trim()) || banner.trim().startsWith("/api/files/");
+  const nameValid = trimmedName.length > 0 && trimmedName.length <= 64;
+  const changed = profile !== null && (trimmedName !== (profile.name ?? "") || banner.trim() !== (profile.banner ?? ""));
+
+  const save = async () => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const patch: { displayName?: string; banner?: string } = {};
+      if (trimmedName !== (profile?.name ?? "")) patch.displayName = trimmedName;
+      if (banner.trim() !== (profile?.banner ?? "")) patch.banner = banner.trim();
+      await rpc("account.updateProfile", patch);
+      setNotice("Perfil atualizado.");
+      await load();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={(event) => { event.preventDefault(); if (nameValid && bannerValid && changed && !busy) void save(); }}>
+      {error && <div className="error" role="alert">{error}</div>}
+      {notice && <div className="settings-version" role="status">{notice}</div>}
+      {profile === null && !error && <p>Carregando perfil…</p>}
+      {profile && (
+        <>
+          {profile.banner && bannerValid && (
+            <img src={profile.banner} alt="Banner atual" style={{ width: "100%", maxHeight: 120, objectFit: "cover", borderRadius: 8 }} />
+          )}
+          <p><strong>Nome de usuário:</strong> {profile.username ?? "—"}</p>
+          <label>
+            <span><strong>Nome de exibição</strong><small>Até 64 caracteres.</small></span>
+            <input value={displayName} maxLength={64} onChange={(event) => setDisplayName(event.target.value)} autoComplete="off" />
+          </label>
+          <label>
+            <span><strong>Banner (URL)</strong><small>Endereço http(s) da imagem. Deixe vazio para remover.</small></span>
+            <input value={banner} maxLength={500} onChange={(event) => setBanner(event.target.value)} autoComplete="off" placeholder="https://…" />
+          </label>
+          {!bannerValid && <div className="error" role="alert">Use um endereço que comece com http:// ou https://.</div>}
+          <button className="primary" type="submit" disabled={!nameValid || !bannerValid || !changed || busy}>Salvar perfil</button>
+        </>
+      )}
+    </form>
   );
 }
 

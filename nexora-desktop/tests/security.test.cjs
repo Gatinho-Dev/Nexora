@@ -35,10 +35,17 @@ test('account operations accept only the documented shapes', () => {
   assert.equal(validRpc('account.setUsername', { username: 'nexora_user.1' }), true);
   assert.equal(validRpc('account.setUsername', { username: 'ab' }), false);
   assert.equal(validRpc('account.setUsername', { username: 'com espaço' }), false);
+  assert.equal(validRpc('account.updateProfile', { displayName: 'Nexora' }), true);
+  assert.equal(validRpc('account.updateProfile', { banner: '' }), true);
+  assert.equal(validRpc('account.updateProfile', { banner: 'https://example.com/b.png' }), true);
+  assert.equal(validRpc('account.updateProfile', {}), false);
+  assert.equal(validRpc('account.updateProfile', { displayName: '   ' }), false);
+  assert.equal(validRpc('account.updateProfile', { displayName: 'x'.repeat(65) }), false);
+  assert.equal(validRpc('account.updateProfile', { banner: 'javascript:alert(1)' }), false);
+  assert.equal(validRpc('account.updateProfile', { bio: 'oi' }), false);
   assert.equal(validRpc('account.setPrivacy', { readReceipts: false }), true);
   assert.equal(validRpc('account.setPrivacy', { readReceipts: 'no' }), false);
   assert.equal(validRpc('account.setPrivacy', {}), false);
-  assert.equal(validRpc('account.updateProfile', { displayName: 'x' }), false);
   assert.equal(validRpc('account.emailStatus', undefined), true);
   assert.equal(validRpc('account.resendVerification', undefined), true);
   assert.equal(validRpc('account.cancelEmailChange', undefined), true);

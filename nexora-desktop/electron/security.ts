@@ -139,6 +139,13 @@ export function validRpc(path: unknown, input: unknown): boolean {
     return only("sessionId") && typeof obj.sessionId === "string" && obj.sessionId.length > 0 && obj.sessionId.length <= 32;
   if (path === "account.setUsername")
     return only("username") && typeof obj.username === "string" && /^[a-zA-Z0-9_.-]{3,32}$/.test(obj.username);
+  if (path === "account.updateProfile")
+    return (
+      only("displayName", "banner") &&
+      keys.length > 0 &&
+      (obj.displayName === undefined || (typeof obj.displayName === "string" && obj.displayName.trim().length > 0 && obj.displayName.length <= 64)) &&
+      (obj.banner === undefined || (typeof obj.banner === "string" && obj.banner.length <= 500 && (obj.banner === "" || /^https?:\/\//.test(obj.banner) || obj.banner.startsWith("/api/files/"))))
+    );
   if (path === "account.setPrivacy")
     return only("readReceipts") && typeof obj.readReceipts === "boolean";
   if (path === "account.requestEmailChange")
