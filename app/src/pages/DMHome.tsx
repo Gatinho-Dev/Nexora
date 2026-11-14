@@ -240,7 +240,7 @@ function QuickAction({
     <button
       onClick={onClick}
       aria-label={label}
-      className="flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl bg-panel ring-1 ring-black/10 dark:ring-white/[0.06] transition-colors hover:bg-hov"
+      className="flex min-h-[68px] flex-col items-center justify-center gap-1 rounded-2xl bg-panel ring-1 ring-black/10 transition-colors hover:bg-hov active:scale-[0.97] dark:ring-white/[0.06]"
     >
       <span className="text-primary">{icon}</span>
       <span className="text-[11px] font-semibold text-muted2">{label}</span>

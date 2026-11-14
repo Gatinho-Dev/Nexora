@@ -41,7 +41,7 @@ export function ServersSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-rail md:hidden">
-      <div className="flex h-14 items-center justify-between border-b border-border px-4 pb-0 pt-[calc(env(safe-area-inset-top))]">
+      <div className="flex min-h-14 items-center justify-between gap-2 border-b border-border px-4 pb-2 pt-[calc(env(safe-area-inset-top)+8px)]">
         <h1 className="flex items-center gap-2 text-base font-extrabold">
           <NexoraAppIcon className="h-6 w-6" decorative /> Comunidades
         </h1>

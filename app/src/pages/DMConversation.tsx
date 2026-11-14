@@ -156,7 +156,7 @@ export function DMConversation() {
         {isMobile && (
           <button
             onClick={() => navigate("/channels/@me")}
-            className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted2 hover:bg-white/[0.06] hover:text-white md:hidden"
+            className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-muted2 hover:bg-white/[0.06] hover:text-white md:hidden"
             aria-label="Voltar para mensagens"
           >
             <ArrowLeft className="h-5 w-5" />

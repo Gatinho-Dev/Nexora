@@ -448,7 +448,7 @@ export function ChatArea({
             setNewBelowCount(0);
             scrollToBottom();
           }}
-          className="absolute bottom-16 right-6 z-20 flex items-center gap-2 rounded-full bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-xl transition-colors hover:bg-primary/90"
+          className="absolute bottom-24 right-4 z-20 flex min-h-[44px] items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-xl transition-colors hover:bg-primary/90 md:bottom-16 md:right-6 md:min-h-0 md:px-3.5 md:py-2"
         >
           <ArrowDown className="h-3.5 w-3.5" />
           <span>
