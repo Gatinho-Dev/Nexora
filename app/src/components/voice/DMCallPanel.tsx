@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
-  Headphones,
   Mic,
   MicOff,
   MonitorUp,
@@ -23,6 +22,8 @@ import { cn } from "@/lib/utils";
 import { voiceManager } from "@/lib/rtc";
 import { openUserSettings } from "@/lib/openUserSettings";
 import { useAppStore } from "@/store/useAppStore";
+import { NexoraVoiceRing } from "@/components/effects/NexoraVoiceRing";
+import { NexoraVoiceBeam } from "@/components/effects/NexoraVoiceBeam";
 import { toast } from "sonner";
 import type { VoiceParticipant } from "@contracts/types";
 
@@ -141,6 +142,7 @@ export function DMCallPanel({
   const deviceError = useAppStore(state => state.voiceDeviceError);
   const speaking = useAppStore(state => state.speakingByUser);
   const localVideo = useAppStore(state => state.localVideo);
+  const localStream = useAppStore(state => state.localStream);
   const remoteStreams = useAppStore(state => state.remoteStreams);
   const [now, setNow] = useState(Date.now);
 
@@ -234,9 +236,19 @@ export function DMCallPanel({
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#7383FF]/55 to-transparent" />
       <div className="flex min-h-14 items-center gap-3 px-3 sm:px-4">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[#7383FF]/25 bg-[#4654D8]/14 text-[#9aa5ff]">
-          <Headphones className="h-4.5 w-4.5" aria-hidden />
-        </div>
+        <NexoraVoiceRing
+          size={36}
+          state={
+            phase === "connected"
+              ? "listening"
+              : phase === "ringing" || phase === "creating" || phase === "connecting"
+                ? "processing"
+                : "idle"
+          }
+          stream={localStream ?? undefined}
+          label={`Estado da chamada: ${phaseLabel}`}
+          className="shrink-0"
+        />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <p className="truncate text-sm font-semibold">{title}</p>
@@ -446,7 +458,10 @@ export function DMCallPanel({
             </div>
           </div>
 
-          <div className="flex items-center justify-center gap-2 border-t border-white/[0.06] bg-black/[0.08] px-3 py-2.5 pb-[max(10px,env(safe-area-inset-bottom))]">
+          <NexoraVoiceBeam
+            stream={localStream ?? undefined}
+            className="flex items-center justify-center gap-2 border-t border-white/[0.06] bg-black/[0.08] px-3 py-2.5 pb-[max(10px,env(safe-area-inset-bottom))]"
+          >
             <Control
               label={muted ? "Ativar microfone" : "Silenciar microfone"}
               active={muted}
@@ -511,7 +526,7 @@ export function DMCallPanel({
             >
               <PhoneOff className="h-4.5 w-4.5" />
             </Control>
-          </div>
+          </NexoraVoiceBeam>
         </>
       )}
     </section>

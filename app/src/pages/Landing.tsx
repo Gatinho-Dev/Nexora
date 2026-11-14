@@ -30,6 +30,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { NexoraAppIcon, NexoraMark } from "@/components/NexoraBrand";
+import { MetalCta } from "@/components/effects/MetalCta";
+import { GooeyBackdrop } from "@/components/effects/GooeyBackdrop";
 import { useAuth } from "@/hooks/useAuth";
 import { Seo } from "@/lib/seo";
 import heroImage from "@/assets/landing/nexora-hero.webp";
@@ -436,6 +438,7 @@ export default function Landing() {
 
       <main id="conteudo">
         <section className="landing-hero">
+          <GooeyBackdrop />
           <div className="landing-shell landing-hero__grid">
             <div className="landing-hero__copy">
               <Reveal>
@@ -452,13 +455,15 @@ export default function Landing() {
               </Reveal>
               <Reveal delay={210}>
                 <div className="landing-hero__actions">
-                  <Link
-                    className="landing-button landing-button--primary landing-button--large"
-                    to="/register"
-                  >
-                    Criar conta
-                    <ArrowRight aria-hidden />
-                  </Link>
+                  <MetalCta>
+                    <Link
+                      className="landing-button landing-button--primary landing-button--large"
+                      to="/register"
+                    >
+                      Criar conta
+                      <ArrowRight aria-hidden />
+                    </Link>
+                  </MetalCta>
                   <Link
                     className="landing-button landing-button--secondary landing-button--large"
                     to="/login"
@@ -648,13 +653,15 @@ export default function Landing() {
               <h2>O próximo “oi” começa aqui.</h2>
               <p>Crie seu espaço no Nexora e chame quem faz parte dele.</p>
               <div className="landing-final-cta__actions">
-                <Link
-                  className="landing-button landing-button--primary landing-button--large"
-                  to="/register"
-                >
-                  Criar conta
-                  <ArrowRight aria-hidden />
-                </Link>
+                <MetalCta>
+                  <Link
+                    className="landing-button landing-button--primary landing-button--large"
+                    to="/register"
+                  >
+                    Criar conta
+                    <ArrowRight aria-hidden />
+                    </Link>
+                  </MetalCta>
                 <Link className="landing-text-link" to="/login">
                   Entrar
                 </Link>

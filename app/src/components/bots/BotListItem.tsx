@@ -27,6 +27,7 @@ import {
   GitBranch,
 } from 'lucide-react';
 import { renderIcon } from '@/components/flow/nodes/FlowNodes';
+import { BotFace } from '@/components/effects/BotFace';
 
 // ============================================
 // Avatar Component
@@ -41,42 +42,12 @@ const BotAvatar = memo(function BotAvatar({
   name: string;
   size?: number;
 }) {
-  const initials = useMemo(() => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  }, [name]);
-
-  const colors = [
-    'bg-primary-500',
-    'bg-success-500',
-    'bg-warning-500',
-    'bg-danger-500',
-    'bg-purple-500',
-    'bg-pink-500',
-    'bg-indigo-500',
-    'bg-teal-500',
-  ];
-
-  const colorIndex = useMemo(() => {
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return Math.abs(hash) % colors.length;
-  }, [name]);
-
   return (
     <div className="avatar" style={{ width: size, height: size }}>
       {src ? (
         <img src={src} alt="" className="avatar-img" />
       ) : (
-        <div className={`avatar-fallback ${colors[colorIndex]}`} style={{ fontSize: size * 0.35 }}>
-          {initials}
-        </div>
+        <BotFace botId={name} name={name} size={size ?? 48} />
       )}
     </div>
   );

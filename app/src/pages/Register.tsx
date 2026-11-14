@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { NexoraBeam } from "@/components/effects/NexoraBeam";
 import { MigrationBanner } from "@/components/MigrationBanner";
 import { Seo } from "@/lib/seo";
 
@@ -339,17 +340,19 @@ export default function Register() {
                 </div>
               )}
 
-              <Button
-                type="submit"
-                disabled={!canSubmit}
-                aria-busy={register.isPending}
-                className="h-12 w-full rounded-md bg-[#5865F2] text-base font-semibold text-white hover:bg-[#4752C4]"
-              >
-                {register.isPending && (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                )}
-                {register.isPending ? "Criando conta..." : "Criar conta"}
-              </Button>
+              <NexoraBeam className="block w-full">
+                <Button
+                  type="submit"
+                  disabled={!canSubmit}
+                  aria-busy={register.isPending}
+                  className="h-12 w-full rounded-md bg-[#5865F2] text-base font-semibold text-white hover:bg-[#4752C4]"
+                >
+                  {register.isPending && (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  )}
+                  {register.isPending ? "Criando conta..." : "Criar conta"}
+                </Button>
+              </NexoraBeam>
             </form>
 
             <p className="mt-6 text-sm text-muted2">

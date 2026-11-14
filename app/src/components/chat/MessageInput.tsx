@@ -71,6 +71,7 @@ import {
   type FormattingResult,
 } from "@/lib/composerFormatting";
 import { toast } from "sonner";
+import { NexoraVoiceBeam } from "@/components/effects/NexoraVoiceBeam";
 import {
   Dialog,
   DialogContent,
@@ -100,6 +101,10 @@ type PendingFile = {
   /** MODERATION_UNAVAILABLE terminal state — user can retry. */
   failed?: boolean;
 };
+
+/** Nível ambiente do feixe de voz enquanto grava (amostrado pelo driver). */
+const recordingLevel = () =>
+  0.35 + 0.3 * (0.5 + 0.5 * Math.sin(Date.now() / 220));
 
 /** Terminal moderation states allow sending; others must be awaited. */
 function isMediaCleared(f: PendingFile): boolean {
@@ -1317,7 +1322,10 @@ export function MessageInput({
 
       {/* Voice recording controls */}
       {recording || recordedUrl ? (
-        <div className="flex items-center gap-3 rounded-xl bg-sidebar border border-white/10 px-4 py-3 text-white shadow-lg">
+        <NexoraVoiceBeam
+          className="flex items-center gap-3 rounded-xl bg-sidebar border border-white/10 px-4 py-3 text-white shadow-lg"
+          level={recording ? recordingLevel : undefined}
+        >
           {recording ? (
             <>
               <span className="h-3 w-3 rounded-full bg-red-500 animate-ping" />
@@ -1380,7 +1388,7 @@ export function MessageInput({
               </div>
             </>
           )}
-        </div>
+        </NexoraVoiceBeam>
       ) : (
         <div
           className={cn(

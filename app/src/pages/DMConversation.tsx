@@ -45,7 +45,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { NexoraOrb } from "@/components/effects/NexoraOrb";
 import { PinnedMessagesPopover } from "@/components/private/PinnedMessagesPopover";
 
 export function DMConversation() {
@@ -430,9 +430,9 @@ export function DMConversation() {
             Conversa não encontrada ou você não participa mais dela.
           </div>
         ) : !conversation.data || !me ? (
-          <div className="flex flex-1 items-center justify-center bg-chat">
-            <NexoraAppIcon className="h-10 w-10 animate-pulse" />
-          </div>
+                      <div className="flex flex-1 items-center justify-center bg-chat">
+              <NexoraOrb state="working" size={64} label="Carregando conversa" />
+            </div>
         ) : (
           <ChatArea
             key={conversationId}

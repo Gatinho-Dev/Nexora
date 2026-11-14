@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Download } from "lucide-react";
+import { MosaicReveal } from "@/components/effects/MosaicReveal";
+import {
+  isWebGL2Supported,
+  usePrefersReducedMotion,
+} from "@/components/effects/useNexoraTheme";
 
 /**
  * Visualizador fullscreen de imagem (mobile-first): pinch-zoom, duplo toque,
@@ -17,6 +22,13 @@ export function ImageViewer({
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [loaded, setLoaded] = useState(false);
+  const reduceMotion = usePrefersReducedMotion();
+  // Revelação em mosaico uma única vez ao abrir (WebGL2 + sem movimento
+  // reduzido); depois o <img> interativo assume para zoom/pan.
+  const [fxSupported] = useState(
+    () => !reduceMotion && isWebGL2Supported()
+  );
+  const [fxDone, setFxDone] = useState(!fxSupported);
   const pinch = useRef<{
     startDist: number;
     startScale: number;
@@ -141,14 +153,17 @@ export function ImageViewer({
         </button>
       </div>
 
-      {!loaded && (
-        <div
-          className="absolute h-8 w-8 animate-pulse rounded-full bg-white/20"
-          aria-hidden
-        />
-      )}
-
-      <img
+      {!fxDone ? (
+        <MosaicReveal src={src} onRevealed={() => setFxDone(true)} />
+      ) : (
+        <>
+          {!loaded && (
+            <div
+              className="absolute h-8 w-8 animate-pulse rounded-full bg-white/20"
+              aria-hidden
+            />
+          )}
+          <img
         src={src}
         alt={alt}
         loading="lazy"
@@ -163,7 +178,9 @@ export function ImageViewer({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-      />
+          />
+        </>
+      )}
 
       {scale > 1 && (
         <button

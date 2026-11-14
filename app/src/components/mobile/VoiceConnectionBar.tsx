@@ -13,6 +13,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { useNavigate } from "react-router";
+import { NexoraVoiceBeam } from "@/components/effects/NexoraVoiceBeam";
 
 /**
  * Barra persistente de chamada (mobile): aparece sempre que o usuário está
@@ -47,7 +48,7 @@ export function VoiceConnectionBar({
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 md:hidden animate-in slide-in-from-bottom fade-in duration-200">
-      <div className="flex items-center gap-2.5 border-t border-black/20 bg-rail px-3 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
+      <NexoraVoiceBeam className="flex items-center gap-2.5 border-t border-black/20 bg-rail px-3 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.35)]">
         <button
           onClick={() => (onOpenSheet ? onOpenSheet() : navigate(callPath))}
           aria-label="Abrir painel da chamada"
@@ -109,7 +110,7 @@ export function VoiceConnectionBar({
         >
           <PhoneOff className="h-4 w-4" />
         </button>
-      </div>
+      </NexoraVoiceBeam>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import { Routes, Route, useParams } from "react-router";
-import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { NexoraOrb } from "@/components/effects/NexoraOrb";
 import { CiderProvider } from "@/cider/provider";
 
 const Landing = lazy(() => import("./pages/Landing"));
@@ -86,7 +86,7 @@ function PageLoader() {
       className="flex min-h-[100dvh] items-center justify-center bg-chat"
       aria-busy="true"
     >
-      <NexoraAppIcon className="h-12 w-12 animate-pulse" />
+      <NexoraOrb state="connecting" size={64} label="Carregando" />
       <span className="sr-only" role="status">
         Carregando...
       </span>

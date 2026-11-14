@@ -33,7 +33,8 @@ import { ServersSheet } from "@/components/mobile/ServersSheet";
 import { useKeyboardOffset } from "@/hooks/useKeyboardOffset";
 import { toast } from "sonner";
 import { TriangleAlert } from "lucide-react";
-import { NexoraAppIcon, NexoraLogo } from "@/components/NexoraBrand";
+import { NexoraLogo } from "@/components/NexoraBrand";
+import { NexoraOrb } from "@/components/effects/NexoraOrb";
 import { Seo } from "@/lib/seo";
 
 export function AppLayout() {
@@ -163,7 +164,7 @@ export function AppLayout() {
   if (isLoading || !user) {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center bg-chat text-foreground">
-        <NexoraAppIcon className="mb-4 h-14 w-14 animate-pulse" />
+        <NexoraOrb state="connecting" size={64} label="Carregando Nexora" className="mb-4" />
         <p className="text-sm font-medium text-muted2 animate-pulse">
           Carregando Nexora...
         </p>

@@ -287,11 +287,18 @@
 }
 
 .landing-hero {
+  position: relative;
   min-height: calc(100dvh - 72px);
   display: grid;
   align-items: center;
   padding-block: clamp(44px, 7vh, 80px);
   overflow: hidden;
+}
+
+/* Conteúdo da hero acima das gosmas decorativas (GooeyBackdrop). */
+.landing-hero__grid {
+  position: relative;
+  z-index: 1;
 }
 
 .landing-hero__grid {

@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar } from "../Avatar";
+import { NexoraOrb } from "@/components/effects/NexoraOrb";
 
 type Props = {
   channelId?: number;
@@ -470,14 +471,14 @@ export function ChatArea({
       <div className="h-5 px-4 text-xs font-medium text-muted2 flex items-center select-none">
         {typingUsers.length === 1 && (
           <span className="flex items-center gap-1.5 text-muted2">
-            <span className="h-1.5 w-1.5 animate-ping rounded-full bg-primary" />
+            <NexoraOrb state="listening" size={20} label="Alguém está digitando" />
             <strong className="text-primary">{typingUsers[0]}</strong> está
             digitando...
           </span>
         )}
         {typingUsers.length === 2 && (
           <span className="flex items-center gap-1.5 text-muted2">
-            <span className="h-1.5 w-1.5 animate-ping rounded-full bg-primary" />
+            <NexoraOrb state="listening" size={20} label="Duas pessoas estão digitando" />
             <strong className="text-primary">{typingUsers[0]}</strong> e{" "}
             <strong className="text-primary">{typingUsers[1]}</strong> estão
             digitando...
@@ -485,7 +486,7 @@ export function ChatArea({
         )}
         {typingUsers.length > 2 && (
           <span className="flex items-center gap-1.5 text-muted2">
-            <span className="h-1.5 w-1.5 animate-ping rounded-full bg-primary" />
+            <NexoraOrb state="listening" size={20} label="Várias pessoas estão digitando" />
             Várias pessoas estão digitando na Nexora...
           </span>
         )}

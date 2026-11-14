@@ -6,6 +6,7 @@ import { realtime } from "@/lib/ws";
 import { Avatar } from "./Avatar";
 import { UserSettingsModal } from "./modals/UserSettingsModal";
 import { Button } from "@/components/ui/button";
+import { NexoraVoiceRing } from "@/components/effects/NexoraVoiceRing";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -320,9 +321,11 @@ export function VoiceView({
   if (!connected) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-chat p-8 text-white select-none">
-        <div className="rounded-2xl bg-sidebar p-6 text-muted2 border border-black/20">
-          <Headphones className="h-12 w-12" />
-        </div>
+        <NexoraVoiceRing
+          size={112}
+          state="listening"
+          label={`Sala de voz ${title}: aguardando participantes`}
+        />
         <div className="text-center max-w-sm">
           <h2 className="text-xl font-bold text-white tracking-wide">
             {title}

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { LoginAlternatives } from "@/components/auth/LoginAlternatives";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { NexoraBeam } from "@/components/effects/NexoraBeam";
 import { MigrationBanner } from "@/components/MigrationBanner";
 import { Seo } from "@/lib/seo";
 
@@ -254,21 +255,23 @@ export default function Login() {
                 </div>
               )}
 
-              <Button
-                type="submit"
-                disabled={login.isPending}
-                aria-busy={login.isPending}
-                className="h-12 w-full rounded-md bg-[#5865F2] text-base font-semibold text-white hover:bg-[#4752C4]"
-              >
-                {login.isPending && (
-                  <Loader2 className="size-4 animate-spin" aria-hidden />
-                )}
-                {login.isPending
-                  ? "Entrando..."
-                  : needsTwoFactor
-                    ? "Verificar e entrar"
-                    : "Entrar"}
-              </Button>
+              <NexoraBeam className="block w-full">
+                <Button
+                  type="submit"
+                  disabled={login.isPending}
+                  aria-busy={login.isPending}
+                  className="h-12 w-full rounded-md bg-[#5865F2] text-base font-semibold text-white hover:bg-[#4752C4]"
+                >
+                  {login.isPending && (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  )}
+                  {login.isPending
+                    ? "Entrando..."
+                    : needsTwoFactor
+                      ? "Verificar e entrar"
+                      : "Entrar"}
+                </Button>
+              </NexoraBeam>
              </form>
 
              {!needsTwoFactor && (

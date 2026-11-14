@@ -11,6 +11,7 @@ import { Avatar } from "@/components/Avatar";
 import { cn } from "@/lib/utils";
 import { BellOff, Inbox, MessageSquarePlus, Pin, Search, UserPlus, Users } from "lucide-react";
 import { NexoraAppIcon } from "@/components/NexoraBrand";
+import { NexoraBeam } from "@/components/effects/NexoraBeam";
 import { NewMessageDialog } from "@/components/private/NewMessageDialog";
 import { GroupAvatar } from "@/components/groups/GroupAvatar";
 import { groupDisplayName } from "@/lib/groupDisplayName";
@@ -108,12 +109,14 @@ function MobileHome({ onOpenProfile }: { onOpenProfile?: (userId: number) => voi
             <p className="max-w-[240px] text-xs text-muted2">
               Selecione uma pessoa para uma DM ou várias para conversar em grupo.
             </p>
-            <button
-              onClick={() => setNewMessageOpen(true)}
-              className="mt-1 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary/90"
-            >
-              Nova conversa
-            </button>
+            <NexoraBeam>
+              <button
+                onClick={() => setNewMessageOpen(true)}
+                className="mt-1 rounded-full bg-primary px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-primary/90"
+              >
+                Nova conversa
+              </button>
+            </NexoraBeam>
           </li>
         )}
         {conversations.data?.filter(c => !c.isRequest).map(conv => {
