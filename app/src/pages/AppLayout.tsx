@@ -174,10 +174,10 @@ export function AppLayout() {
   const inVoiceCall = inCall;
   const mobileBottomPadding =
     !inVoiceCall
-      ? "pb-[calc(60px+env(safe-area-inset-bottom))] md:pb-0"
+      ? "pb-[calc(68px+env(safe-area-inset-bottom))] md:pb-0"
       : viewingCall
         ? ""
-        : "pb-[calc(66px+env(safe-area-inset-bottom))] md:pb-0";
+        : "pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-0";
 
   // Server-side enforced ban — presentation only.
   if (safety.data?.safety.accountStatus === "permanently_banned") {
@@ -236,9 +236,9 @@ export function AppLayout() {
             className="absolute inset-0 bg-black/70 backdrop-blur-xs"
             onClick={() => setMobileNavOpen(false)}
           />
-          <div className="absolute left-0 top-0 flex h-full shadow-2xl">
+          <div className="nexora-mobile-drawer absolute left-0 top-0 flex h-full max-w-[calc(100vw-16px)] shadow-2xl">
             <ServerRail />
-            <div id="mobile-sidebar-slot" className="flex h-full" />
+            <div id="mobile-sidebar-slot" className="mobile-drawer-slot flex h-full min-w-0" />
           </div>
         </div>
       )}
@@ -280,7 +280,7 @@ export function AppLayout() {
         {/* Mobile top bar — só nas telas sem header próprio (home, requests,
             oficial). Em servidores e conversas o header da tela é único. */}
         {showMobileTopBar && (
-          <div className="flex h-12 items-center gap-2 border-b border-black/20 px-3 md:hidden bg-sidebar text-foreground">
+          <div className="flex h-14 items-center gap-1 border-b border-black/20 bg-sidebar/95 px-2 text-foreground backdrop-blur-xl md:hidden">
             <button
               onClick={() => setMobileNavOpen(!mobileNavOpen)}
               className="flex h-11 w-11 items-center justify-center rounded-md text-muted2 hover:bg-hov hover:text-white"

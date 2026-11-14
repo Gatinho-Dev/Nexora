@@ -1005,7 +1005,7 @@ export function MessageInput({
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
   return (
-    <div className="px-4 pt-1 relative bg-chat pb-[calc(16px+env(safe-area-inset-bottom))] md:pb-4">
+    <div className="px-2.5 pt-1 relative bg-chat pb-2 md:px-4 md:pb-4">
       {/* Menu de anexos (mobile) */}
       {attachOpen && (
         <div
@@ -1384,7 +1384,7 @@ export function MessageInput({
       ) : (
         <div
           className={cn(
-            "relative flex min-h-11 items-end gap-1.5 rounded-lg border border-transparent bg-input px-3.5 py-2 transition-colors focus-within:border-primary",
+            "relative flex min-h-[52px] items-end gap-0.5 rounded-2xl border border-white/[0.06] bg-input px-2 py-1.5 transition-colors focus-within:border-primary md:min-h-11 md:gap-1.5 md:rounded-lg md:px-3.5 md:py-2",
             (replyingTo || files.length > 0) &&
               "rounded-t-none border-t-0"
           )}
@@ -1492,7 +1492,7 @@ export function MessageInput({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="p-1.5 text-muted2 hover:text-white transition-colors disabled:opacity-40 active:scale-90 rounded-full"
+                  className="flex h-11 w-11 items-center justify-center text-muted2 hover:text-white transition-colors disabled:opacity-40 active:scale-90 rounded-full md:h-auto md:w-auto md:p-1.5"
                   disabled={disabled || uploading}
                   onClick={() => {
                     if (isMobile) setAttachOpen(true);
@@ -1509,7 +1509,7 @@ export function MessageInput({
           <textarea
             ref={textareaRef}
             rows={1}
-            className="min-h-9 max-h-48 flex-1 resize-none bg-transparent py-1.5 text-sm text-bodyx outline-none placeholder:text-faint disabled:opacity-50"
+            className="min-h-[40px] max-h-48 flex-1 resize-none bg-transparent py-2 text-[16px] leading-6 text-bodyx outline-none placeholder:text-faint disabled:opacity-50 md:py-1.5 md:text-sm"
             placeholder={
               pendingCommand
                 ? pendingCommand.args?.[0]?.placeholder ?? "Argumentos do comando…"
@@ -1572,7 +1572,7 @@ export function MessageInput({
           <Suspense fallback={<PickerFallback />}>
             <EmojiPickerPro onPick={emoji => setText(t => t + emoji)}>
               <button
-                className="p-1.5 text-muted2 hover:text-white transition-colors"
+                className="flex h-11 w-11 items-center justify-center text-muted2 hover:text-white transition-colors md:h-auto md:w-auto md:p-1.5"
                 title="Emojis"
                 type="button"
                 aria-label="Emojis"
@@ -1630,7 +1630,7 @@ export function MessageInput({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="p-1.5 text-primary transition-colors hover:text-primary/80 disabled:opacity-40"
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/15 text-primary transition-colors hover:text-primary/80 disabled:opacity-40 md:h-auto md:w-auto md:bg-transparent md:p-1.5"
                     disabled={disabled || send.isPending || uploading}
                     onClick={doSend}
                   >

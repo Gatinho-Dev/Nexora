@@ -129,11 +129,11 @@ export function ServerChannel() {
   const canRead = details.data.myPermissions.includes("READ_MESSAGES");
 
   const header = channel ? (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-black/20 px-4 bg-chat text-foreground select-none shadow-sm">
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-black/20 bg-chat px-2 text-foreground select-none shadow-sm sm:px-4 md:h-12">
       <div className="flex items-center gap-2 min-w-0">
         <button
           onClick={() => useAppStore.getState().setMobileNavOpen(true)}
-          className="-ml-1 rounded p-1 text-muted2 hover:bg-white/10 hover:text-foreground md:hidden"
+          className="-ml-1 flex h-11 w-11 items-center justify-center rounded-xl text-muted2 hover:bg-white/10 hover:text-foreground md:hidden"
           aria-label="Abrir lista de canais"
           title="Canais"
         >
