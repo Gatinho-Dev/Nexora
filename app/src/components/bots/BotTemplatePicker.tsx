@@ -3,7 +3,7 @@
  * Galeria "Começar de um modelo" do assistente de criação de bots.
  */
 
-import React, { memo, useMemo } from "react";
+import { memo, useMemo } from "react";
 import { BOT_TEMPLATES } from "./botTemplates";
 import { renderIcon } from "@/components/flow/nodes/flowIcons";
 

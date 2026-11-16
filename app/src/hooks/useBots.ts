@@ -6,7 +6,8 @@ import type {
   BotExecution,
   BotMode,
 } from "@/types/bots";
-import type { BotDTO, BotExecutionDTO } from "@contracts/types";
+import type { BotDTO, BotExecutionDTO, BotExecutionStatus, BotTriggerType } from "@contracts/types";
+import { isTriggerNodeType, type NodeType } from "@/contracts/bots";
 
 // Transform backend DTO to frontend Bot type
 const adaptBot = (dto: BotDTO): Bot => ({
@@ -116,6 +117,27 @@ export const useBots = (serverId: number) => {
   };
 };
 
+// O banco guarda triggerType como texto livre; normaliza para o union do DTO
+// (desconhecido vira null e o adaptador usa "webhook" como reserva).
+const toExecutionDTO = (row: {
+  id: number;
+  botId: number;
+  triggerId: number | null;
+  triggerType: string | null;
+  status: BotExecutionStatus;
+  context: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  startedAt: string | Date;
+  completedAt: string | Date | null;
+}): BotExecutionDTO => ({
+  ...row,
+  triggerType:
+    row.triggerType && isTriggerNodeType(row.triggerType as NodeType)
+      ? (row.triggerType as BotTriggerType)
+      : null,
+});
+
 // Cursor-based execution history for one bot (newest first).
 export const useBotExecutions = (botId: number, execServerId: string, limit = 25) => {
   const query = trpc.bot.listExecutions.useInfiniteQuery(
@@ -127,7 +149,7 @@ export const useBotExecutions = (botId: number, execServerId: string, limit = 25
     }
   );
   const executions = (query.data?.pages ?? []).flatMap((page) =>
-    page.items.map((dto) => adaptExecution(dto, execServerId))
+    page.items.map((row) => adaptExecution(toExecutionDTO(row), execServerId))
   );
   return { ...query, executions };
 };
