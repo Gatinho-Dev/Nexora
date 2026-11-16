@@ -21,6 +21,16 @@ interface CategorySectionProps {
   onDragStart: (event: React.DragEvent<HTMLDivElement>, nodeDef: NodeDefinition) => void;
 }
 
+const nodeMatchesQuery = (node: NodeDefinition, query: string): boolean => {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    node.label.toLowerCase().includes(q) ||
+    node.description.toLowerCase().includes(q) ||
+    node.type.toLowerCase().includes(q)
+  );
+};
+
 const CategorySection = memo(function CategorySection({
   category,
   nodes,
@@ -38,12 +48,7 @@ const CategorySection = memo(function CategorySection({
   const meta = categoryMeta[category];
 
   // Filter nodes based on search
-  const filteredNodes = nodes.filter(
-    (node) =>
-      node.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      node.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      node.type.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredNodes = nodes.filter((node) => nodeMatchesQuery(node, searchQuery));
 
   if (filteredNodes.length === 0 && searchQuery) {
     return null;
@@ -245,6 +250,17 @@ export const NodePalette = memo(function NodePalette({
 
       {/* Categories */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {searchQuery.trim() &&
+          categories.every((category) =>
+            category.nodes.every((node) => !nodeMatchesQuery(node, searchQuery))
+          ) && (
+            <div className="px-3 py-8 text-center">
+              <p className="text-sm font-medium text-text-primary">Nenhum nó encontrado</p>
+              <p className="text-xs text-text-tertiary mt-1">
+                Tente buscar por &ldquo;mensagem&rdquo;, &ldquo;cargo&rdquo; ou &ldquo;tempo&rdquo;.
+              </p>
+            </div>
+          )}
         {categories.map((category) => (
           <CategorySection
             key={category.id}
