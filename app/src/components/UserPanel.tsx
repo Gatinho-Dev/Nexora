@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar } from "./Avatar";
@@ -6,7 +6,11 @@ import { statusColor } from "@/lib/statusColor";
 import { useAppStore } from "@/store/useAppStore";
 import { realtime } from "@/lib/ws";
 import { voiceManager } from "@/lib/rtc";
-import { UserSettingsModal } from "./modals/UserSettingsModal";
+const UserSettingsModal = lazy(() =>
+  import("./modals/UserSettingsModal").then((module) => ({
+    default: module.UserSettingsModal,
+  }))
+);
 import { NexoraMark } from "./NexoraBrand";
 import { BadgeIcon } from "./badges/BadgeUI";
 import { ProfileAvatar } from "./profile/ProfileAvatar";
@@ -477,12 +481,14 @@ export function UserPanel() {
         </TooltipProvider>
       </div>
 
-      <UserSettingsModal
-        key={settingsTab}
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        initialTab={settingsTab}
-      />
+      <Suspense fallback={null}>
+        <UserSettingsModal
+          key={settingsTab}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          initialTab={settingsTab}
+        />
+      </Suspense>
     </div>
   );
 }

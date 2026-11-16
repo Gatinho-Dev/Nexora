@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,10 +19,13 @@ import { useVoiceCallView } from "@/hooks/useVoiceCallView";
 import { PermanentBanScreen } from "@/components/safety/PermanentBanScreen";
 import { SessionRevokedScreen } from "@/components/settings/SessionRevokedScreen";
 import { ReportHost } from "@/components/safety/ReportHost";
-import {
-  UserSettingsModal,
-  type SettingsTab,
-} from "@/components/modals/UserSettingsModal";
+import type { SettingsTab } from "@/components/modals/UserSettingsModal";
+
+const UserSettingsModal = lazy(() =>
+  import("@/components/modals/UserSettingsModal").then((module) => ({
+    default: module.UserSettingsModal,
+  }))
+);
 import { OPEN_SETTINGS_EVENT } from "@/lib/openUserSettings";
 import { MigrationBanner } from "@/components/MigrationBanner";
 import { GlobalMessageBanner } from "@/components/GlobalMessageBanner";
@@ -341,11 +344,13 @@ export function AppLayout() {
       />
       <ShortcutsModal open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <ReportHost />
-      <UserSettingsModal
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        initialTab={settingsTab}
-      />
+      <Suspense fallback={null}>
+        <UserSettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          initialTab={settingsTab}
+        />
+      </Suspense>
       <IncomingCallToast />
       <NotificationPopupHost />
       <VoiceMediaRenderer myUserId={user.id} />

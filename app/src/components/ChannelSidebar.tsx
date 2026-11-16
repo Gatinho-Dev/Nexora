@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,11 @@ import { Avatar } from "./Avatar";
 import { UserPanel } from "./UserPanel";
 import { CreateChannelModal } from "./modals/CreateChannelModal";
 import { InviteModal } from "./modals/InviteModal";
-import { ServerSettingsModal } from "./modals/ServerSettingsModal";
+const ServerSettingsModal = lazy(() =>
+  import("./modals/ServerSettingsModal").then((module) => ({
+    default: module.ServerSettingsModal,
+  }))
+);
 import { EventsModal } from "./modals/EventsModal";
 import { ReportDialog } from "./safety/ReportDialog";
 import { voiceManager } from "@/lib/rtc";
@@ -423,11 +427,13 @@ export function ChannelSidebar({
         onOpenChange={setInviteOpen}
         serverId={server.id}
       />
-      <ServerSettingsModal
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        details={details}
-      />
+      <Suspense fallback={null}>
+        <ServerSettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          details={details}
+        />
+      </Suspense>
       <EventsModal
         open={eventsOpen}
         onOpenChange={setEventsOpen}

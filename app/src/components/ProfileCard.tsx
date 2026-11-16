@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useNavigate } from "react-router";
 import type { PublicUser, UserBadgeDTO } from "@contracts/types";
 import {
@@ -22,7 +22,11 @@ import { statusColor } from "@/lib/statusColor";
 import { cn } from "@/lib/utils";
 import { NexoraMark } from "./NexoraBrand";
 import { BadgeList } from "./badges/BadgeUI";
-import { UserSettingsModal } from "./modals/UserSettingsModal";
+const UserSettingsModal = lazy(() =>
+  import("./modals/UserSettingsModal").then((module) => ({
+    default: module.UserSettingsModal,
+  }))
+);
 import { ReportDialog } from "./safety/ReportDialog";
 import { Button } from "./ui/button";
 import {
@@ -567,11 +571,13 @@ export function ProfileCard({
         </DialogContent>
       </Dialog>
 
-      <UserSettingsModal
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        initialTab="profile"
-      />
+      <Suspense fallback={null}>
+        <UserSettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          initialTab="profile"
+        />
+      </Suspense>
       {userId !== null && !isOwn && (
         <ReportDialog
           open={reportOpen}

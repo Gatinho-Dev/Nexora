@@ -1,11 +1,17 @@
+import { lazy, Suspense } from "react";
 import type { ServerDTO } from "@contracts/types";
 import { trpc } from "@/providers/trpc";
 import { CreateCategoryModal } from "../modals/CreateCategoryModal";
 import { CreateChannelModal } from "../modals/CreateChannelModal";
 import { EventsModal } from "../modals/EventsModal";
 import { InviteModal } from "../modals/InviteModal";
-import { ServerSettingsModal } from "../modals/ServerSettingsModal";
 import type { ServerMenuAction } from "./ServerContextMenu";
+
+const ServerSettingsModal = lazy(() =>
+  import("../modals/ServerSettingsModal").then((module) => ({
+    default: module.ServerSettingsModal,
+  }))
+);
 
 export type ActiveServerMenuAction = {
   action: ServerMenuAction;
@@ -60,11 +66,13 @@ export function ServerActionModalHost({
         />
       )}
       {details.data && activeAction.action === "settings" && (
-        <ServerSettingsModal
-          open
-          onOpenChange={handleOpenChange}
-          details={details.data}
-        />
+        <Suspense fallback={null}>
+          <ServerSettingsModal
+            open
+            onOpenChange={handleOpenChange}
+            details={details.data}
+          />
+        </Suspense>
       )}
       {details.data && activeAction.action === "events" && (
         <EventsModal
