@@ -103,6 +103,12 @@ export function ConnectionsSection() {
     void refetchProviders();
   }, [refetchProviders]);
 
+  const connectedCount =
+    providers.data?.filter(provider => provider.connected).length ?? 0;
+  const totalCount = providers.data?.length ?? 0;
+  const connectedPct =
+    totalCount === 0 ? 0 : Math.round((connectedCount / totalCount) * 100);
+
   return (
     <div className="space-y-5">
       <div>
@@ -116,6 +122,27 @@ export function ConnectionsSection() {
           modo invisível.
         </p>
       </div>
+
+      {!providers.isLoading && totalCount > 0 && (
+        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-sidebar px-4 py-3">
+          <div
+            className="h-2 flex-1 overflow-hidden rounded-full bg-white/10"
+            role="progressbar"
+            aria-valuenow={connectedPct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Conexões concluídas"
+          >
+            <div
+              className="h-full rounded-full bg-[#5865F2] transition-all"
+              style={{ width: `${connectedPct}%` }}
+            />
+          </div>
+          <span className="shrink-0 text-xs text-white/60">
+            {connectedCount} de {totalCount} conectadas
+          </span>
+        </div>
+      )}
 
       {providers.isLoading && (
         <div className="grid gap-3 lg:grid-cols-2">

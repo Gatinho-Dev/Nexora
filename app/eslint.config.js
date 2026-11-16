@@ -21,7 +21,13 @@ export default defineConfig([
     },
   },
   {
-    files: ["src/components/ui/**/*.{ts,tsx}", "src/providers/trpc.tsx"],
+    // shadcn-style: variantes (cva) convivem com o componente no mesmo arquivo.
+    files: [
+      "src/components/ui/**/*.{ts,tsx}",
+      "src/providers/trpc.tsx",
+      "desktop-poc/src/components/ui/**/*.{ts,tsx}",
+      "desktop-poc/src/providers/trpc.tsx",
+    ],
     rules: {
       "react-refresh/only-export-components": "off",
     },

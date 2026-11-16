@@ -12,6 +12,7 @@ import type {
 } from '@/contracts/bots';
 import { renderIcon } from '@/components/flow/nodes/flowIcons';
 import { useBotExecutions } from '@/hooks/useBots';
+import { downloadExecutionsCsv } from './botExecutionsCsv';
 
 // ============================================
 // Status Badge
@@ -451,10 +452,6 @@ const ExecutionsEmptyState = memo(function ExecutionsEmptyState({ hasFilters }: 
 // Bot Executions Tab (dados reais via tRPC)
 // ============================================
 
-function escapeCsvCell(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
 export const BotExecutionsTab = memo(function BotExecutionsTab({
   botId,
   serverId,
@@ -498,28 +495,7 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
   }, []);
 
   const handleExport = useCallback(() => {
-    const header = ['id', 'status', 'trigger', 'duration_ms', 'started_at', 'error'];
-    const lines = filtered.map((execution) =>
-      [
-        execution.id,
-        execution.status,
-        execution.trigger.type,
-        String(execution.duration),
-        execution.startedAt,
-        execution.error?.message ?? '',
-      ]
-        .map(escapeCsvCell)
-        .join(',')
-    );
-    const blob = new Blob([[header.join(','), ...lines].join('\n')], {
-      type: 'text/csv;charset=utf-8',
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `bot-${botId}-executions.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadExecutionsCsv(filtered, botId);
   }, [filtered, botId]);
 
   const showSpinner = isLoading && executions.length === 0;
