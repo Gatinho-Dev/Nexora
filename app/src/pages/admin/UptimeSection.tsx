@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -11,6 +11,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiUrl } from "@/lib/endpoints";
 import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +86,75 @@ function overallMeta(overall: string) {
     default:
       return STATUS_META.not_checked_yet;
   }
+}
+
+/**
+ * Cartão "Deploy atual": qual commit está no ar, desde quando.
+ * Lê o bloco `version` do /api/health (commit do Render/GitHub).
+ * Se o health não responder, o cartão some em vez de fazer barulho.
+ */
+function DeployCard() {
+  const [version, setVersion] = useState<{
+    commit: string;
+    branch: string | null;
+    startedAt: string;
+    uptimeSeconds: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl("/api/health"))
+      .then(response => (response.ok ? response.json() : null))
+      .then(data => {
+        if (!cancelled && data?.version?.commit) setVersion(data.version);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!version) return null;
+  const short = version.commit.slice(0, 7);
+  const isSha = /^[0-9a-f]{7,40}$/.test(version.commit);
+  let since = "";
+  try {
+    since = new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(version.startedAt));
+  } catch {
+    since = "";
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-4 rounded-xl border border-white/[0.055] bg-[#191b20] p-5">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#5865F2]/15 text-[#8e9aff]">
+        <Gauge className="h-5 w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-[#f4f5f7]">Deploy atual</p>
+        <p className="mt-0.5 text-[11px] text-[#969da7]">
+          {isSha ? (
+            <a
+              href={`https://github.com/Gatinho-Dev/Nexora/commit/${version.commit}`}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              className="font-mono text-[#8e9aff] hover:underline"
+            >
+              {short}
+            </a>
+          ) : (
+            <span className="font-mono">{short}</span>
+          )}
+          {version.branch ? ` · ${version.branch}` : ""}
+          {since ? ` · no ar desde ${since}` : ""}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function formatFetchedAt(ts: number) {
@@ -167,6 +237,7 @@ export function UptimeSection() {
 
   return (
     <div className="space-y-4">
+      <DeployCard />
       {/* Resumo geral */}
       <div
         className={cn(

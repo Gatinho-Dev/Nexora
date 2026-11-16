@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ServerBotsList } from "./ServerBotsList";
 import { BotEditorModal } from "./BotEditorModal";
+import { BotExecutionsTab } from "./BotExecutionsTab";
 import { useBots } from "@/hooks/useBots";
 import type { Bot } from "@/types/bots";
 
@@ -9,6 +10,7 @@ export const BotsTab: React.FC<{ serverId: number }> = ({ serverId }) => {
   const bots = query.data ? adaptBots(query.data) : [];
   const [editingBot, setEditingBot] = useState<Bot | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [viewingExecutions, setViewingExecutions] = useState<Bot | null>(null);
 
   const handleCreate = async (botData: Partial<Bot> & { mode: "simple" | "advanced" }) => {
     await create.mutateAsync(adaptBotForCreate({ ...botData, serverId }));
@@ -41,8 +43,7 @@ export const BotsTab: React.FC<{ serverId: number }> = ({ serverId }) => {
   };
 
   const handleViewExecutions = (bot: Bot) => {
-    // TODO: navigate to executions tab
-    console.log("View executions for", bot.id);
+    setViewingExecutions(bot);
   };
 
   const handleDuplicate = async (bot: Bot) => {
@@ -57,6 +58,30 @@ export const BotsTab: React.FC<{ serverId: number }> = ({ serverId }) => {
     }));
     query.refetch();
   };
+
+  if (viewingExecutions) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-center gap-3 p-4 border-b border-surface-border">
+          <button
+            onClick={() => setViewingExecutions(null)}
+            className="btn btn-secondary btn-sm"
+          >
+            ← Voltar
+          </button>
+          <div className="min-w-0">
+            <h3 className="font-medium text-text-primary truncate">
+              Execuções · {viewingExecutions.name}
+            </h3>
+            <p className="text-xs text-text-tertiary">Histórico mais recente primeiro</p>
+          </div>
+        </div>
+        <div className="flex-1 min-h-0">
+          <BotExecutionsTab botId={viewingExecutions.id} serverId={viewingExecutions.serverId} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

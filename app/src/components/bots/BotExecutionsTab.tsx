@@ -3,7 +3,7 @@
  * Paginated list of bot executions with detail modal
  */
 
-import { memo, useState, useCallback, useEffect, useRef } from 'react';
+import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type {
   BotExecution,
   ExecutionStatus,
@@ -11,6 +11,7 @@ import type {
   ExecutionDetailModalProps,
 } from '@/contracts/bots';
 import { renderIcon } from '@/components/flow/nodes/flowIcons';
+import { useBotExecutions } from '@/hooks/useBots';
 
 // ============================================
 // Status Badge
@@ -407,7 +408,7 @@ const ExecutionsToolbar = memo(function ExecutionsToolbar({
         </select>
 
         <button onClick={onRefresh} disabled={loading} className="btn btn-secondary btn-sm">
-          {loading ? renderIcon('RefreshCw', 14, 'animate-spin') : renderIcon('RefreshCw', 14)}
+          {loading ? renderIcon('RefreshCw', 14, 'currentColor', 'animate-spin') : renderIcon('RefreshCw', 14)}
           Refresh
         </button>
 
@@ -447,42 +448,46 @@ const ExecutionsEmptyState = memo(function ExecutionsEmptyState({ hasFilters }: 
 });
 
 // ============================================
-// Bot Executions Tab
+// Bot Executions Tab (dados reais via tRPC)
 // ============================================
+
+function escapeCsvCell(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
 
 export const BotExecutionsTab = memo(function BotExecutionsTab({
   botId,
   serverId,
 }: BotExecutionsTabProps) {
-  // Mock atual: props reservadas para o fetch real (vede fetchExecutions).
-  void botId;
-  void serverId;
-  // In a real app, this would fetch from an API using botId/serverId
-  const [executions] = useState<BotExecution[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [totalCount] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
+  const numericBotId = Number(botId);
+  const validBotId = Number.isFinite(numericBotId);
+  const {
+    executions,
+    isLoading,
+    isError,
+    refetch,
+    isFetching,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useBotExecutions(validBotId ? numericBotId : 0, serverId, 25);
+
   const [statusFilter, setStatusFilter] = useState<ExecutionStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedExecution, setSelectedExecution] = useState<BotExecution | null>(null);
 
-  const fetchExecutions = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Simulate API call
-      await new Promise((r) => setTimeout(r, 500));
-      // In real app: const response = await api.getExecutions({ botId, serverId, page, pageSize, status: statusFilter, search: searchQuery });
-      // _setExecutions(response.data);
-      // _setTotalCount(response.total);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchExecutions();
-  }, [fetchExecutions]);
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return executions.filter((execution) => {
+      if (statusFilter !== 'all' && execution.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        execution.id.toLowerCase().includes(q) ||
+        execution.trigger.type.toLowerCase().includes(q) ||
+        (execution.error?.message ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [executions, statusFilter, searchQuery]);
 
   const handleView = useCallback((execution: BotExecution) => {
     setSelectedExecution(execution);
@@ -492,30 +497,41 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
     setSelectedExecution(null);
   }, []);
 
-  const handleRetry = useCallback(async () => {
-    // In real app: await api.retryExecution(execution.id);
-    fetchExecutions();
-  }, [fetchExecutions]);
-
   const handleExport = useCallback(() => {
-    // const _csvData = executions.map((e) => ({
-    //   id: e.id,
-    //   status: e.status,
-    //   trigger: e.trigger.type,
-    //   duration: e.duration,
-    //   startedAt: e.startedAt,
-    //   error: e.error?.message || '',
-    // }));
-    // Convert to CSV and download
-  }, []);
+    const header = ['id', 'status', 'trigger', 'duration_ms', 'started_at', 'error'];
+    const lines = filtered.map((execution) =>
+      [
+        execution.id,
+        execution.status,
+        execution.trigger.type,
+        String(execution.duration),
+        execution.startedAt,
+        execution.error?.message ?? '',
+      ]
+        .map(escapeCsvCell)
+        .join(',')
+    );
+    const blob = new Blob([[header.join(','), ...lines].join('\n')], {
+      type: 'text/csv;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `bot-${botId}-executions.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }, [filtered, botId]);
+
+  const showSpinner = isLoading && executions.length === 0;
+  const hasFilters = !!searchQuery || statusFilter !== 'all';
 
   return (
     <div className="flex flex-col h-full bg-surface-primary">
       {/* Toolbar */}
       <ExecutionsToolbar
-        totalCount={totalCount}
-        loading={loading}
-        onRefresh={fetchExecutions}
+        totalCount={filtered.length}
+        loading={isFetching}
+        onRefresh={() => refetch()}
         onExport={handleExport}
         statusFilter={statusFilter}
         onStatusChange={setStatusFilter}
@@ -525,45 +541,52 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
 
       {/* List */}
       <div className="flex-1 overflow-y-auto">
-        {loading && executions.length === 0 ? (
+        {showSpinner ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="animate-spin text-primary-500">{renderIcon('RefreshCw', 32)}</div>
           </div>
-        ) : executions.length === 0 ? (
-          <ExecutionsEmptyState hasFilters={!!searchQuery || statusFilter !== 'all'} />
+        ) : isError && executions.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-16 px-6 text-center">
+            <div className="w-20 h-20 rounded-2xl bg-danger-500/10 flex items-center justify-center mb-6 text-danger-500">
+              {renderIcon('AlertCircle', 40)}
+            </div>
+            <h3 className="text-lg font-medium text-text-primary mb-2">Não foi possível carregar</h3>
+            <p className="text-text-tertiary mb-6 max-w-sm">
+              Verifique sua conexão e tente de novo.
+            </p>
+            <button onClick={() => refetch()} className="btn btn-secondary btn-sm">
+              {renderIcon('RefreshCw', 14)}
+              Tentar de novo
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <ExecutionsEmptyState hasFilters={hasFilters} />
         ) : (
           <div className="p-4 space-y-3">
-            {executions.map((execution) => (
+            {filtered.map((execution) => (
               <ExecutionRow
                 key={execution.id}
                 execution={execution}
                 onView={handleView}
-                onRetry={handleRetry}
               />
             ))}
-          </div>
-        )}
-
-        {/* Pagination */}
-        {totalCount > pageSize && (
-          <div className="p-4 border-t border-surface-border flex items-center justify-center gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1 || loading}
-              className="btn btn-secondary btn-sm"
-            >
-              {renderIcon('ChevronLeft', 14)} Previous
-            </button>
-            <span className="text-sm text-text-tertiary px-4">
-              Page {page} of {Math.ceil(totalCount / pageSize)}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
-              disabled={page >= Math.ceil(totalCount / pageSize) || loading}
-              className="btn btn-secondary btn-sm"
-            >
-              Next {renderIcon('ChevronRight', 14)}
-            </button>
+            {hasNextPage && (
+              <div className="flex justify-center pt-2">
+                <button
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="btn btn-secondary btn-sm"
+                >
+                  {isFetchingNextPage ? (
+                    <>
+                      {renderIcon('RefreshCw', 14, 'currentColor', 'animate-spin')} Carregando...
+                    </>
+                  ) : (
+                    'Carregar mais'
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -577,5 +600,3 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
     </div>
   );
 });
-
-BotExecutionsTab.displayName = 'BotExecutionsTab';
