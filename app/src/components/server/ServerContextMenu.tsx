@@ -18,6 +18,11 @@ import type { ServerDTO } from "@contracts/types";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { openUserSettings } from "@/lib/openUserSettings";
+
+// Warm the settings modal chunks on hover intent so they open instantly.
+// Dynamic imports share the same async chunks as the React.lazy modals.
+const preloadServerSettingsModal = () => import("../modals/ServerSettingsModal");
+const preloadUserSettingsModal = () => import("../modals/UserSettingsModal");
 import {
   ContextMenu,
   ContextMenuContent,
@@ -216,6 +221,8 @@ export function ServerContextMenu({
         {canManageServer && (
           <ContextMenuItem
             onSelect={() => onAction("settings", server)}
+            onMouseEnter={preloadServerSettingsModal}
+            onFocus={preloadServerSettingsModal}
             className="min-h-9 rounded-lg text-xs"
           >
             <Settings /> Config. do servidor
@@ -223,6 +230,8 @@ export function ServerContextMenu({
         )}
         <ContextMenuItem
           onSelect={() => openUserSettings("privacy")}
+          onMouseEnter={preloadUserSettingsModal}
+          onFocus={preloadUserSettingsModal}
           className="min-h-9 rounded-lg text-xs"
         >
           <ShieldCheck /> Config. de privacidade

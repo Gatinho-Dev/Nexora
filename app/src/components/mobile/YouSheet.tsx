@@ -5,6 +5,9 @@ import { Avatar } from "../Avatar";
 import { useAppStore } from "@/store/useAppStore";
 import { realtime } from "@/lib/ws";
 import { openUserSettings } from "@/lib/openUserSettings";
+
+// Warm the user settings chunk on hover intent (same async chunk as the lazy modal).
+const preloadUserSettingsModal = () => import("../modals/UserSettingsModal");
 import { BadgeIcon } from "../badges/BadgeUI";
 import { cn } from "@/lib/utils";
 import {
@@ -114,7 +117,7 @@ export function YouSheet({
 
         {/* Links */}
         <nav className="mt-4 space-y-1 px-4 pb-2">
-          <SheetLink icon={<Settings className="h-5 w-5" />} label="Configurações" onClick={() => openUserSettings("account")} close={onClose} hint="Conta, perfil, aparência e mais" />
+          <SheetLink icon={<Settings className="h-5 w-5" />} label="Configurações" onClick={() => openUserSettings("account")} close={onClose} hint="Conta, perfil, aparência e mais" prefetch={preloadUserSettingsModal} />
           <SheetLink
             icon={<ShieldCheck className="h-5 w-5" />}
             label={
@@ -134,6 +137,7 @@ export function YouSheet({
             onClick={() => openUserSettings("standing")}
             close={onClose}
             hint="Infrações e conformidade"
+            prefetch={preloadUserSettingsModal}
           />
           {authority.data?.canAccess && (
             <SheetLink
@@ -161,6 +165,7 @@ export function YouSheet({
     close,
     hint,
     dot,
+    prefetch,
   }: {
     icon: React.ReactNode;
     label: string;
@@ -168,6 +173,7 @@ export function YouSheet({
     close: () => void;
     hint?: string;
     dot?: string;
+    prefetch?: () => void;
   }) {
     return (
       <button
@@ -175,6 +181,8 @@ export function YouSheet({
           onClick();
           close();
         }}
+        onMouseEnter={prefetch}
+        onFocus={prefetch}
         className="flex min-h-[48px] w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-bodyx hover:bg-white/5"
       >
         <span className="text-muted2">{icon}</span>

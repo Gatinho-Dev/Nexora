@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { ModalLoadingFallback } from "./modals/ModalLoadingFallback";
 import { useNavigate, useParams } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { cn } from "@/lib/utils";
@@ -29,8 +30,9 @@ import { Avatar } from "./Avatar";
 import { UserPanel } from "./UserPanel";
 import { CreateChannelModal } from "./modals/CreateChannelModal";
 import { InviteModal } from "./modals/InviteModal";
+const preloadServerSettingsModal = () => import("./modals/ServerSettingsModal");
 const ServerSettingsModal = lazy(() =>
-  import("./modals/ServerSettingsModal").then((module) => ({
+  preloadServerSettingsModal().then((module) => ({
     default: module.ServerSettingsModal,
   }))
 );
@@ -161,6 +163,8 @@ export function ChannelSidebar({
           {canManageServer && (
             <DropdownMenuItem
               onClick={() => setSettingsOpen(true)}
+              onMouseEnter={preloadServerSettingsModal}
+              onFocus={preloadServerSettingsModal}
               className="hover:bg-white/10 cursor-pointer"
             >
               <Settings className="h-4 w-4 mr-2 text-muted2" /> Configurações
@@ -427,7 +431,7 @@ export function ChannelSidebar({
         onOpenChange={setInviteOpen}
         serverId={server.id}
       />
-      <Suspense fallback={null}>
+      <Suspense fallback={<ModalLoadingFallback label="Carregando configurações…" />}>
         <ServerSettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { ModalLoadingFallback } from "./modals/ModalLoadingFallback";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar } from "./Avatar";
@@ -6,8 +7,9 @@ import { statusColor } from "@/lib/statusColor";
 import { useAppStore } from "@/store/useAppStore";
 import { realtime } from "@/lib/ws";
 import { voiceManager } from "@/lib/rtc";
+const preloadUserSettingsModal = () => import("./modals/UserSettingsModal");
 const UserSettingsModal = lazy(() =>
-  import("./modals/UserSettingsModal").then((module) => ({
+  preloadUserSettingsModal().then((module) => ({
     default: module.UserSettingsModal,
   }))
 );
@@ -221,6 +223,8 @@ export function UserPanel() {
                 <button
                   type="button"
                   onClick={() => openSettings("profile")}
+                  onMouseEnter={preloadUserSettingsModal}
+                  onFocus={preloadUserSettingsModal}
                   className="mb-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -376,6 +380,8 @@ export function UserPanel() {
                 <button
                   type="button"
                   onClick={() => openSettings("account")}
+                  onMouseEnter={preloadUserSettingsModal}
+                  onFocus={preloadUserSettingsModal}
                   className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium text-bodyx transition-colors hover:bg-hov focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Settings className="h-4 w-4 text-faint" />
@@ -466,6 +472,8 @@ export function UserPanel() {
               <TooltipTrigger asChild>
                 <button
                   onClick={() => openSettings("account")}
+                  onMouseEnter={preloadUserSettingsModal}
+                  onFocus={preloadUserSettingsModal}
                   className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted2 hover:bg-hov hover:text-white transition-colors"
                   aria-label="Abrir configurações de usuário"
                   title="Configurações de usuário"
@@ -481,7 +489,7 @@ export function UserPanel() {
         </TooltipProvider>
       </div>
 
-      <Suspense fallback={null}>
+      <Suspense fallback={<ModalLoadingFallback label="Carregando configurações…" />}>
         <UserSettingsModal
           key={settingsTab}
           open={settingsOpen}

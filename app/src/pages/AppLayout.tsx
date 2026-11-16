@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { ModalLoadingFallback } from "@/components/modals/ModalLoadingFallback";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
@@ -26,6 +27,7 @@ const UserSettingsModal = lazy(() =>
     default: module.UserSettingsModal,
   }))
 );
+
 import { OPEN_SETTINGS_EVENT } from "@/lib/openUserSettings";
 import { MigrationBanner } from "@/components/MigrationBanner";
 import { GlobalMessageBanner } from "@/components/GlobalMessageBanner";
@@ -344,7 +346,7 @@ export function AppLayout() {
       />
       <ShortcutsModal open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
       <ReportHost />
-      <Suspense fallback={null}>
+      <Suspense fallback={<ModalLoadingFallback label="Carregando configurações…" />}>
         <UserSettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}

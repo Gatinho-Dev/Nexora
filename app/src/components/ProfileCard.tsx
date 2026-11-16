@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { ModalLoadingFallback } from "./modals/ModalLoadingFallback";
 import { useNavigate } from "react-router";
 import type { PublicUser, UserBadgeDTO } from "@contracts/types";
 import {
@@ -22,8 +23,9 @@ import { statusColor } from "@/lib/statusColor";
 import { cn } from "@/lib/utils";
 import { NexoraMark } from "./NexoraBrand";
 import { BadgeList } from "./badges/BadgeUI";
+const preloadUserSettingsModal = () => import("./modals/UserSettingsModal");
 const UserSettingsModal = lazy(() =>
-  import("./modals/UserSettingsModal").then((module) => ({
+  preloadUserSettingsModal().then((module) => ({
     default: module.UserSettingsModal,
   }))
 );
@@ -269,6 +271,8 @@ export function ProfileCard({
                       {isOwn ? (
                         <Button
                           onClick={openProfileSettings}
+                          onMouseEnter={preloadUserSettingsModal}
+                          onFocus={preloadUserSettingsModal}
                           size="sm"
                           className="h-9 rounded-xl bg-white px-3 text-xs font-bold text-[#171923] hover:bg-white/90"
                         >
@@ -571,7 +575,7 @@ export function ProfileCard({
         </DialogContent>
       </Dialog>
 
-      <Suspense fallback={null}>
+      <Suspense fallback={<ModalLoadingFallback label="Carregando configurações…" />}>
         <UserSettingsModal
           open={settingsOpen}
           onOpenChange={setSettingsOpen}

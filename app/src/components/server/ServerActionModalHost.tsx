@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { ModalLoadingFallback } from "../modals/ModalLoadingFallback";
 import type { ServerDTO } from "@contracts/types";
 import { trpc } from "@/providers/trpc";
 import { CreateCategoryModal } from "../modals/CreateCategoryModal";
@@ -66,7 +67,7 @@ export function ServerActionModalHost({
         />
       )}
       {details.data && activeAction.action === "settings" && (
-        <Suspense fallback={null}>
+        <Suspense fallback={<ModalLoadingFallback label="Carregando configurações…" />}>
           <ServerSettingsModal
             open
             onOpenChange={handleOpenChange}
