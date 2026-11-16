@@ -171,10 +171,22 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
+const BOOT_STARTED_AT = new Date().toISOString();
+
 app.get("/api/health", c =>
   c.json({
     status: "ok",
     service: "nexora",
+    version: {
+      commit:
+        process.env.RENDER_GIT_COMMIT ??
+        process.env.GITHUB_SHA ??
+        "dev",
+      branch: process.env.RENDER_GIT_BRANCH ?? null,
+      nodeEnv: process.env.NODE_ENV ?? "development",
+      startedAt: BOOT_STARTED_AT,
+      uptimeSeconds: Math.floor(process.uptime()),
+    },
     safety: {
       provider: env.openrouterApiKey ? "openrouter" : "disabled",
       model: env.openrouterSafetyModel,

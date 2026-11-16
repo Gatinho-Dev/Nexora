@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "start": "NODE_ENV=production node dist/migrate.js && NODE_ENV=production node dist/boot.js",
     "check": "tsc -b",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
     "format": "prettier --write .",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",

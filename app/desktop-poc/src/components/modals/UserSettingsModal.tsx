@@ -854,6 +854,7 @@ function VoiceTab() {
   const [recording, setRecording] = useState(false);
   const [level, setLevel] = useState(0);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [recordingKey, setRecordingKey] = useState(false);
   const testSessionRef = useRef<AudioProcessingSession | null>(null);
   const testContextRef = useRef<AudioContext | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -911,6 +912,25 @@ function VoiceTab() {
     },
     [recordingUrl]
   );
+
+  useEffect(() => {
+    if (!recordingKey) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      const key = e.key === " " ? "Space" : e.key;
+      const modifiers = [];
+      if (e.ctrlKey) modifiers.push("Ctrl");
+      if (e.shiftKey) modifiers.push("Shift");
+      if (e.altKey) modifiers.push("Alt");
+      if (e.metaKey) modifiers.push("Meta");
+      const keybind = [...modifiers, key].join("+");
+      setPrefs(current => ({ ...current, pushToTalkKeybind: keybind }));
+      setDevicePrefs({ pushToTalkKeybind: keybind });
+      setRecordingKey(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [recordingKey]);
 
   const startTest = async () => {
     try {
@@ -1224,37 +1244,8 @@ function VoiceTab() {
           </div>
 )}
       </div>
-    </div>
-  );
-
-  // Push-to-talk keybind section
-  const [recordingKey, setRecordingKey] = useState(false);
-
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (recordingKey) {
-      e.preventDefault();
-      const key = e.key === " " ? "Space" : e.key;
-      const modifiers = [];
-      if (e.ctrlKey) modifiers.push("Ctrl");
-      if (e.shiftKey) modifiers.push("Shift");
-      if (e.altKey) modifiers.push("Alt");
-      if (e.metaKey) modifiers.push("Meta");
-      const keybind = [...modifiers, key].join("+");
-      updatePref({ pushToTalkKeybind: keybind });
-      setRecordingKey(false);
-    }
-  };
-
-  useEffect(() => {
-    if (recordingKey) {
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [recordingKey]);
-
-  return (
     <div className="space-y-5">
-      {/* Existing content... */}
+      {/* Push-to-talk + qualidade de stream (antes inalcançáveis após o return) */}
       {/* Push-to-talk keybind section */}
       <section
         className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 space-y-3"
@@ -1359,6 +1350,7 @@ function VoiceTab() {
           ))}
         </div>
       </section>
+    </div>
     </div>
   );
 }

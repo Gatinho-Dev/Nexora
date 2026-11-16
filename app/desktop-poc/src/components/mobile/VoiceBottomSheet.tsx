@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+
+const randomConnectionQuality = () => {
+  const qualities = ["excellent", "good", "poor"] as const;
+  return qualities[Math.floor(Math.random() * qualities.length)];
+};
 import { useAppStore } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
 import { Avatar } from "@/components/Avatar";
@@ -25,23 +30,26 @@ export function VoiceBottomSheet({
   const [connectionQuality, setConnectionQuality] = useState<"excellent" | "good" | "poor" | "unknown">("unknown");
   const qualityCheckRef = useRef(0);
 
+  // Zera/mede na abertura durante o render (evita setState dentro do efeito).
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    const connectionStatus = useAppStore.getState().voiceConnectionStatus;
+    setConnectionQuality(
+      isOpen && connectionStatus === "connected" ? randomConnectionQuality() : "unknown"
+    );
+  }
+
   useEffect(() => {
-    if (!isOpen) {
-      setConnectionQuality("unknown");
-      return;
-    }
-    const checkQuality = () => {
+    if (!isOpen) return;
+    qualityCheckRef.current = window.setInterval(() => {
       const connectionStatus = useAppStore.getState().voiceConnectionStatus;
       if (connectionStatus === "connected") {
-        const qualities = ["excellent", "good", "poor"] as const;
-        const randomQuality = qualities[Math.floor(Math.random() * 3)];
-        setConnectionQuality(randomQuality);
+        setConnectionQuality(randomConnectionQuality());
       } else {
         setConnectionQuality("unknown");
       }
-    };
-    checkQuality();
-    qualityCheckRef.current = window.setInterval(checkQuality, 10000);
+    }, 10000);
     return () => window.clearInterval(qualityCheckRef.current);
   }, [isOpen]);
 

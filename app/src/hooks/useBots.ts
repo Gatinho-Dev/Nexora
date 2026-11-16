@@ -6,7 +6,8 @@ import type {
   BotExecution,
   BotMode,
 } from "@/types/bots";
-import type { BotDTO, BotExecutionDTO } from "@contracts/types";
+import type { BotDTO, BotExecutionDTO, BotExecutionStatus, BotTriggerType } from "@contracts/types";
+import { isTriggerNodeType, type NodeType } from "@/contracts/bots";
 
 // Transform backend DTO to frontend Bot type
 const adaptBot = (dto: BotDTO): Bot => ({
@@ -30,7 +31,7 @@ const toDateString = (value: string | Date): string =>
   value instanceof Date ? value.toISOString() : String(value);
 
 // Transform backend Execution DTO to frontend BotExecution type
-const adaptExecution = (dto: BotExecutionDTO): BotExecution => {
+const adaptExecution = (dto: BotExecutionDTO, serverId: string): BotExecution => {
   const startedAt = toDateString(dto.startedAt);
   const completedAt = dto.completedAt ? toDateString(dto.completedAt) : null;
   const startedMs = Date.parse(startedAt);
@@ -38,7 +39,7 @@ const adaptExecution = (dto: BotExecutionDTO): BotExecution => {
   return {
     id: String(dto.id),
     botId: String(dto.botId),
-    serverId: "",
+    serverId,
     trigger: {
       type: dto.triggerType ?? "webhook",
       data: {},
@@ -97,8 +98,15 @@ export const useBots = (serverId: number) => {
   // Adapter functions for components
   const adaptBots = useCallback((dtos: BotDTO[]): Bot[] => dtos.map(adaptBot), []);
   const adaptBotAdapter = useCallback((dto: BotDTO): Bot => adaptBot(dto), []);
-  const adaptExecutions = useCallback((dtos: BotExecutionDTO[]): BotExecution[] => dtos.map(adaptExecution), []);
-  const adaptExecutionAdapter = useCallback((dto: BotExecutionDTO): BotExecution => adaptExecution(dto), []);
+  const adaptExecutions = useCallback(
+    (dtos: BotExecutionDTO[], serverId: string): BotExecution[] =>
+      dtos.map((dto) => adaptExecution(dto, serverId)),
+    []
+  );
+  const adaptExecutionAdapter = useCallback(
+    (dto: BotExecutionDTO, serverId: string): BotExecution => adaptExecution(dto, serverId),
+    []
+  );
 
   return {
     // Bound tRPC hooks
@@ -107,4 +115,41 @@ export const useBots = (serverId: number) => {
     adaptBots, adaptBot: adaptBotAdapter, adaptExecutions, adaptExecution: adaptExecutionAdapter,
     adaptBotForCreate, adaptBotForUpdate,
   };
+};
+
+// O banco guarda triggerType como texto livre; normaliza para o union do DTO
+// (desconhecido vira null e o adaptador usa "webhook" como reserva).
+const toExecutionDTO = (row: {
+  id: number;
+  botId: number;
+  triggerId: number | null;
+  triggerType: string | null;
+  status: BotExecutionStatus;
+  context: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  startedAt: string | Date;
+  completedAt: string | Date | null;
+}): BotExecutionDTO => ({
+  ...row,
+  triggerType:
+    row.triggerType && isTriggerNodeType(row.triggerType as NodeType)
+      ? (row.triggerType as BotTriggerType)
+      : null,
+});
+
+// Cursor-based execution history for one bot (newest first).
+export const useBotExecutions = (botId: number, execServerId: string, limit = 25) => {
+  const query = trpc.bot.listExecutions.useInfiniteQuery(
+    { botId, limit },
+    {
+      enabled: Number.isFinite(botId),
+      getNextPageParam: (page) =>
+        page.hasMore ? page.items[page.items.length - 1]?.id : undefined,
+    }
+  );
+  const executions = (query.data?.pages ?? []).flatMap((page) =>
+    page.items.map((row) => adaptExecution(toExecutionDTO(row), execServerId))
+  );
+  return { ...query, executions };
 };

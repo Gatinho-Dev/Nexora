@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+
+const randomConnectionQuality = () => {
+  const qualities = ["excellent", "good", "poor"] as const;
+  return qualities[Math.floor(Math.random() * qualities.length)];
+};
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
 import { voiceManager } from "@/lib/rtc";
@@ -196,24 +201,26 @@ export function VoiceView({
   const [connectionQuality, setConnectionQuality] = useState<"excellent" | "good" | "poor" | "unknown">("unknown");
   const qualityCheckRef = useRef(0);
 
+  // Deriva a qualidade exibida no render (evita setState dentro do efeito).
+  const [prevConnection, setPrevConnection] = useState({ connected, connectionStatus });
+  if (prevConnection.connected !== connected || prevConnection.connectionStatus !== connectionStatus) {
+    setPrevConnection({ connected, connectionStatus });
+    setConnectionQuality(
+      !connected || connectionStatus !== "connected" ? "unknown" : randomConnectionQuality()
+    );
+  }
+
   // Periodic connection quality check (simplified)
   useEffect(() => {
-    if (!connected) {
-      setConnectionQuality("unknown");
-      return;
-    }
-    
-    const checkQuality = () => {
+    if (!connected) return;
+
+    qualityCheckRef.current = window.setInterval(() => {
       if (connectionStatus === "connected") {
-        const qualities = ["excellent", "good", "poor"] as const;
-        setConnectionQuality(qualities[Math.floor(Math.random() * 3)]);
+        setConnectionQuality(randomConnectionQuality());
       } else {
         setConnectionQuality("unknown");
       }
-    };
-    
-    checkQuality();
-    qualityCheckRef.current = window.setInterval(checkQuality, 10000);
+    }, 10000);
     return () => window.clearInterval(qualityCheckRef.current);
   }, [connected, connectionStatus]);
 

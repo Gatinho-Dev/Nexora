@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type Dispatch, type SetStateAction } from "react";
 import { useNavigate } from "react-router";
 import { X, Mic, Video, Monitor, CheckCircle, AlertCircle, Loader2, Cpu, MemoryStick, Wifi, Maximize2, Minimize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,67 @@ interface DeviceInfo {
   audioOutputs: MediaDeviceInfo[];
 }
 
+type SetResults = Dispatch<SetStateAction<TestResult[]>>;
+type ReportFn = (name: string, status: TestResult["status"], details: string, error?: string) => void;
+
+function pushResult(setResults: SetResults, name: string, status: TestResult["status"], details: string, error?: string) {
+  const result: TestResult = {
+    name,
+    status,
+    details,
+    timestamp: new Date().toISOString(),
+    error,
+  };
+  setResults(prev => [...prev, result]);
+  console.log(`[MediaTest] ${name}: ${status.toUpperCase()} - ${details}`, error ? `- ${error}` : "");
+}
+
+function detectEnvironment(setWebkitVersion: (value: string) => void, setDisplayServer: (value: string) => void) {
+  const ua = navigator.userAgent;
+    const webkitMatch = ua.match(/AppleWebKit\/(\d+\.\d+)/);
+  if (webkitMatch) {
+    setWebkitVersion(`WebKit/${webkitMatch[1]}`);
+  }
+  const tauri = (window as unknown as { __TAURI__?: unknown }).__TAURI__;
+  if (typeof window !== "undefined" && tauri) {
+    setDisplayServer("Tauri (Linux)");
+  } else if (window.navigator.userAgent.includes("Wayland")) {
+    setDisplayServer("Wayland");
+  } else if (window.navigator.userAgent.includes("X11")) {
+    setDisplayServer("X11");
+  } else {
+    setDisplayServer(`${navigator.platform} / ${navigator.userAgent.includes("Linux") ? "Linux" : "Unknown"}`);
+  }
+}
+
+function checkCapabilities(setCapabilities: (value: MediaCapabilities) => void) {
+  setCapabilities({
+    getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+    getDisplayMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia),
+    rtcPeerConnection: !!window.RTCPeerConnection,
+    audioContext: !!window.AudioContext,
+    webAudio: !!window.AudioContext,
+    mediaStream: !!window.MediaStream,
+  });
+}
+
+function enumerateDevices(setDevices: (value: DeviceInfo) => void, report: ReportFn) {
+  const run = async () => {
+    try {
+      const allDevices = await navigator.mediaDevices.enumerateDevices();
+      setDevices({
+        audioInputs: allDevices.filter(d => d.kind === "audioinput"),
+        videoInputs: allDevices.filter(d => d.kind === "videoinput"),
+        audioOutputs: allDevices.filter(d => d.kind === "audiooutput"),
+      });
+      report("Device Enumeration", "passed", `Found ${allDevices.length} devices`);
+    } catch (error) {
+      report("Device Enumeration", "failed", `Error: ${error instanceof Error ? error.message : "Unknown"}`);
+    }
+  };
+  void run();
+}
+
 function MediaTestPage() {
   const navigate = useNavigate();
   const [results, setResults] = useState<TestResult[]>([]);
@@ -44,7 +105,6 @@ function MediaTestPage() {
   });
   const [selectedAudioInput, setSelectedAudioInput] = useState<string>("");
   const [selectedVideoInput, setSelectedVideoInput] = useState<string>("");
-  const [selectedAudioOutput, setSelectedAudioOutput] = useState<string>("");
   const [isTesting, setIsTesting] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -56,7 +116,9 @@ function MediaTestPage() {
   const [displayServer, setDisplayServer] = useState<string>("Unknown");
   const [webkitVersion, setWebkitVersion] = useState<string>("Unknown");
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
-  const [animationFrame, setAnimationFrame] = useState<number | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [showCameraPreview, setShowCameraPreview] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -65,67 +127,39 @@ function MediaTestPage() {
   const audioDataArrayRef = useRef<Uint8Array | null>(null);
 
   useEffect(() => {
-    detectEnvironment();
-    checkCapabilities();
-    enumerateDevices();
+    detectEnvironment(setWebkitVersion, setDisplayServer);
+    checkCapabilities(setCapabilities);
+    enumerateDevices(setDevices, (name, status, details, error) =>
+      pushResult(setResults, name, status, details, error)
+    );
+    const localVideoEl = localVideoRef.current;
+    const remoteVideoEl = remoteVideoRef.current;
+    const screenVideoEl = screenVideoRef.current;
     return () => {
-      stopAllStreams();
-      if (animationFrame) cancelAnimationFrame(animationFrame);
+      [localStream, remoteStream, screenStream, cameraStream].forEach(stream => {
+        stream?.getTracks().forEach(track => track.stop());
+      });
+      setLocalStream(null);
+      setRemoteStream(null);
+      setScreenStream(null);
+      setCameraStream(null);
+      setShowCameraPreview(false);
+      if (localVideoEl) localVideoEl.srcObject = null;
+      if (remoteVideoEl) remoteVideoEl.srcObject = null;
+      if (screenVideoEl) screenVideoEl.srcObject = null;
+      peerConnection?.close();
+      setPeerConnection(null);
+      stopAudioLevelMonitoring();
+      setIceCandidates([]);
+      setConnectionState("new");
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
+    // Diagnóstico propositalmente executado uma vez ao abrir a página.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const detectEnvironment = () => {
-    const ua = navigator.userAgent;
-    const webkitMatch = ua.match(/AppleWebKit\/(\d+\.\d+)/);
-    if (webkitMatch) {
-      setWebkitVersion(`WebKit/${webkitMatch[1]}`);
-    }
-    if (typeof window !== "undefined" && (window as any).__TAURI__) {
-      setDisplayServer("Tauri (Linux)");
-    } else if (window.navigator.userAgent.includes("Wayland")) {
-      setDisplayServer("Wayland");
-    } else if (window.navigator.userAgent.includes("X11")) {
-      setDisplayServer("X11");
-    } else {
-      setDisplayServer(`${navigator.platform} / ${navigator.userAgent.includes("Linux") ? "Linux" : "Unknown"}`);
-    }
-  };
-
-  const checkCapabilities = () => {
-    setCapabilities({
-      getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
-      getDisplayMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia),
-      rtcPeerConnection: !!window.RTCPeerConnection,
-      audioContext: !!window.AudioContext,
-      webAudio: !!window.AudioContext,
-      mediaStream: !!window.MediaStream,
-    });
-  };
-
-  const enumerateDevices = async () => {
-    try {
-      const allDevices = await navigator.mediaDevices.enumerateDevices();
-      setDevices({
-        audioInputs: allDevices.filter(d => d.kind === "audioinput"),
-        videoInputs: allDevices.filter(d => d.kind === "videoinput"),
-        audioOutputs: allDevices.filter(d => d.kind === "audiooutput"),
-      });
-      addResult("Device Enumeration", "passed", `Found ${allDevices.length} devices`);
-    } catch (error) {
-      addResult("Device Enumeration", "failed", `Error: ${error instanceof Error ? error.message : "Unknown"}`);
-    }
-  };
-
   const addResult = (name: string, status: TestResult["status"], details: string, error?: string) => {
-    const result: TestResult = {
-      name,
-      status,
-      details,
-      timestamp: new Date().toISOString(),
-      error,
-    };
-    setResults(prev => [...prev, result]);
-    console.log(`[MediaTest] ${name}: ${status.toUpperCase()} - ${details}`, error ? `- ${error}` : "");
+    pushResult(setResults, name, status, details, error);
   };
 
   const updateResult = (name: string, status: TestResult["status"], details: string, error?: string) => {
@@ -153,19 +187,19 @@ function MediaTestPage() {
         setAudioLevel(average / 255);
       }
       const frame = requestAnimationFrame(animate);
-      setAnimationFrame(frame);
+      animationFrameRef.current = frame;
     };
     animate();
   }, [audioContext]);
 
-  const stopAudioLevelMonitoring = () => {
-    if (animationFrame) cancelAnimationFrame(animationFrame);
-    setAnimationFrame(null);
+  function stopAudioLevelMonitoring() {
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    animationFrameRef.current = null;
     setAudioLevel(0);
     audioAnalyserRef.current?.disconnect();
     audioAnalyserRef.current = null;
     audioDataArrayRef.current = null;
-  };
+  }
 
   const testMicrophone = async () => {
     setIsTesting("microphone");
@@ -204,6 +238,8 @@ function MediaTestPage() {
       });
       const track = stream.getVideoTracks()[0];
       if (track && track.readyState === "live") {
+        setCameraStream(stream);
+        setShowCameraPreview(true);
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
@@ -308,23 +344,6 @@ function MediaTestPage() {
       addResult("WebRTC Loopback", "failed", `Error: ${error instanceof Error ? error.message : "Unknown"}`, error instanceof Error ? error.name : undefined);
     }
     setIsTesting(null);
-  };
-
-  const stopAllStreams = () => {
-    [localStream, remoteStream, screenStream].forEach(stream => {
-      stream?.getTracks().forEach(track => track.stop());
-    });
-    setLocalStream(null);
-    setRemoteStream(null);
-    setScreenStream(null);
-    if (localVideoRef.current) localVideoRef.current.srcObject = null;
-    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
-    if (screenVideoRef.current) screenVideoRef.current.srcObject = null;
-    peerConnection?.close();
-    setPeerConnection(null);
-    stopAudioLevelMonitoring();
-    setIceCandidates([]);
-    setConnectionState("new");
   };
 
   const clearResults = () => setResults([]);
@@ -510,9 +529,12 @@ function MediaTestPage() {
                     "Test Camera"
                   )}
                 </button>
-                {localVideoRef.current && (
+                {showCameraPreview && (
                   <video
-                    ref={localVideoRef}
+                    ref={element => {
+                      localVideoRef.current = element;
+                      if (element && cameraStream) element.srcObject = cameraStream;
+                    }}
                     autoPlay
                     playsInline
                     muted
