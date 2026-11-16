@@ -3,10 +3,10 @@
  * Grid/list view of all bots for a server
  */
 
-import React, { memo, useState, useCallback, useEffect } from 'react';
-import { Bot, BotStatus, BotMode, BotListParams } from '@/contracts/bots';
+import { memo } from 'react';
+import type { Bot, BotStatus, BotMode, BotListParams } from '@/contracts/bots';
 import { BotListItem } from './BotListItem';
-import { renderIcon } from '@/components/flow/nodes/FlowNodes';
+import { renderIcon } from '@/components/flow/nodes/flowIcons';
 
 // ============================================
 // Empty State
@@ -94,7 +94,9 @@ const SearchFilterBar = memo(function SearchFilterBar({
       {/* Search */}
       <div className="relative flex-1 min-w-[200px]">
         <div className="relative">
-          {renderIcon('Search',  16, 'var(--color-text-tertiary)', 'absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none')}
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+            {renderIcon('Search',  16, 'var(--color-text-tertiary)')}
+          </span>
           <input
             type="text"
             value={searchQuery}

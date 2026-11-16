@@ -4,14 +4,16 @@
  */
 
 import React, { memo, useState, useCallback, useEffect, useRef } from 'react';
-import {
+import { ReactFlowProvider } from 'reactflow';
+import type {
   Bot,
   BotMode,
   BotFlow,
+  NodeDefinition,
   ValidationError,
 } from '@/contracts/bots';
 import { BotFlowEditor } from '@/components/flow/BotFlowEditor';
-import { renderIcon } from '@/components/flow/nodes/FlowNodes';
+import { renderIcon } from '@/components/flow/nodes/flowIcons';
 
 // ============================================
 // Avatar Upload
@@ -390,7 +392,7 @@ interface BotEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (bot: Partial<Bot> & { mode: BotMode }) => Promise<void>;
-  availableNodes?: any[];
+  availableNodes?: NodeDefinition[];
   saving?: boolean;
 }
 
@@ -608,13 +610,15 @@ export const BotEditorModal = memo(function BotEditorModal({
             {/* Flow Editor Tab (Simple Mode) */}
             {activeTab === 'flow' && mode === 'simple' && (
               <div className="h-[500px]" role="tabpanel" aria-labelledby="flow-tab">
-                <BotFlowEditor
-                  initialFlow={flow || undefined}
-                  readOnly={false}
-                  onChange={handleFlowChange}
-                  onValidate={handleValidate}
-                  availableNodes={availableNodes}
-                />
+                <ReactFlowProvider>
+                  <BotFlowEditor
+                    initialFlow={flow || undefined}
+                    readOnly={false}
+                    onChange={handleFlowChange}
+                    onValidate={handleValidate}
+                    availableNodes={availableNodes}
+                  />
+                </ReactFlowProvider>
                 <div className="flex justify-end pt-4 border-t border-surface-border mt-4">
                   <button onClick={() => setActiveTab('basic')} className="btn btn-secondary mr-2">
                     {renderIcon('X', 14)} Back

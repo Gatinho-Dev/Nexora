@@ -5,9 +5,8 @@ import { useBots } from "@/hooks/useBots";
 import type { Bot } from "@/types/bots";
 
 export const BotsTab: React.FC<{ serverId: number }> = ({ serverId }) => {
-  const { list, adaptBots, toggle, deleteBot, create, update, adaptBotForCreate, adaptBotForUpdate } = useBots();
-  const query = list({ serverId });
-  const bots = query.data ? adaptBots(query.data as any) : [];
+  const { list: query, adaptBots, toggle, deleteBot, create, update, adaptBotForCreate, adaptBotForUpdate } = useBots(serverId);
+  const bots = query.data ? adaptBots(query.data) : [];
   const [editingBot, setEditingBot] = useState<Bot | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -62,7 +61,6 @@ export const BotsTab: React.FC<{ serverId: number }> = ({ serverId }) => {
   return (
     <div>
       <ServerBotsList
-        serverId={serverId}
         bots={bots}
         loading={query.isLoading}
         totalCount={bots.length}

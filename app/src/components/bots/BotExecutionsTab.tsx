@@ -4,15 +4,13 @@
  */
 
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import {
+import type {
   BotExecution,
   ExecutionStatus,
-} from '@/contracts/bots';
-import {
   BotExecutionsTabProps,
   ExecutionDetailModalProps,
 } from '@/contracts/bots';
-import { renderIcon } from '@/components/flow/nodes/FlowNodes';
+import { renderIcon } from '@/components/flow/nodes/flowIcons';
 
 // ============================================
 // Status Badge
@@ -24,6 +22,7 @@ const StatusBadge = memo(function StatusBadge({ status }: { status: ExecutionSta
     failed: { label: 'Failed', className: 'badge-danger', icon: 'AlertCircle' },
     timeout: { label: 'Timeout', className: 'badge-warning', icon: 'Clock' },
     running: { label: 'Running', className: 'badge-primary', icon: 'Clock' },
+    cancelled: { label: 'Cancelled', className: 'badge-warning', icon: 'X' },
   };
 
   const config = configs[status];
@@ -187,7 +186,7 @@ export const ExecutionDetailModal = memo(function ExecutionDetailModal({
 }: ExecutionDetailModalProps) {
   if (!isOpen || !execution) return null;
 
-  const formatJson = (obj: any) => JSON.stringify(obj, null, 2);
+  const formatJson = (obj: unknown) => JSON.stringify(obj, null, 2);
 
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="execution-detail-title">
@@ -456,9 +455,9 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
   serverId,
 }: BotExecutionsTabProps) {
   // In a real app, this would fetch from an API
-  const [executions, _setExecutions] = useState<BotExecution[]>([]);
+  const [executions] = useState<BotExecution[]>([]);
   const [loading, setLoading] = useState(false);
-  const [totalCount, _setTotalCount] = useState(0);
+  const [totalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [statusFilter, setStatusFilter] = useState<ExecutionStatus | 'all'>('all');
@@ -490,8 +489,8 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
     setSelectedExecution(null);
   }, []);
 
-  const handleRetry = useCallback(async (_execution: BotExecution) => {
-    // In real app: await api.retryExecution(_execution.id);
+  const handleRetry = useCallback(async () => {
+    // In real app: await api.retryExecution(execution.id);
     fetchExecutions();
   }, [fetchExecutions]);
 

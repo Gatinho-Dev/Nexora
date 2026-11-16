@@ -4,29 +4,12 @@
  */
 
 import React, { memo, useState, useRef, useEffect } from 'react';
-import {
-  Bot,
+import type {
   BotMode,
   BotStatus,
-} from '@/contracts/bots';
-import {
   BotListItemProps,
 } from '@/contracts/bots';
-import {
-  Settings,
-  Copy,
-  Trash2,
-  Play,
-  Pause,
-  Eye,
-  MoreHorizontal,
-  Check,
-  X,
-  Zap,
-  Send,
-  GitBranch,
-} from 'lucide-react';
-import { renderIcon } from '@/components/flow/nodes/FlowNodes';
+import { renderIcon } from '@/components/flow/nodes/flowIcons';
 import { BotFace } from '@/components/effects/BotFace';
 
 // ============================================
@@ -121,7 +104,7 @@ const DropdownMenu = memo(function DropdownMenu({
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
-  anchorRef: React.RefObject<HTMLButtonElement>;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -172,16 +155,6 @@ export const BotListItem = memo(function BotListItem({
   const dropdownAnchorRef = useRef<HTMLButtonElement>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const modeColors = {
-    simple: 'text-success-500',
-    advanced: 'text-primary-500',
-  };
-
-  const modeIcons = {
-    simple: Zap,
-    advanced: GitBranch,
-  };
-
   return (
     <div className="card-hover group relative">
       <div className="p-4">
@@ -217,7 +190,7 @@ export const BotListItem = memo(function BotListItem({
             {/* Status Toggle */}
             <StatusToggle
               status={bot.status}
-              onChange={onToggleStatus}
+              onChange={(status) => onToggleStatus(bot, status === 'enabled')}
             />
 
             {/* Dropdown */}

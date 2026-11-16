@@ -1,7 +1,12 @@
 import { trpc } from "@/providers/trpc";
 import { useCallback } from "react";
-import type { Bot, BotFlow, BotExecution, BotStatus, BotMode } from "@/types/bots";
-import type { BotDTO, BotExecutionDTO } from "@/contracts/types";
+import type {
+  Bot,
+  BotFlow,
+  BotExecution,
+  BotMode,
+} from "@/types/bots";
+import type { BotDTO, BotExecutionDTO } from "@contracts/types";
 
 // Transform backend DTO to frontend Bot type
 const adaptBot = (dto: BotDTO): Bot => ({
@@ -21,68 +26,73 @@ const adaptBot = (dto: BotDTO): Bot => ({
   lastExecutedAt: null, // Would need separate query
 });
 
+const toDateString = (value: string | Date): string =>
+  value instanceof Date ? value.toISOString() : String(value);
+
 // Transform backend Execution DTO to frontend BotExecution type
-const adaptExecution = (dto: BotExecutionDTO): BotExecution => ({
-  id: String(dto.id),
-  botId: String(dto.botId),
-  triggerId: dto.triggerId ? String(dto.triggerId) : null,
-  triggerType: dto.triggerType ?? null,
-  status: dto.status,
-  context: dto.context as Record<string, unknown> | null,
-  result: dto.result as Record<string, unknown> | null,
-  error: dto.error,
-  startedAt: dto.startedAt instanceof Date ? dto.startedAt.toISOString() : String(dto.startedAt),
-  completedAt: dto.completedAt ? (dto.completedAt instanceof Date ? dto.completedAt.toISOString() : String(dto.completedAt)) : null,
-});
+const adaptExecution = (dto: BotExecutionDTO): BotExecution => {
+  const startedAt = toDateString(dto.startedAt);
+  const completedAt = dto.completedAt ? toDateString(dto.completedAt) : null;
+  const startedMs = Date.parse(startedAt);
+  const completedMs = completedAt ? Date.parse(completedAt) : NaN;
+  return {
+    id: String(dto.id),
+    botId: String(dto.botId),
+    serverId: "",
+    trigger: {
+      type: dto.triggerType ?? "webhook",
+      data: {},
+    },
+    status: dto.status,
+    context: { variables: dto.context ?? {} },
+    result: {
+      nodesExecuted: 0,
+      actionsPerformed: [],
+      finalOutput: dto.result ?? undefined,
+    },
+    error: dto.error ? { nodeId: "", message: dto.error } : null,
+    startedAt,
+    completedAt,
+    duration:
+      Number.isFinite(startedMs) && Number.isFinite(completedMs)
+        ? Math.max(0, (completedMs as number) - (startedMs as number))
+        : 0,
+  };
+};
 
 // Transform frontend Bot to backend CreateBotInput
-const adaptBotForCreate = (bot: Partial<Bot> & { mode: BotMode; serverId: number }) => ({
+// Omit serverId: the frontend Bot stores it as a string, the backend wants a number.
+const adaptBotForCreate = (bot: Omit<Partial<Bot>, "serverId"> & { mode: BotMode; serverId: number }) => ({
   serverId: bot.serverId,
-  name: bot.name,
+  name: bot.name ?? "",
   description: bot.description,
-  avatarUrl: bot.avatarUrl,
+  avatarUrl: bot.avatarUrl ?? undefined,
   mode: bot.mode,
-  code: bot.mode === "advanced" ? bot.code : null,
-  nodesConfig: bot.mode === "simple" ? (bot.flow as Record<string, unknown> | null) : null,
+  code: bot.mode === "advanced" ? bot.code ?? undefined : undefined,
+  nodesConfig:
+    bot.mode === "simple"
+      ? ((bot.flow ?? undefined) as Record<string, unknown> | undefined)
+      : undefined,
 });
 
 // Transform frontend Bot to backend UpdateBotInput
-const adaptBotForUpdate = (bot: Partial<Bot> & { id: number }) => ({
-  id: bot.id,
+// Omit id: the frontend Bot stores it as a string, the backend wants botId as a number.
+const adaptBotForUpdate = (bot: Omit<Partial<Bot>, "id"> & { id: number }) => ({
+  botId: bot.id,
   name: bot.name,
-  description: bot.description,
-  avatarUrl: bot.avatarUrl,
+  description: bot.description ?? undefined,
+  avatarUrl: bot.avatarUrl ?? undefined,
   mode: bot.mode,
-  code: bot.mode === "advanced" ? bot.code : null,
+  code: bot.mode === "advanced" ? bot.code ?? undefined : null,
   nodesConfig: bot.mode === "simple" ? (bot.flow as Record<string, unknown> | null) : null,
 });
 
-export const useBots = () => {
-  const list = trpc.bot.list.useQuery;
-  const get = trpc.bot.get.useQuery;
-  const create = trpc.bot.create.useMutation;
-  const update = trpc.bot.update.useMutation;
-  const deleteBot = trpc.bot.delete.useMutation;
-  const toggle = trpc.bot.toggle.useMutation;
-  const saveFlow = trpc.bot.saveFlow.useMutation;
-  const listExecutions = trpc.bot.listExecutions.useQuery;
-  const testRun = trpc.bot.testRun.useMutation;
-
-  const createTrigger = trpc.bot.createTrigger.useMutation;
-  const updateTrigger = trpc.bot.updateTrigger.useMutation;
-  const deleteTrigger = trpc.bot.deleteTrigger.useMutation;
-
-  const createAction = trpc.bot.createAction.useMutation;
-  const updateAction = trpc.bot.updateAction.useMutation;
-  const deleteAction = trpc.bot.deleteAction.useMutation;
-
-  const createNode = trpc.bot.createNode.useMutation;
-  const updateNode = trpc.bot.updateNode.useMutation;
-  const deleteNode = trpc.bot.deleteNode.useMutation;
-
-  const createEdge = trpc.bot.createEdge.useMutation;
-  const updateEdge = trpc.bot.updateEdge.useMutation;
-  const deleteEdge = trpc.bot.deleteEdge.useMutation;
+export const useBots = (serverId: number) => {
+  const list = trpc.bot.list.useQuery({ serverId });
+  const create = trpc.bot.create.useMutation();
+  const update = trpc.bot.update.useMutation();
+  const deleteBot = trpc.bot.delete.useMutation();
+  const toggle = trpc.bot.toggle.useMutation();
 
   // Adapter functions for components
   const adaptBots = useCallback((dtos: BotDTO[]): Bot[] => dtos.map(adaptBot), []);
@@ -91,12 +101,8 @@ export const useBots = () => {
   const adaptExecutionAdapter = useCallback((dto: BotExecutionDTO): BotExecution => adaptExecution(dto), []);
 
   return {
-    // Raw tRPC hooks
-    list, get, create, update, deleteBot, toggle, saveFlow, listExecutions, testRun,
-    createTrigger, updateTrigger, deleteTrigger,
-    createAction, updateAction, deleteAction,
-    createNode, updateNode, deleteNode,
-    createEdge, updateEdge, deleteEdge,
+    // Bound tRPC hooks
+    list, create, update, deleteBot, toggle,
     // Adapters
     adaptBots, adaptBot: adaptBotAdapter, adaptExecutions, adaptExecution: adaptExecutionAdapter,
     adaptBotForCreate, adaptBotForUpdate,

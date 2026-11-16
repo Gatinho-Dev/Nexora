@@ -129,7 +129,9 @@ export function getFriendlyErrorMessage(raw: unknown): FriendlyError {
     };
   }
 
-  const errorString = typeof raw === "string" ? raw : (raw as any)?.message || (raw as any)?.code || String(raw);
+  const details = (raw ?? {}) as { message?: unknown; code?: unknown };
+  const errorString =
+    typeof raw === "string" ? raw : String(details.message ?? details.code ?? raw);
 
   for (const [key, item] of Object.entries(ERROR_DICTIONARY)) {
     if (errorString.toLowerCase().includes(key.toLowerCase())) {

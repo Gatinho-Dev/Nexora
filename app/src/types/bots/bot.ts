@@ -9,7 +9,7 @@
 
 export type BotMode = 'simple' | 'advanced';
 export type BotStatus = 'enabled' | 'disabled';
-export type ExecutionStatus = 'success' | 'failed' | 'timeout' | 'running';
+export type ExecutionStatus = 'success' | 'failed' | 'timeout' | 'running' | 'cancelled';
 
 export interface Bot {
   id: string;
@@ -83,16 +83,26 @@ export type MarkerType = 'arrow' | 'arrowclosed' | 'circle' | 'diamond';
 
 export type TriggerNodeType =
   | 'message_create'
+  | 'message_update'
+  | 'message_delete'
   | 'member_join'
+  | 'member_leave'
+  | 'member_ban'
+  | 'member_timeout'
   | 'command'
   | 'scheduled'
   | 'webhook'
   | 'reaction_add'
+  | 'reaction_remove'
   | 'voice_join'
+  | 'voice_leave'
+  | 'voice_switch'
   | 'channel_create'
+  | 'channel_update'
+  | 'channel_delete'
+  | 'role_create'
   | 'role_update'
-  | 'message_update'
-  | 'message_delete';
+  | 'role_delete';
 
 export type ActionNodeType =
   | 'send_message'
@@ -132,9 +142,19 @@ export const NODE_CATEGORIES: Record<NodeType, NodeCategory> = {
   reaction_add: 'trigger',
   voice_join: 'trigger',
   channel_create: 'trigger',
+  role_create: 'trigger',
   role_update: 'trigger',
+  role_delete: 'trigger',
   message_update: 'trigger',
   message_delete: 'trigger',
+  member_leave: 'trigger',
+  member_ban: 'trigger',
+  member_timeout: 'trigger',
+  channel_update: 'trigger',
+  channel_delete: 'trigger',
+  reaction_remove: 'trigger',
+  voice_leave: 'trigger',
+  voice_switch: 'trigger',
   // Actions
   send_message: 'action',
   send_embed: 'action',

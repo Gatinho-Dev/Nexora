@@ -9,7 +9,7 @@
 
 export type BotMode = 'simple' | 'advanced';
 export type BotStatus = 'enabled' | 'disabled';
-export type ExecutionStatus = 'success' | 'failed' | 'timeout' | 'running';
+export type ExecutionStatus = 'success' | 'failed' | 'timeout' | 'running' | 'cancelled';
 
 export interface Bot {
   id: string;
@@ -83,16 +83,26 @@ export type MarkerType = 'arrow' | 'arrowclosed' | 'circle' | 'diamond';
 
 export type TriggerNodeType =
   | 'message_create'
+  | 'message_update'
+  | 'message_delete'
   | 'member_join'
+  | 'member_leave'
+  | 'member_ban'
+  | 'member_timeout'
   | 'command'
   | 'scheduled'
   | 'webhook'
   | 'reaction_add'
+  | 'reaction_remove'
   | 'voice_join'
+  | 'voice_leave'
+  | 'voice_switch'
   | 'channel_create'
+  | 'channel_update'
+  | 'channel_delete'
+  | 'role_create'
   | 'role_update'
-  | 'message_update'
-  | 'message_delete';
+  | 'role_delete';
 
 export type ActionNodeType =
   | 'send_message'
@@ -132,9 +142,19 @@ export const NODE_CATEGORIES: Record<NodeType, NodeCategory> = {
   reaction_add: 'trigger',
   voice_join: 'trigger',
   channel_create: 'trigger',
+  role_create: 'trigger',
   role_update: 'trigger',
+  role_delete: 'trigger',
   message_update: 'trigger',
   message_delete: 'trigger',
+  member_leave: 'trigger',
+  member_ban: 'trigger',
+  member_timeout: 'trigger',
+  channel_update: 'trigger',
+  channel_delete: 'trigger',
+  reaction_remove: 'trigger',
+  voice_leave: 'trigger',
+  voice_switch: 'trigger',
   // Actions
   send_message: 'action',
   send_embed: 'action',
@@ -159,6 +179,49 @@ export const NODE_CATEGORIES: Record<NodeType, NodeCategory> = {
   parallel: 'logic',
   switch: 'logic'
 };
+
+// ============================================
+// Node Type Guards
+// ============================================
+
+export function isTriggerNodeType(type: NodeType): type is TriggerNodeType {
+  return NODE_CATEGORIES[type] === 'trigger';
+}
+
+export function isActionNodeType(type: NodeType): type is ActionNodeType {
+  return NODE_CATEGORIES[type] === 'action';
+}
+
+export function isLogicNodeType(type: NodeType): type is LogicNodeType {
+  return NODE_CATEGORIES[type] === 'logic';
+}
+
+/** Narrow a generic node type to a trigger type, falling back to 'webhook'. */
+export function asTriggerNodeType(type: NodeType): TriggerNodeType {
+  return isTriggerNodeType(type) ? type : 'webhook';
+}
+
+/** Narrow a generic node type to an action type, falling back to 'send_message'. */
+export function asActionNodeType(type: NodeType): ActionNodeType {
+  return isActionNodeType(type) ? type : 'send_message';
+}
+
+/** Narrow a generic node type to a logic type, falling back to 'condition'. */
+export function asLogicNodeType(type: NodeType): LogicNodeType {
+  return isLogicNodeType(type) ? type : 'condition';
+}
+
+/** Get the specific node type stored in a node's data (source of truth for rendering). */
+export function getSpecificNodeType(data: NodeData): NodeType {
+  switch (data.category) {
+    case 'trigger':
+      return data.triggerType;
+    case 'action':
+      return data.actionType;
+    case 'logic':
+      return data.logicType;
+  }
+}
 
 // ============================================
 // Node Data Structures
@@ -290,18 +353,16 @@ export interface ActionConfig {
   // send_embed
   embed?: EmbedConfig;
 
-  // add_role / remove_role
+  // add_role / remove_role / timeout_member / kick_member / ban_member
   roleId?: string;
   userId?: string;
   reason?: string;
 
   // timeout_member
   duration?: number; // milliseconds
-  reason?: string;
 
   // kick_member / ban_member
   banUserId?: string;
-  reason?: string;
   deleteMessageSeconds?: number;
 
   // create_channel

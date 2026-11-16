@@ -10,7 +10,6 @@ import type {
   NodeInput,
   NodeOutput,
   ConfigField,
-  SelectOption,
   TriggerNodeType,
   ActionNodeType,
   LogicNodeType,
@@ -1242,7 +1241,7 @@ export const nodeCategories = [
 // Lookup Helpers
 // ============================================
 
-export const nodeDefinitionsMap: Record<NodeType, NodeDefinition> = {};
+export const nodeDefinitionsMap: Partial<Record<NodeType, NodeDefinition>> = {};
 
 allNodeDefinitions.forEach((def) => {
   nodeDefinitionsMap[def.type] = def;

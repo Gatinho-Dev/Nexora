@@ -4,7 +4,7 @@
  */
 
 import React, { memo } from 'react';
-import { renderIcon } from '../../flow/nodes/FlowNodes';
+import { renderIcon } from '../nodes/flowIcons';
 
 interface FlowToolbarProps {
   onZoomIn: () => void;

@@ -3,56 +3,167 @@
  * Main visual flow editor component using React Flow
  */
 
-import React, {
+import {
   useState,
   useCallback,
-  useRef,
   useEffect,
   useMemo,
-  memo,
+  type MouseEvent as ReactMouseEvent,
+  type DragEvent as ReactDragEvent,
 } from 'react';
 import ReactFlow, {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   useNodesState,
   useEdgesState,
   useReactFlow,
   addEdge,
+  getOutgoers,
+  ConnectionMode,
+  MarkerType,
+} from 'reactflow';
+import type {
   Node,
   Edge,
   OnNodesChange,
   OnEdgesChange,
   OnConnect,
-  ConnectionMode,
-  applyNodeChanges,
-  applyEdgeChanges,
-  getIncomers,
-  getOutgoers,
-  fitView,
-  ConnectionLineType,
-  MarkerType,
-  isNode,
-  isEdge,
+  Connection,
+  NodeChange,
+  EdgeChange,
+  OnSelectionChangeParams,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-import { FlowNodes, nodeTypes, edgeTypes, getNodeComponentType } from '@/components/flow/nodes/FlowNodes';
+import { nodeTypes, edgeTypes } from '@/components/flow/nodes/FlowNodes';
 import { NodePalette } from '@/components/flow/sidebar/NodePalette';
 import { NodeConfigSidebar } from '@/components/flow/sidebar/NodeConfigSidebar';
 import { FlowToolbar, KeyboardShortcutsModal } from '@/components/flow/toolbar/FlowToolbar';
 import {
+  getNodeDefinition,
+  getSpecificNodeType,
+  asTriggerNodeType,
+  asActionNodeType,
+  asLogicNodeType,
+  allNodeDefinitions,
+  nodeCategories,
+} from '@/contracts/bots';
+import type {
   BotFlow,
   FlowNode,
   FlowEdge,
   Viewport,
+  NodeData,
   NodeDefinition,
   ValidationError,
   NodeCategory,
-  allNodeDefinitions,
-  nodeCategories,
-  getNodeDefinition,
+  TriggerConfig,
+  ActionConfig,
+  LogicConfig,
 } from '@/contracts/bots';
+
+// ============================================
+// Editor-local types & converters
+// ============================================
+
+type EditorNode = Node<NodeData>;
+
+function toEditorNode(node: FlowNode): EditorNode {
+  return {
+    id: node.id,
+    type: node.type,
+    position: node.position,
+    data: node.data,
+    ...(node.style ? { style: node.style } : null),
+    ...(node.className ? { className: node.className } : null),
+  };
+}
+
+function fromEditorNode(node: EditorNode): FlowNode {
+  return {
+    id: node.id,
+    type: getSpecificNodeType(node.data),
+    position: node.position,
+    data: node.data,
+  };
+}
+
+function toEditorEdge(edge: FlowEdge): Edge {
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    sourceHandle: edge.sourceHandle,
+    targetHandle: edge.targetHandle,
+    type: edge.type ?? 'smoothstep',
+    animated: edge.animated,
+    label: edge.label,
+    labelStyle: edge.labelStyle,
+    labelShowBg: edge.labelShowBg,
+    labelBgStyle: edge.labelBgStyle,
+    style: edge.style,
+    markerEnd: edge.markerEnd as Edge['markerEnd'],
+    data: { animated: edge.animated ?? false, label: edge.label },
+  };
+}
+
+function fromEditorEdge(edge: Edge): FlowEdge {
+  const animated = edge.animated ?? (edge.data?.animated as boolean | undefined);
+  const label =
+    (typeof edge.data?.label === 'string' ? edge.data.label : undefined) ?? edge.label;
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    sourceHandle: edge.sourceHandle ?? undefined,
+    targetHandle: edge.targetHandle ?? undefined,
+    type: (edge.type as FlowEdge['type']) ?? 'smoothstep',
+    animated,
+    label,
+    markerEnd:
+      edge.markerEnd === MarkerType.ArrowClosed ? MarkerType.ArrowClosed : undefined,
+  };
+}
+
+function buildNodeData(definition: NodeDefinition): NodeData {
+  const base = {
+    label: definition.label,
+    description: definition.description,
+    category: definition.category,
+    icon: definition.icon,
+    disabled: false,
+  };
+  switch (definition.category) {
+    case 'trigger':
+      return {
+        ...base,
+        category: 'trigger',
+        triggerType: asTriggerNodeType(definition.type),
+        config: {},
+        outputs: definition.outputs,
+      };
+    case 'action':
+      return {
+        ...base,
+        category: 'action',
+        actionType: asActionNodeType(definition.type),
+        config: {},
+        inputs: definition.inputs,
+        outputs: definition.outputs,
+      };
+    case 'logic':
+      return {
+        ...base,
+        category: 'logic',
+        logicType: asLogicNodeType(definition.type),
+        config: {},
+        inputs: definition.inputs,
+        outputs: definition.outputs,
+      };
+  }
+}
 
 // ============================================
 // Custom Hooks
@@ -103,7 +214,7 @@ interface BotFlowEditorProps {
   availableNodes?: NodeDefinition[];
 }
 
-export const BotFlowEditor = memo(function BotFlowEditor({
+export function BotFlowEditor({
   initialFlow,
   readOnly = false,
   onChange,
@@ -111,26 +222,34 @@ export const BotFlowEditor = memo(function BotFlowEditor({
   availableNodes = allNodeDefinitions,
 }: BotFlowEditorProps) {
   // React Flow state
-  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(
-    initialFlow?.nodes || [],
-    (changes) => changes
+  const [nodes, setNodes, onNodesChange] = useNodesState<NodeData>(
+    (initialFlow?.nodes ?? []).map(toEditorNode)
   );
-  const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>(
-    initialFlow?.edges || [],
-    (changes) => changes
+  const [edges, setEdges, onEdgesChange] = useEdgesState(
+    (initialFlow?.edges ?? []).map(toEditorEdge)
   );
   const [viewport, setViewport] = useState<Viewport>(
-    initialFlow?.viewport || { x: 0, y: 0, zoom: 1 }
+    initialFlow?.viewport ?? { x: 0, y: 0, zoom: 1 }
   );
 
   // UI state
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
-  const [showPalette, setShowPalette] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [gridEnabled, setGridEnabled] = useState(true);
   const [minimapEnabled, setMinimapEnabled] = useState(true);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+
+  // Palette categories derived from the available node definitions
+  const paletteCategories = useMemo(() => {
+    const available = new Set(availableNodes.map((n) => n.type));
+    return nodeCategories
+      .map((category) => ({
+        ...category,
+        nodes: category.nodes.filter((node) => available.has(node.type)),
+      }))
+      .filter((category) => category.nodes.length > 0);
+  }, [availableNodes]);
 
   // History
   const history = useHistory({ nodes, edges });
@@ -147,7 +266,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
 
     // Check for nodes without connections (except triggers)
     nodes.forEach((node) => {
-      const def = getNodeDefinition(node.type as any);
+      const def = getNodeDefinition(getSpecificNodeType(node.data));
       if (!def) return;
 
       const incoming = edges.filter((e) => e.target === node.id);
@@ -173,7 +292,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
 
       // Logic nodes validation
       if (def.category === 'logic') {
-        if (node.type === 'condition') {
+        if (getSpecificNodeType(node.data) === 'condition') {
           const trueEdges = edges.filter((e) => e.source === node.id && e.sourceHandle === 'true');
           const falseEdges = edges.filter((e) => e.source === node.id && e.sourceHandle === 'false');
           if (trueEdges.length === 0 && falseEdges.length === 0) {
@@ -188,7 +307,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
 
       // Check for required config
       if (def.configSchema) {
-        const config = node.data.config || {};
+        const config = (node.data.config ?? {}) as Record<string, unknown>;
         def.configSchema.forEach((field) => {
           if (field.required && (config[field.key] === undefined || config[field.key] === '')) {
             errors.push({
@@ -210,7 +329,8 @@ export const BotFlowEditor = memo(function BotFlowEditor({
       if (visited.has(nodeId)) return false;
 
       visiting.add(nodeId);
-      const outgoers = getOutgoers(nodeId, nodes, edges);
+      const node = nodes.find((n) => n.id === nodeId);
+      const outgoers = node ? getOutgoers(node, nodes, edges) : [];
       for (const outgoer of outgoers) {
         if (hasCycle(outgoer.id)) return true;
       }
@@ -255,7 +375,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
     setNodes(prevNodes);
     setEdges(prevEdges);
     saveToHistory();
-  }, [history, saveToHistory]);
+  }, [history, saveToHistory, setEdges, setNodes]);
 
   const handleRedo = useCallback(() => {
     history.redo();
@@ -263,52 +383,53 @@ export const BotFlowEditor = memo(function BotFlowEditor({
     setNodes(nextNodes);
     setEdges(nextEdges);
     saveToHistory();
-  }, [history, saveToHistory]);
+  }, [history, saveToHistory, setEdges, setNodes]);
 
   // ============================================
   // Node/Edge Handlers
   // ============================================
 
-  const onConnect = useCallback<OnConnect>(
+  const onConnect: OnConnect = useCallback(
     (params: Connection) => {
       const { source, target, sourceHandle, targetHandle } = params;
 
-      // Prevent self-connections
-      if (source === target) return;
+      // Prevent self-connections and incomplete connections
+      if (!source || !target || source === target) return;
 
       // Check if connection already exists
       const exists = edges.some(
         (e) =>
           e.source === source &&
           e.target === target &&
-          e.sourceHandle === sourceHandle &&
-          e.targetHandle === targetHandle
+          e.sourceHandle === (sourceHandle ?? undefined) &&
+          e.targetHandle === (targetHandle ?? undefined)
       );
       if (exists) return;
 
-      const newEdge: FlowEdge = {
+      const newEdge: Edge = {
         id: `edge-${source}-${target}-${sourceHandle}-${targetHandle}-${Date.now()}`,
         source,
         target,
-        sourceHandle: sourceHandle || undefined,
-        targetHandle: targetHandle || undefined,
+        sourceHandle: sourceHandle ?? undefined,
+        targetHandle: targetHandle ?? undefined,
         type: 'smoothstep',
         animated: false,
         markerEnd: MarkerType.ArrowClosed,
+        data: { animated: false },
       };
 
       setEdges((eds) => addEdge(newEdge, eds));
       saveToHistory();
     },
-    [edges, saveToHistory]
+    [edges, saveToHistory, setEdges]
   );
 
-  const onNodesChangeHandler = useCallback<OnNodesChange<FlowNode>>(
-    (changes) => {
+  const onNodesChangeHandler: OnNodesChange = useCallback(
+    (changes: NodeChange[]) => {
       onNodesChange(changes);
       // Save to history for position changes
       const hasPositionChange = changes.some(
-        (c) => 'position' in c && c.position
+        (c) => c.type === 'position' && c.position
       );
       if (hasPositionChange) {
         saveToHistory();
@@ -317,8 +438,8 @@ export const BotFlowEditor = memo(function BotFlowEditor({
     [onNodesChange, saveToHistory]
   );
 
-  const onEdgesChangeHandler = useCallback<OnEdgesChange<FlowEdge>>(
-    (changes) => {
+  const onEdgesChangeHandler: OnEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
       onEdgesChange(changes);
       saveToHistory();
     },
@@ -326,8 +447,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
   );
 
   const onNodeClick = useCallback(
-    (event: React.MouseEvent, node: Node<FlowNode>) => {
-      event.stopPropagation();
+    (_event: ReactMouseEvent, node: EditorNode) => {
       setSelectedNodeId(node.id);
       setShowSidebar(true);
     },
@@ -339,26 +459,21 @@ export const BotFlowEditor = memo(function BotFlowEditor({
     setShowSidebar(false);
   }, []);
 
-  const onSelectionChange = useCallback(({ nodes: selectedNodes, edges: selectedEdges }) => {
-    if (selectedNodes.length > 0) {
-      setSelectedNodeId(selectedNodes[0].id);
-      setShowSidebar(true);
-    } else if (selectedEdges.length > 0) {
-      setSelectedNodeId(null);
-      setShowSidebar(false);
-    } else {
-      setSelectedNodeId(null);
-      setShowSidebar(false);
-    }
-  }, []);
-
-  // ============================================
-  // Viewport Handlers
-  // ============================================
-
-  const onViewportChange = useCallback((newViewport: Viewport) => {
-    setViewport(newViewport);
-  }, []);
+  const onSelectionChange = useCallback(
+    ({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
+      if (selectedNodes.length > 0) {
+        setSelectedNodeId(selectedNodes[0].id);
+        setShowSidebar(true);
+      } else if (selectedEdges.length > 0) {
+        setSelectedNodeId(null);
+        setShowSidebar(false);
+      } else {
+        setSelectedNodeId(null);
+        setShowSidebar(false);
+      }
+    },
+    []
+  );
 
   // ============================================
   // Toolbar Actions
@@ -380,6 +495,10 @@ export const BotFlowEditor = memo(function BotFlowEditor({
     reactFlowInstance.setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 300 });
   }, [reactFlowInstance]);
 
+  const clearSelection = useCallback(() => {
+    setNodes((nds) => nds.map((n) => (n.selected ? { ...n, selected: false } : n)));
+  }, [setNodes]);
+
   const handleDelete = useCallback(() => {
     if (!selectedNodeId) return;
     setNodes((nds) => nds.filter((n) => n.id !== selectedNodeId));
@@ -387,7 +506,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
     setSelectedNodeId(null);
     setShowSidebar(false);
     saveToHistory();
-  }, [selectedNodeId, saveToHistory]);
+  }, [selectedNodeId, saveToHistory, setEdges, setNodes]);
 
   const handleAlignHorizontal = useCallback(() => {
     const selected = nodes.filter((n) => n.selected);
@@ -400,7 +519,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
       )
     );
     saveToHistory();
-  }, [nodes, saveToHistory]);
+  }, [nodes, saveToHistory, setNodes]);
 
   const handleAlignVertical = useCallback(() => {
     const selected = nodes.filter((n) => n.selected);
@@ -413,13 +532,13 @@ export const BotFlowEditor = memo(function BotFlowEditor({
       )
     );
     saveToHistory();
-  }, [nodes, saveToHistory]);
+  }, [nodes, saveToHistory, setNodes]);
 
   const handleExport = useCallback(() => {
     const flow: BotFlow = {
       version: 1,
-      nodes,
-      edges,
+      nodes: nodes.map(fromEditorNode),
+      edges: edges.map(fromEditorEdge),
       viewport,
     };
     const blob = new Blob([JSON.stringify(flow, null, 2)], { type: 'application/json' });
@@ -438,8 +557,8 @@ export const BotFlowEditor = memo(function BotFlowEditor({
         try {
           const flow = JSON.parse(e.target?.result as string) as BotFlow;
           if (flow.nodes && flow.edges) {
-            setNodes(flow.nodes);
-            setEdges(flow.edges);
+            setNodes(flow.nodes.map(toEditorNode));
+            setEdges(flow.edges.map(toEditorEdge));
             if (flow.viewport) setViewport(flow.viewport);
             saveToHistory();
             validateFlow();
@@ -450,11 +569,11 @@ export const BotFlowEditor = memo(function BotFlowEditor({
       };
       reader.readAsText(file);
     },
-    [saveToHistory, validateFlow]
+    [saveToHistory, validateFlow, setEdges, setNodes]
   );
 
   const handleDragStart = useCallback(
-    (event: React.DragEvent, nodeDef: NodeDefinition) => {
+    (event: ReactDragEvent, nodeDef: NodeDefinition) => {
       event.dataTransfer.setData('application/json', JSON.stringify(nodeDef));
       event.dataTransfer.effectAllowed = 'copy';
     },
@@ -462,7 +581,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
   );
 
   const onDrop = useCallback(
-    (event: React.DragEvent) => {
+    (event: ReactDragEvent) => {
       event.preventDefault();
       try {
         const nodeDef = JSON.parse(event.dataTransfer.getData('application/json')) as NodeDefinition;
@@ -471,15 +590,11 @@ export const BotFlowEditor = memo(function BotFlowEditor({
           y: event.clientY,
         });
 
-        const newNode: FlowNode = {
+        const newNode: EditorNode = {
           id: `${nodeDef.type}-${Date.now()}`,
-          type: getNodeComponentType(nodeDef.category),
+          type: nodeDef.type,
           position,
-          data: {
-            label: nodeDef.label,
-            category: nodeDef.category,
-            ...nodeDef.defaultData,
-          },
+          data: buildNodeData(nodeDef),
         };
 
         setNodes((nds) => [...nds, newNode]);
@@ -488,10 +603,10 @@ export const BotFlowEditor = memo(function BotFlowEditor({
         console.error('Failed to add node from palette:', err);
       }
     },
-    [reactFlowInstance, saveToHistory]
+    [reactFlowInstance, saveToHistory, setNodes]
   );
 
-  const onDragOver = useCallback((event: React.DragEvent) => {
+  const onDragOver = useCallback((event: ReactDragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
   }, []);
@@ -521,7 +636,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
         setShowShortcuts(false);
         setSelectedNodeId(null);
         setShowSidebar(false);
-        reactFlowInstance.setSelection([]);
+        clearSelection();
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
@@ -570,7 +685,6 @@ export const BotFlowEditor = memo(function BotFlowEditor({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    reactFlowInstance,
     selectedNodeId,
     handleUndo,
     handleRedo,
@@ -578,6 +692,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
     handleFitView,
     handleCenter,
     handleExport,
+    clearSelection,
   ]);
 
   // ============================================
@@ -585,7 +700,12 @@ export const BotFlowEditor = memo(function BotFlowEditor({
   // ============================================
 
   useEffect(() => {
-    const flow: BotFlow = { version: 1, nodes, edges, viewport };
+    const flow: BotFlow = {
+      version: 1,
+      nodes: nodes.map(fromEditorNode),
+      edges: edges.map(fromEditorEdge),
+      viewport,
+    };
     onChange(flow);
   }, [nodes, edges, viewport, onChange]);
 
@@ -594,7 +714,9 @@ export const BotFlowEditor = memo(function BotFlowEditor({
   // ============================================
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
-  const selectedNodeDef = selectedNode ? getNodeDefinition(selectedNode.type as any) : null;
+  const selectedNodeDef = selectedNode
+    ? (getNodeDefinition(getSpecificNodeType(selectedNode.data)) ?? null)
+    : null;
 
   // ============================================
   // Render
@@ -633,13 +755,13 @@ export const BotFlowEditor = memo(function BotFlowEditor({
       {/* Main Content */}
       <div className="flex-1 flex relative overflow-hidden">
         {/* Left Palette */}
-        {showPalette && !readOnly && (
+        {!readOnly && (
           <div className="w-72 flex-shrink-0 transition-width duration-fast">
             <NodePalette
               onDragStart={handleDragStart}
               searchQuery=""
               onSearchChange={() => {}}
-              categories={nodeCategories}
+              categories={paletteCategories}
             />
           </div>
         )}
@@ -650,7 +772,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
           onDrop={onDrop}
           onDragOver={onDragOver}
         >
-          <ReactFlow<FlowNode, FlowEdge>
+          <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChangeHandler}
@@ -659,7 +781,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             onSelectionChange={onSelectionChange}
-            onViewportChange={onViewportChange}
+            onMoveEnd={(_event, nextViewport) => setViewport(nextViewport)}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={readOnly ? ConnectionMode.Loose : ConnectionMode.Strict}
@@ -670,16 +792,15 @@ export const BotFlowEditor = memo(function BotFlowEditor({
             minZoom={0.1}
             maxZoom={3}
             snapToGrid={gridEnabled}
-            snapGrid={{ x: 20, y: 20 }}
+            snapGrid={[20, 20]}
             nodesDraggable={!readOnly}
             nodesConnectable={!readOnly}
             elementsSelectable={true}
             selectNodesOnDrag={true}
-            connectionLineType="smoothstep"
             attributionPosition="bottom-left"
           >
             <Background
-              variant="dots"
+              variant={BackgroundVariant.Dots}
               gap={20}
               size={1}
               color="var(--color-surface-border)"
@@ -687,7 +808,9 @@ export const BotFlowEditor = memo(function BotFlowEditor({
             {minimapEnabled && (
               <MiniMap
                 nodeColor={(node) => {
-                  const def = getNodeDefinition(node.type as any);
+                  const def = node.type
+                    ? getNodeDefinition(node.type as FlowNode['type'])
+                    : undefined;
                   if (!def) return 'var(--color-surface-border-strong)';
                   const colors: Record<NodeCategory, string> = {
                     trigger: 'var(--color-node-trigger-border)',
@@ -711,20 +834,37 @@ export const BotFlowEditor = memo(function BotFlowEditor({
         {showSidebar && (
           <div className="w-80 flex-shrink-0 transition-width duration-fast border-l border-surface-border">
             <NodeConfigSidebar
-              node={selectedNode || null}
+              node={selectedNode ? fromEditorNode(selectedNode) : null}
               nodeDefinition={selectedNodeDef}
               onUpdate={(nodeId, config) => {
                 setNodes((nds) =>
-                  nds.map((n) =>
-                    n.id === nodeId ? { ...n, data: { ...n.data, config } } : n
-                  )
+                  nds.map((n) => {
+                    if (n.id !== nodeId) return n;
+                    const data = n.data;
+                    if (data.category === 'trigger') {
+                      return {
+                        ...n,
+                        data: { ...data, config: { ...data.config, ...config } as TriggerConfig },
+                      };
+                    }
+                    if (data.category === 'action') {
+                      return {
+                        ...n,
+                        data: { ...data, config: { ...data.config, ...config } as ActionConfig },
+                      };
+                    }
+                    return {
+                      ...n,
+                      data: { ...data, config: { ...data.config, ...config } as LogicConfig },
+                    };
+                  })
                 );
                 saveToHistory();
               }}
               onClose={() => {
                 setShowSidebar(false);
                 setSelectedNodeId(null);
-                reactFlowInstance.setSelection([]);
+                clearSelection();
               }}
               onDeleteNode={(nodeId) => {
                 setNodes((nds) => nds.filter((n) => n.id !== nodeId));
@@ -736,7 +876,7 @@ export const BotFlowEditor = memo(function BotFlowEditor({
               onDuplicateNode={(nodeId) => {
                 const nodeToDup = nodes.find((n) => n.id === nodeId);
                 if (!nodeToDup) return;
-                const newNode: FlowNode = {
+                const newNode: EditorNode = {
                   ...nodeToDup,
                   id: `${nodeToDup.type}-${Date.now()}`,
                   position: {
@@ -758,6 +898,4 @@ export const BotFlowEditor = memo(function BotFlowEditor({
       </div>
     </div>
   );
-});
-
-BotFlowEditor.displayName = 'BotFlowEditor';
+}

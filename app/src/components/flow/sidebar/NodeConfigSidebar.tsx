@@ -3,9 +3,9 @@
  * Right sidebar for configuring selected node properties
  */
 
-import React, { memo, useState, useCallback, useMemo } from 'react';
-import { NodeDefinition, ConfigField, FlowNode, SelectOption, NodeData } from '@/types/bots';
-import { renderIcon } from '@/components/flow/nodes/FlowNodes';
+import { memo, useState, useCallback, useMemo } from 'react';
+import type { NodeDefinition, ConfigField, FlowNode, SelectOption } from '@/types/bots';
+import { renderIcon } from '@/components/flow/nodes/flowIcons';
 
 // ============================================
 // Field Components
@@ -28,7 +28,9 @@ const FieldLabel = memo(function FieldLabel({
         {label}
         {required && <span className="text-danger-500" aria-hidden="true">*</span>}
         {description && (
-          <Info className="w-4 h-4 text-text-tertiary hover:text-text-secondary cursor-help transition-colors" />
+          <span className="inline-flex text-text-tertiary hover:text-text-secondary cursor-help transition-colors">
+            {renderIcon('Info', 16)}
+          </span>
         )}
       </label>
       {description && (
@@ -36,7 +38,7 @@ const FieldLabel = memo(function FieldLabel({
       )}
       {error && (
         <p className="text-xs text-danger-500 mt-0.5 ml-1 flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" />
+          <span className="inline-flex">{renderIcon('AlertCircle', 12)}</span>
           {error}
         </p>
       )}
@@ -100,8 +102,8 @@ const SelectInput = memo(function SelectInput({
   searchable = false,
   multiple = false,
 }: {
-  value: string | string[] | number | number[] | null;
-  onChange: (value: string | string[] | number | number[] | null) => void;
+  value: string | number | boolean | Array<string | number | boolean> | null;
+  onChange: (value: string | number | boolean | Array<string | number | boolean> | null) => void;
   options: SelectOption[];
   placeholder?: string;
   disabled?: boolean;
@@ -125,7 +127,7 @@ const SelectInput = memo(function SelectInput({
 
   const handleSelect = (option: SelectOption) => {
     if (multiple) {
-      const current = (Array.isArray(value) ? value : []) as (string | number)[];
+      const current = (Array.isArray(value) ? value : []) as (string | number | boolean)[];
       const newValue = current.includes(option.value)
         ? current.filter((v) => v !== option.value)
         : [...current, option.value];
@@ -183,7 +185,7 @@ const SelectInput = memo(function SelectInput({
             ) : (
               filteredOptions.map((option) => (
                 <button
-                  key={option.value}
+                  key={String(option.value)}
                   type="button"
                   onClick={() => handleSelect(option)}
                   className={`w-full px-3 py-2 text-left text-sm hover:bg-surface-hover transition-colors ${
@@ -200,10 +202,10 @@ const SelectInput = memo(function SelectInput({
                       <span className="text-xs text-text-tertiary ml-auto">{option.description}</span>
                     )}
                     {multiple && Array.isArray(value) && value.includes(option.value) && (
-                      <CheckCircle className="w-4 h-4 text-primary-500" />
+                      <span className="inline-flex text-primary-500">{renderIcon('CheckCircle', 16)}</span>
                     )}
                     {!multiple && value === option.value && (
-                      <CheckCircle className="w-4 h-4 text-primary-500" />
+                      <span className="inline-flex text-primary-500">{renderIcon('CheckCircle', 16)}</span>
                     )}
                   </div>
                 </button>
@@ -333,18 +335,15 @@ const JsonInput = memo(function JsonInput({
   error?: string;
 }) {
   const [isValid, setIsValid] = useState(true);
-  const [parsed, setParsed] = useState<unknown>(null);
 
   const handleChange = useCallback(
     (newValue: string) => {
       onChange(newValue);
       try {
-        const parsedValue = newValue ? JSON.parse(newValue) : null;
-        setParsed(parsedValue);
+        if (newValue) JSON.parse(newValue);
         setIsValid(true);
       } catch {
         setIsValid(false);
-        setParsed(null);
       }
     },
     [onChange]
@@ -518,8 +517,8 @@ const FieldRenderer = memo(function FieldRenderer({
     case 'select':
       return (
         <SelectInput
-          value={value as string | number | null}
-          onChange={handleChange as (v: string | number | null) => void}
+          value={value as string | number | boolean | null}
+          onChange={(v) => handleChange(v)}
           options={field.options || []}
           placeholder={field.placeholder}
           disabled={disabled}
@@ -531,8 +530,8 @@ const FieldRenderer = memo(function FieldRenderer({
     case 'multiselect':
       return (
         <SelectInput
-          value={value as string[] | number[] | null}
-          onChange={handleChange as (v: string[] | number[] | null) => void}
+          value={value as Array<string | number | boolean> | null}
+          onChange={(v) => handleChange(v)}
           options={field.options || []}
           placeholder={field.placeholder}
           disabled={disabled}
@@ -546,7 +545,7 @@ const FieldRenderer = memo(function FieldRenderer({
       return (
         <SelectInput
           value={value as string | null}
-          onChange={handleChange as (v: string | null) => void}
+          onChange={(v) => handleChange(v)}
           options={[
             { value: '', label: 'Use Trigger Channel', description: 'Automatically use the channel from the trigger' },
             ...(field.options || []),
@@ -562,7 +561,7 @@ const FieldRenderer = memo(function FieldRenderer({
       return (
         <SelectInput
           value={value as string | null}
-          onChange={handleChange as (v: string | null) => void}
+          onChange={(v) => handleChange(v)}
           options={field.options || []}
           placeholder={field.placeholder || 'Select role...'}
           disabled={disabled}
@@ -575,7 +574,7 @@ const FieldRenderer = memo(function FieldRenderer({
       return (
         <SelectInput
           value={value as string | null}
-          onChange={handleChange as (v: string | null) => void}
+          onChange={(v) => handleChange(v)}
           options={[
             { value: '', label: 'Use Trigger User', description: 'Automatically use the user from the trigger' },
             ...(field.options || []),
@@ -656,6 +655,34 @@ export const NodeConfigSidebar = memo(function NodeConfigSidebar({
   onDuplicateNode,
   validationErrors = {},
 }: NodeConfigSidebarProps) {
+  // Hooks run before the empty-state early return so hook order stays stable
+  // whether or not a node is selected.
+  const config = useMemo(
+    () => (node?.data.config ?? {}) as Record<string, unknown>,
+    [node?.data.config]
+  );
+
+  const selectedNodeId = node?.id;
+  const handleConfigChange = useCallback(
+    (key: string, value: unknown) => {
+      if (!selectedNodeId) return;
+      onUpdate(selectedNodeId, { ...config, [key]: value });
+    },
+    [selectedNodeId, config, onUpdate]
+  );
+
+  // Get visible fields based on dependencies
+  const visibleFields = useMemo(() => {
+    return (nodeDefinition?.configSchema ?? []).filter((field) => {
+      if (!field.showWhen) return true;
+      try {
+        return field.showWhen(config);
+      } catch {
+        return true;
+      }
+    });
+  }, [nodeDefinition?.configSchema, config]);
+
   if (!node || !nodeDefinition) {
     return (
       <div className="flex flex-col h-full bg-surface-secondary border-l border-surface-border">
@@ -678,7 +705,6 @@ export const NodeConfigSidebar = memo(function NodeConfigSidebar({
     );
   }
 
-  const config = (node.data.config || {}) as Record<string, unknown>;
   const category = nodeDefinition.category;
 
   const categoryIcons: Record<string, string> = {
@@ -694,25 +720,6 @@ export const NodeConfigSidebar = memo(function NodeConfigSidebar({
   };
 
   const categoryColor = categoryColors[category] || '#5865f2';
-
-  const handleConfigChange = useCallback(
-    (key: string, value: unknown) => {
-      onUpdate(node.id, { ...config, [key]: value });
-    },
-    [node.id, config, onUpdate]
-  );
-
-  // Get visible fields based on dependencies
-  const visibleFields = useMemo(() => {
-    return nodeDefinition.configSchema.filter((field) => {
-      if (!field.showWhen) return true;
-      try {
-        return field.showWhen(config);
-      } catch {
-        return true;
-      }
-    });
-  }, [nodeDefinition.configSchema, config]);
 
   return (
     <div className="flex flex-col h-full bg-surface-secondary border-l border-surface-border">
