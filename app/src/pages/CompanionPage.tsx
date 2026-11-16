@@ -166,7 +166,7 @@ export default function CompanionPage() {
         setErrorMsg("Não foi possível conectar à chamada.");
       }
     },
-    [ensurePeer, send]
+    [ensurePeer]
   );
 
   const createOffer = useCallback(() => {

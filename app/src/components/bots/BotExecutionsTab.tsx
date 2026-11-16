@@ -454,7 +454,10 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
   botId,
   serverId,
 }: BotExecutionsTabProps) {
-  // In a real app, this would fetch from an API
+  // Mock atual: props reservadas para o fetch real (vede fetchExecutions).
+  void botId;
+  void serverId;
+  // In a real app, this would fetch from an API using botId/serverId
   const [executions] = useState<BotExecution[]>([]);
   const [loading, setLoading] = useState(false);
   const [totalCount] = useState(0);
@@ -475,7 +478,7 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
     } finally {
       setLoading(false);
     }
-  }, [botId, serverId, page, pageSize, statusFilter, searchQuery]);
+  }, []);
 
   useEffect(() => {
     fetchExecutions();
@@ -504,7 +507,7 @@ export const BotExecutionsTab = memo(function BotExecutionsTab({
     //   error: e.error?.message || '',
     // }));
     // Convert to CSV and download
-  }, [executions]);
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-surface-primary">

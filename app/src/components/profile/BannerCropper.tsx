@@ -26,7 +26,8 @@ export function BannerCropper({
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [prevFile, setPrevFile] = useState<typeof file | null>(null);
   const [crop, setCrop] = useState({
     x: 0,
     y: 0,
@@ -44,11 +45,17 @@ export function BannerCropper({
   const [rotation, setRotation] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
+  // Ajuste durante a renderização: recria a object URL quando o arquivo
+  // troca. A URL anterior é revogada pelo cleanup abaixo.
+  if (prevFile !== file) {
+    setPrevFile(file);
+    setImageUrl(URL.createObjectURL(file));
+  }
   useEffect(() => {
-    const url = URL.createObjectURL(file);
-    setImageUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
+    return () => {
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+    };
+  }, [imageUrl]);
 
   const handleImageLoad = useCallback(() => {
     if (!imgRef.current || !containerRef.current) return;

@@ -9,7 +9,7 @@ import { requirePermission, getMemberPermissions } from "./utils/permissions";
 import { broadcastToServer } from "./realtime";
 import { logServerAudit } from "./services/serverAudit";
 
-function buildTriggerConfig(type: string): z.ZodObject<any> {
+function buildTriggerConfig(type: string): z.ZodType<Record<string, unknown>> {
   const base = z.object({});
   switch (type) {
     case "message_create":
@@ -71,7 +71,7 @@ function buildTriggerConfig(type: string): z.ZodObject<any> {
   }
 }
 
-function buildActionConfig(type: string): z.ZodObject<any> {
+function buildActionConfig(type: string): z.ZodType<Record<string, unknown>> {
   switch (type) {
     case "send_message":
     case "reply":
@@ -580,7 +580,7 @@ export const botRouter = createRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const _bot = await requireBotOwnerOrManage(ctx.user.id, input.botId); void _bot;(ctx.user.id, input.botId);
+      await requireBotOwnerOrManage(ctx.user.id, input.botId);
       const db = getDb();
       const [{ id }] = await db
         .insert(schema.botNodes)
@@ -644,7 +644,7 @@ export const botRouter = createRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const _bot = await requireBotOwnerOrManage(ctx.user.id, input.botId); void _bot;(ctx.user.id, input.botId);
+      await requireBotOwnerOrManage(ctx.user.id, input.botId);
       const db = getDb();
       const [{ id }] = await db
         .insert(schema.botEdges)
@@ -720,7 +720,7 @@ export const botRouter = createRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const _bot = await requireBotOwnerOrManage(ctx.user.id, input.botId); void _bot;(ctx.user.id, input.botId);
+      await requireBotOwnerOrManage(ctx.user.id, input.botId);
       const db = getDb();
       await db.transaction(async (tx) => {
         for (const node of input.nodes) {
@@ -776,7 +776,7 @@ export const botRouter = createRouter({
   listExecutions: authedQuery
     .input(z.object({ botId: z.number(), limit: z.number().int().min(1).max(100).default(50), cursor: z.number().optional() }))
     .query(async ({ ctx, input }) => {
-      const _bot = await requireBotOwnerOrManage(ctx.user.id, input.botId); void _bot;(ctx.user.id, input.botId);
+      await requireBotOwnerOrManage(ctx.user.id, input.botId);
       const db = getDb();
       const baseFilter = eq(schema.botExecutions.botId, input.botId);
       const whereClause = input.cursor

@@ -11,7 +11,7 @@ const LIVE = process.env.RUN_ROBLOX_LIVE === "1";
 
 describe.skipIf(!LIVE)("Roblox presence pipeline (live)", () => {
   it("consulta presença real e persiste atividade normalizada", async () => {
-    const { fetchPresenceBatch, PRESENCE_TYPE_MAP } = await import("../client");
+    const { PRESENCE_TYPE_MAP } = await import("../client");
     const { pollOnce } = await import("../presenceWorker");
     const mysql = await import("mysql2/promise");
     const conn = await mysql.createConnection({
@@ -96,14 +96,10 @@ describe("mapeamento de tipos de presença", () => {
 
   it("bloqueia host fora da allowlist (SSRF guard)", async () => {
     const { RobloxApiError } = await import("../client");
-    const mod = await import("../client");
     // buildAuthorizeUrl só existe com credenciais; testa guard via fetchPresenceBatch de URL maliciosa é indireto,
     // então valida diretamente a função interna através de um erro tipado:
     await expect(async () => {
-      const evil = new (globalThis as any).URL("https://evil.example.com/x");
-      void evil;
       throw new RobloxApiError(400, "Host não permitido (SSRF guard).");
     }).rejects.toThrow(/SSRF/);
-    void mod;
   });
 });

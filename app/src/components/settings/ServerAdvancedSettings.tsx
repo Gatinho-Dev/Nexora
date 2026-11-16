@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { BarChart3, BookOpenCheck, CheckCircle2, Loader2, Plus, Rocket, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import type { ServerDetailsDTO } from "@contracts/types";
@@ -27,14 +27,17 @@ export function ServerCommunitySettings({ details }: { details: ServerDetailsDTO
   const [announcementChannelId, setAnnouncementChannelId] = useState<number | null>(null);
   const [spamProtectionEnabled, setSpamProtectionEnabled] = useState(true);
   const [minimumModerationEnabled, setMinimumModerationEnabled] = useState(true);
-  useEffect(() => {
-    if (!community.isFetched) return;
+  // Ajuste durante a renderização: quando os dados da comunidade chegam/trocam,
+  // sincroniza o formulário (os valores de reset coincidem com os iniciais).
+  const [prevCommunity, setPrevCommunity] = useState(community.data);
+  if (prevCommunity !== community.data) {
+    setPrevCommunity(community.data);
     setEnabled(Boolean(community.data?.enabledAt));
     setRulesChannelId(community.data?.rulesChannelId ?? null);
     setAnnouncementChannelId(community.data?.announcementChannelId ?? null);
     setSpamProtectionEnabled(community.data?.spamProtectionEnabled ?? true);
     setMinimumModerationEnabled(community.data?.minimumModerationEnabled ?? true);
-  }, [community.data, community.isFetched]);
+  }
   const update = trpc.advanced.server.updateCommunity.useMutation({
     onSuccess: () => {
       toast.success(enabled ? "Comunidade ativada." : "Configuração de comunidade salva.");
@@ -76,8 +79,11 @@ export function ServerOnboardingSettings({ details }: { details: ServerDetailsDT
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [questions, setQuestions] = useState<DraftQuestion[]>([]);
   const [optionRules, setOptionRules] = useState<Record<string, OnboardingOptionRule>>({});
-  useEffect(() => {
-    if (!onboarding.isFetched) return;
+  // Ajuste durante a renderização: quando os dados do onboarding chegam/trocam,
+  // sincroniza o formulário (os valores de reset coincidem com os iniciais).
+  const [prevOnboarding, setPrevOnboarding] = useState(onboarding.data);
+  if (prevOnboarding !== onboarding.data) {
+    setPrevOnboarding(onboarding.data);
     setEnabled(onboarding.data?.config?.enabled ?? false);
     setRequireRules(onboarding.data?.config?.requireRules ?? true);
     setWelcomeTitle(onboarding.data?.config?.welcomeTitle ?? "");
@@ -89,7 +95,7 @@ export function ServerOnboardingSettings({ details }: { details: ServerDetailsDT
       onboardingOptionRuleKey(questionIndex, optionIndex),
       { roleIds: option.roleIds ?? [], channelIds: option.channelIds ?? [], interests: (option.interests ?? []).join(", ") },
     ]))));
-  }, [onboarding.data, onboarding.isFetched]);
+  }
   const update = trpc.advanced.server.updateOnboarding.useMutation({ onSuccess: () => { toast.success("Onboarding publicado."); void utils.advanced.server.onboarding.invalidate({ serverId }); }, onError: error => toast.error(error.message) });
   const save = () => update.mutate({ serverId, enabled, requireRules, welcomeTitle: welcomeTitle.trim() || null, welcomeMessage: welcomeMessage.trim() || null, coverImageUrl: coverImageUrl.trim() || null, questions: questions.filter(item => item.prompt.trim()).map((question, questionIndex) => ({ prompt: question.prompt.trim(), required: question.required, multiple: question.multiple, options: question.optionsText.split("\n").map(value => value.trim()).filter(Boolean).map((label, optionIndex) => {
     const rule = optionRules[onboardingOptionRuleKey(questionIndex, optionIndex)];
@@ -126,15 +132,19 @@ export function ServerGuideSettings({ details }: { details: ServerDetailsDTO }) 
   const [faq, setFaq] = useState("");
   const [resources, setResources] = useState("");
   const [recommendedChannelIds, setRecommendedChannelIds] = useState<number[]>([]);
-  useEffect(() => {
-    if (!guide.data) return;
-    setWelcome(guide.data.welcomeMessage ?? "");
-    setRules((guide.data.rules ?? []).join("\n"));
-    setTasks((guide.data.tasks ?? []).map(task => task.label).join("\n"));
-    setFaq((guide.data.faq ?? []).map(item => `${item.question} | ${item.answer}`).join("\n"));
-    setResources((guide.data.resources ?? []).map(resource => `${resource.label} | ${resource.url}`).join("\n"));
-    setRecommendedChannelIds(guide.data.recommendedChannelIds ?? []);
-  }, [guide.data]);
+  // Ajuste durante a renderização: quando o guia chega/troca, sincroniza o formulário.
+  const [prevGuide, setPrevGuide] = useState(guide.data);
+  if (prevGuide !== guide.data) {
+    setPrevGuide(guide.data);
+    if (guide.data) {
+      setWelcome(guide.data.welcomeMessage ?? "");
+      setRules((guide.data.rules ?? []).join("\n"));
+      setTasks((guide.data.tasks ?? []).map(task => task.label).join("\n"));
+      setFaq((guide.data.faq ?? []).map(item => `${item.question} | ${item.answer}`).join("\n"));
+      setResources((guide.data.resources ?? []).map(resource => `${resource.label} | ${resource.url}`).join("\n"));
+      setRecommendedChannelIds(guide.data.recommendedChannelIds ?? []);
+    }
+  }
   const update = trpc.advanced.server.updateGuide.useMutation({ onSuccess: () => { toast.success("Guia atualizado."); void utils.advanced.server.guide.invalidate({ serverId }); }, onError: error => toast.error(error.message) });
   const lines = (value: string) => value.split("\n").map(item => item.trim()).filter(Boolean);
   const parsedResources = () => lines(resources).map(line => {

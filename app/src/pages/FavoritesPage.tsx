@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowDown,
@@ -30,9 +30,13 @@ export function FavoritesPage() {
   const [order, setOrder] = useState<number[]>([]);
   const [draggedId, setDraggedId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (favorites.data) setOrder(favorites.data.map(item => item.id));
-  }, [favorites.data]);
+  // Ajuste durante a renderização (padrão React para sincronizar estado com
+  // dados da query): quando os favoritos chegam/trocam, rederiva a ordem.
+  const [prevFavorites, setPrevFavorites] = useState(favorites.data);
+  if (prevFavorites !== favorites.data) {
+    setPrevFavorites(favorites.data);
+    setOrder(favorites.data?.map(item => item.id) ?? []);
+  }
 
   const ordered = useMemo(() => {
     const byId = new Map((favorites.data ?? []).map(item => [item.id, item]));

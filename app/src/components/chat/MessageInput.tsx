@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { trpc } from "@/providers/trpc";
 import { useNavigate } from "react-router";
 import { realtime } from "@/lib/ws";
@@ -335,12 +335,12 @@ export function MessageInput({
       ).slice(0, 6)
     : [];
 
-  const emitTyping = () => {
+  const emitTyping = useCallback(() => {
     const now = Date.now();
     if (now - lastTypingSent.current < 3000) return;
     lastTypingSent.current = now;
     realtime.send({ t: "typing", channelId, conversationId });
-  };
+  }, [channelId, conversationId]);
 
   const handleChange = (value: string) => {
     setText(value);

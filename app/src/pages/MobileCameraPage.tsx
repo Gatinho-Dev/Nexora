@@ -159,7 +159,7 @@ export default function MobileCameraPage() {
         setErrorMsg("Não foi possível conectar à sala.");
       }
     },
-    [ensurePeer, send]
+    [ensurePeer]
   );
 
   const createOffer = useCallback(() => {

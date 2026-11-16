@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { trpc } from "@/providers/trpc";
 import { useAppStore } from "@/store/useAppStore";
@@ -27,7 +27,6 @@ export function BottomNav({
   const unreadChannels = useAppStore(s => s.unreadChannels);
   const keyboardOffset = useKeyboardOffset(true);
   const keyboardOpen = keyboardOffset > 80;
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dmUnread = Object.values(unreadConversations).reduce((a, b) => a + b, 0);
   const chUnread = Object.values(unreadChannels).reduce((a, b) => a + b, 0);
@@ -53,11 +52,6 @@ export function BottomNav({
 
   // Evita flicker quando o teclado abre/fecha rápido.
   const visuallyHidden = useVisuallyHidden(keyboardOpen);
-  useEffect(() => {
-    return () => {
-      if (hideTimer.current) clearTimeout(hideTimer.current);
-    };
-  }, []);
 
   const items: { id: TabId; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "home", label: "Início", icon: <Home className="h-[22px] w-[22px]" />, badge: homeUnread },
@@ -145,14 +139,21 @@ export function BottomNav({
 /** Esconde com pequeno atraso para não piscar junto do teclado. */
 function useVisuallyHidden(keyboardOpen: boolean) {
   const [hidden, setHidden] = useState(keyboardOpen);
+  const [prevKeyboardOpen, setPrevKeyboardOpen] = useState(keyboardOpen);
+  // Ajuste durante a renderização (padrão React para sincronizar estado com
+  // props): esconde na hora quando o teclado abre; o atraso de reexibição
+  // continua num timeout com cleanup.
+  if (prevKeyboardOpen !== keyboardOpen) {
+    setPrevKeyboardOpen(keyboardOpen);
+    if (keyboardOpen) setHidden(true);
+  }
   useEffect(() => {
-    if (!keyboardOpen) {
+    if (!keyboardOpen && hidden) {
       const t = setTimeout(() => setHidden(false), 120);
       return () => clearTimeout(t);
     }
-    setHidden(true);
     return undefined;
-  }, [keyboardOpen]);
+  }, [keyboardOpen, hidden]);
   return hidden;
 }
 

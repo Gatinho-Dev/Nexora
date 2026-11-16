@@ -49,9 +49,14 @@ export function UserActionHost() {
     return () => window.removeEventListener(OPEN_USER_ACTION_EVENT, open);
   }, []);
 
-  useEffect(() => {
+  // Ajuste durante a renderização: quando a nota salva chega/troca, preenche
+  // o campo (sem efeito; a edição do usuário não é sobrescrita porque o
+  // gatilho é a identidade dos dados, não o texto digitado).
+  const [prevSavedNote, setPrevSavedNote] = useState(savedNote.data);
+  if (prevSavedNote !== savedNote.data) {
+    setPrevSavedNote(savedNote.data);
     if (request?.action === "note" && savedNote.data) setNote(savedNote.data.content ?? "");
-  }, [request?.action, savedNote.data]);
+  }
 
   const done = (message: string) => {
     toast.success(message);
